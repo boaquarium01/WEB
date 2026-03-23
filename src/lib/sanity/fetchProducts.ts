@@ -21,13 +21,11 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   isPlaceholder
 }`;
 
-function getClient(): SanityClient {
-  const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID;
+function getClient(): SanityClient | null {
+  const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim();
   const dataset = import.meta.env.PUBLIC_SANITY_DATASET || 'production';
   if (!projectId) {
-    throw new Error(
-      '[Sanity] 請在 .env 設定 PUBLIC_SANITY_PROJECT_ID；商品資料已改為從雲端讀取。'
-    );
+    return null;
   }
   return createClient({
     projectId,
@@ -35,6 +33,16 @@ function getClient(): SanityClient {
     useCdn: false,
     apiVersion: API_VERSION
   });
+}
+
+let warnedMissingProjectId = false;
+
+function warnMissingSanityConfig() {
+  if (warnedMissingProjectId) return;
+  warnedMissingProjectId = true;
+  console.warn(
+    '[Sanity] 未設定 PUBLIC_SANITY_PROJECT_ID，商品資料為空。請在 .env 或 Vercel Environment Variables 設定後重新建置。'
+  );
 }
 
 function normalizeCategory(raw: string | undefined): CategoryId {
@@ -83,6 +91,11 @@ let cache: Product[] | null = null;
 export async function getAllProducts(): Promise<Product[]> {
   if (cache) return cache;
   const client = getClient();
+  if (!client) {
+    warnMissingSanityConfig();
+    cache = [];
+    return cache;
+  }
   const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID as string;
   const dataset = import.meta.env.PUBLIC_SANITY_DATASET || 'production';
   const docs = await client.fetch<SanityProductDoc[]>(PRODUCT_QUERY);

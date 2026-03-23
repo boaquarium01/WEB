@@ -33,7 +33,7 @@ gh repo create 你的儲存庫名 --private --source=. --remote=origin --push
 
 5. 按 **Deploy**
 
-> 商品頁為 **建置時** 向 Sanity 拉資料，若未設定上述變數，建置會失敗。
+> **商品資料**：網站會在 **建置時** 向 Sanity 拉取 `product`。若尚未在 Vercel 設定 `PUBLIC_SANITY_PROJECT_ID`，建置仍會**成功**，但首頁／列表不會有商品；補上環境變數後 **Redeploy** 即可。
 
 ## 3. Sanity CORS（正式網址）
 
