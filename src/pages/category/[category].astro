@@ -1,0 +1,323 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { CATEGORIES, getAllProducts, getCategoryLabel, type Product } from '../../data/products';
+
+export async function getStaticPaths() {
+  const all = await getAllProducts();
+  return CATEGORIES.map((c) => ({
+    params: { category: c.id },
+    props: {
+      list: all.filter((p) => p.category === c.id) as Product[]
+    }
+  }));
+}
+
+interface Props {
+  list: Product[];
+}
+
+const { category } = Astro.params;
+const { list } = Astro.props;
+const label = getCategoryLabel(category ?? '');
+const pageTitle = `${label}｜展示商品｜水博館水族`;
+---
+
+<Layout
+  title={pageTitle}
+  description={`水博館水族${label}類別展示商品列表，僅供參考，歡迎來店參觀。`}
+>
+  <div class="page">
+    <header class="site-header">
+      <div class="header-inner">
+        <a href="/" class="back-link" aria-label="返回首頁">
+          <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <a href="/" class="brand">水博館水族</a>
+        <span class="header-spacer" aria-hidden="true"></span>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <nav class="breadcrumb" aria-label="麵包屑">
+        <a href="/">首頁</a>
+        <span class="sep">/</span>
+        <span class="current">{label}</span>
+      </nav>
+
+      <h1 class="page-title">{label}</h1>
+      <p class="page-lead">以下為本類別展示項目，點圖可見介紹。實際以門市現場為準。</p>
+
+      {list.length === 0 ? (
+        <p class="empty">此分類尚無展示資料，請改選其他分類或洽門市。</p>
+      ) : (
+        <div class="product-grid">
+          {list.map((product) => (
+            <article class="product-card">
+              <a href={`/product/${product.slug}`} class="product-card-link">
+                <div class="product-img-wrap">
+                  <img src={product.image} alt="" width="600" height="450" loading="lazy" />
+                </div>
+                <div class="product-body">
+                  <h2>{product.name}</h2>
+                  <p class="product-excerpt">{product.excerpt}</p>
+                </div>
+              </a>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div class="category-nav">
+        <p class="category-nav-title">其他分類</p>
+        <ul>
+          {CATEGORIES.filter((c) => c.id !== category).map((c) => (
+            <li>
+              <a href={`/category/${c.id}`}>{c.label}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p class="footer-brand">水博館水族</p>
+        <p class="footer-copy">© {new Date().getFullYear()} 門市展示網頁</p>
+      </div>
+    </footer>
+  </div>
+</Layout>
+
+<style>
+  .page {
+    min-height: 100vh;
+    background: #fff;
+    color: #111;
+  }
+
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: #fff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .header-inner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    min-height: 56px;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    color: #111;
+  }
+
+  .back-link:hover {
+    background: #f5f5f5;
+  }
+
+  .brand {
+    justify-self: center;
+    font-weight: 800;
+    font-size: 1.0625rem;
+    letter-spacing: 0.04em;
+    color: #111;
+  }
+
+  .header-spacer {
+    width: 40px;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px 48px;
+  }
+
+  .breadcrumb {
+    font-size: 0.875rem;
+    color: #666;
+    margin-bottom: 20px;
+  }
+
+  .breadcrumb a {
+    color: #111;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .sep {
+    margin: 0 6px;
+    color: #bbb;
+  }
+
+  .page-title {
+    margin: 0 0 10px;
+    font-size: clamp(1.5rem, 3vw, 1.875rem);
+    font-weight: 800;
+  }
+
+  .page-lead {
+    margin: 0 0 28px;
+    color: #555;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+
+  .empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: #666;
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 12px;
+  }
+
+  .product-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (min-width: 1024px) {
+    .product-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+  }
+
+  .product-card {
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #eee;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.2s;
+  }
+
+  .product-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .product-card-link {
+    display: block;
+    color: inherit;
+  }
+
+  .product-img-wrap {
+    aspect-ratio: 4 / 3;
+    background: #f5f5f5;
+    overflow: hidden;
+  }
+
+  .product-img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .product-body {
+    padding: 12px 10px 14px;
+  }
+
+  .product-body h2 {
+    margin: 0 0 6px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    line-height: 1.4;
+    color: #111;
+  }
+
+  @media (min-width: 640px) {
+    .product-body h2 {
+      font-size: 1rem;
+    }
+  }
+
+  .product-excerpt {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #666;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  @media (min-width: 640px) {
+    .product-excerpt {
+      font-size: 0.8125rem;
+    }
+  }
+
+  .category-nav {
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid #eee;
+  }
+
+  .category-nav-title {
+    margin: 0 0 12px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #333;
+  }
+
+  .category-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .category-nav a {
+    display: inline-block;
+    padding: 8px 14px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid #ddd;
+    border-radius: 999px;
+    color: #111;
+    background: #fff;
+  }
+
+  .category-nav a:hover {
+    background: #f5f5f5;
+  }
+
+  .site-footer {
+    border-top: 1px solid #e5e5e5;
+    padding: 24px 16px;
+  }
+
+  .footer-inner {
+    text-align: center;
+  }
+
+  .footer-brand {
+    margin: 0 0 6px;
+    font-weight: 800;
+  }
+
+  .footer-copy {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #666;
+  }
+</style>

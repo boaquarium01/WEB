@@ -1,23 +1,63 @@
+---
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const {
+	title = '水博館水族｜門市與商品展示',
+	description = '水博館水族：門市環境、服務項目與展示商品介紹（僅展示，非線上購物）。'
+} = Astro.props;
+---
+
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<meta name="description" content={description} />
+		<title>{title}</title>
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+			crossorigin="anonymous"
+			referrerpolicy="no-referrer"
+		/>
 	</head>
 	<body>
 		<slot />
 	</body>
 </html>
 
-<style>
+<style is:global>
 	html,
 	body {
 		margin: 0;
 		width: 100%;
-		height: 100%;
+		min-height: 100%;
+		background: #ffffff;
+		color: #111111;
+		font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	*,
+	*::before,
+	*::after {
+		box-sizing: border-box;
+	}
+
+	a {
+		color: inherit;
+		text-decoration: none;
+	}
+
+	img {
+		max-width: 100%;
+		height: auto;
+		display: block;
 	}
 </style>

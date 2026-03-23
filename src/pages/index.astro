@@ -1,11 +1,837 @@
 ---
-import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import { CATEGORIES, getFeaturedProducts } from '../data/products';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const navItems = [
+  { name: '首頁', href: '#home' },
+  { name: '服務項目', href: '#services' },
+  { name: '關於我們', href: '#about' },
+  { name: '商品分類', href: '#categories' },
+  { name: '展示商品', href: '#products' },
+  { name: '全部商品', href: '/products' }
+];
+
+const featuredProducts = await getFeaturedProducts(7);
+
+const heroSlides = [
+  {
+    title: '打造理想水族生活',
+    subtitle: '專業選魚、設備顧問與完整售後服務',
+    image:
+      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1920&q=80'
+  },
+  {
+    title: '從活體到設備，一站式到位',
+    subtitle: '嚴選健康魚種與高品質器材，讓養魚更安心',
+    image:
+      'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?auto=format&fit=crop&w=1920&q=80'
+  },
+  {
+    title: '水景與生態兼具的專家',
+    subtitle: '讓每一座魚缸都成為家中的亮點',
+    image:
+      'https://images.unsplash.com/photo-1571752726703-5e7d1f6a0f45?auto=format&fit=crop&w=1920&q=80'
+  }
+];
+
+const services = [
+  { icon: 'fa-solid fa-water', title: '魚缸維護', desc: '定期換水、水質檢測與設備保養' },
+  { icon: 'fa-solid fa-fish', title: '活體展示', desc: '健康魚種門市展示與飼養建議' },
+  { icon: 'fa-solid fa-screwdriver-wrench', title: '器材諮詢', desc: '過濾、燈具與耗材規劃建議' }
+];
 ---
 
-<Layout>
-	<Welcome />
+<Layout title="水博館水族｜門市與商品展示">
+  <div class="site" id="home">
+    <header class="site-header">
+      <div class="header-inner">
+        <button type="button" id="menuButton" class="icon-btn" aria-label="開啟選單">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+        <a href="/" class="brand">水博館水族</a>
+        <nav class="nav-desktop" aria-label="主要導覽">
+          <ul>
+            {navItems.map((item) => (
+              <li>
+                <a href={item.href}>{item.name}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+        <div class="header-end-spacer" aria-hidden="true"></div>
+      </div>
+    </header>
+
+    <div id="mobileMenuBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
+    <aside id="mobileMenu" class="drawer" aria-label="側邊選單">
+      <div class="drawer-head">
+        <span class="drawer-title">選單</span>
+        <button type="button" id="closeMenuButton" class="icon-btn" aria-label="關閉選單">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <nav>
+        <ul class="drawer-list">
+          {navItems.map((item) => (
+            <li>
+              <a href={item.href} class="mobile-menu-link">{item.name}</a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </aside>
+
+    <main>
+      <!-- Hero 輪播：滿版大圖 -->
+      <section class="hero" aria-label="主視覺輪播">
+        <div class="hero-track">
+          {heroSlides.map((slide, idx) => (
+            <article
+              class:list={['hero-slide', idx === 0 && 'is-active']}
+              style={`--bg: url('${slide.image}')`}
+            >
+              <div class="hero-overlay"></div>
+              <div class="hero-content wrap">
+                <h1>{slide.title}</h1>
+                <p>{slide.subtitle}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div class="hero-dots" role="tablist" aria-label="輪播指示">
+          {heroSlides.map((_, idx) => (
+            <button
+              type="button"
+              class:list={['carousel-dot', idx === 0 && 'is-active']}
+              data-index={idx}
+              aria-label={`第 ${idx + 1} 張`}
+            ></button>
+          ))}
+        </div>
+      </section>
+
+      <!-- 服務項目 -->
+      <section id="services" class="section wrap">
+        <h2 class="section-title">服務項目</h2>
+        <div class="services-grid">
+          {services.map((service) => (
+            <div class="service-card">
+              <i class:list={[service.icon, 'service-icon']}></i>
+              <h3>{service.title}</h3>
+              <p>{service.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <!-- 關於我們 -->
+      <section id="about" class="section section--alt">
+        <div class="about-grid wrap">
+          <img
+            src="https://images.unsplash.com/photo-1583212292454-1fe6229603b7?auto=format&fit=crop&w=1200&q=80"
+            alt="水博館水族門市展示空間"
+            class="about-img"
+            width="1200"
+            height="800"
+            loading="lazy"
+          />
+          <div class="about-text">
+            <h2 class="section-title">關於我們</h2>
+            <p>
+              水博館水族專注於水族生態與生活美學，提供活體展示、魚缸規劃與維護諮詢。本網站僅供門市與商品展示，歡迎來店參觀；實際庫存與服務內容以現場為準。
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="categories" class="section wrap">
+        <h2 class="section-title">商品分類</h2>
+        <p class="categories-lead">
+          依類別瀏覽展示項目；分類與商品內容於 Sanity Studio 維護，建置後會反映於網站。
+        </p>
+        <ul class="category-chips">
+          {CATEGORIES.map((c) => (
+            <li>
+              <a class="category-chip" href={`/category/${c.id}`}>
+                {c.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section id="products" class="section wrap">
+        <h2 class="products-page-title">展示商品</h2>
+        <p class="products-lead">
+          精選內容來自 Sanity；點擊卡片可開啟介紹分頁（不含價格與購物功能）。
+          <a class="products-all-link" href="/products">查看全部商品（含分頁）</a>
+        </p>
+        {featuredProducts.length === 0 ? (
+          <p class="products-empty">
+            尚無商品資料。請執行 <code class="inline-code">npm run studio</code> 新增 <strong>product</strong> 文件（可勾選「首頁精選」），再重新建置網站。
+          </p>
+        ) : (
+          <div class="product-grid">
+            {featuredProducts.map((product) => (
+              <article class="product-card">
+                <a href={`/product/${product.slug}`} class="product-card-link">
+                  <div class="product-img-wrap">
+                    <img src={product.image} alt="" width="600" height="450" loading="lazy" />
+                  </div>
+                  <div class="product-body">
+                    <h3>{product.name}</h3>
+                    <p class="product-excerpt">{product.excerpt}</p>
+                  </div>
+                </a>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-inner">
+        <p class="footer-brand">水博館水族</p>
+        <p class="footer-copy">© {new Date().getFullYear()} 門市展示用 · 非電商購物網站</p>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const menuButton = document.getElementById('menuButton');
+    const closeMenuButton = document.getElementById('closeMenuButton');
+    const mobileMenu = document.getElementById('mobileMenu');
+    const mobileMenuBackdrop = document.getElementById('mobileMenuBackdrop');
+    const mobileLinks = document.querySelectorAll('.mobile-menu-link');
+
+    const openMenu = () => {
+      mobileMenu?.classList.add('is-open');
+      mobileMenuBackdrop?.classList.add('is-open');
+      document.body.style.overflow = 'hidden';
+    };
+
+    const closeMenu = () => {
+      mobileMenu?.classList.remove('is-open');
+      mobileMenuBackdrop?.classList.remove('is-open');
+      document.body.style.overflow = '';
+    };
+
+    menuButton?.addEventListener('click', openMenu);
+    closeMenuButton?.addEventListener('click', closeMenu);
+    mobileMenuBackdrop?.addEventListener('click', closeMenu);
+    mobileLinks.forEach((link) => link.addEventListener('click', closeMenu));
+
+    const slides = Array.from(document.querySelectorAll('.hero-slide'));
+    const dots = Array.from(document.querySelectorAll('.carousel-dot'));
+    let currentSlide = 0;
+
+    const setSlide = (index) => {
+      const next = ((index % slides.length) + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle('is-active', i === next));
+      dots.forEach((dot, i) => dot.classList.toggle('is-active', i === next));
+      currentSlide = next;
+    };
+
+    dots.forEach((dot) => {
+      dot.addEventListener('click', () => {
+        const idx = Number(dot.getAttribute('data-index') ?? 0);
+        setSlide(idx);
+      });
+    });
+
+    setInterval(() => setSlide(currentSlide + 1), 5000);
+  </script>
 </Layout>
+
+<style>
+  .wrap {
+    width: 100%;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .site {
+    min-height: 100vh;
+    background: #ffffff;
+    color: #111111;
+  }
+
+  /* 頂欄：白底、底線，參考電商站 */
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #ffffff;
+    border-bottom: 1px solid #e5e5e5;
+  }
+
+  .header-inner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    min-height: 56px;
+  }
+
+  .brand {
+    justify-self: center;
+    font-weight: 800;
+    font-size: 1.125rem;
+    letter-spacing: 0.06em;
+    color: #111;
+  }
+
+  .nav-desktop {
+    display: none;
+  }
+
+  .nav-desktop ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: clamp(12px, 2vw, 22px);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .nav-desktop a {
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #333;
+  }
+
+  .nav-desktop a:hover {
+    color: #000;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .header-end-spacer {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #111;
+    cursor: pointer;
+    border-radius: 8px;
+    font-size: 1.125rem;
+  }
+
+  .icon-btn:hover {
+    background: #f5f5f5;
+  }
+
+  @media (min-width: 1024px) {
+    .header-inner {
+      grid-template-columns: auto 1fr auto;
+    }
+
+    #menuButton {
+      display: none;
+    }
+
+    .brand {
+      justify-self: start;
+      grid-column: 1;
+    }
+
+    .nav-desktop {
+      display: block;
+      grid-column: 2;
+    }
+
+    .header-end-spacer {
+      grid-column: 3;
+    }
+  }
+
+  /* 側邊欄 */
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .drawer-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 210;
+    width: min(300px, 88vw);
+    height: 100%;
+    background: #fff;
+    border-right: 1px solid #e5e5e5;
+    padding: 20px;
+    transform: translateX(-100%);
+    transition: transform 0.28s ease;
+    overflow-y: auto;
+  }
+
+  .drawer.is-open {
+    transform: translateX(0);
+  }
+
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #eee;
+  }
+
+  .drawer-title {
+    font-weight: 700;
+    font-size: 1.125rem;
+  }
+
+  .drawer-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .drawer-list a {
+    display: block;
+    padding: 14px 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #222;
+  }
+
+  .drawer-list a:hover {
+    background: #f5f5f5;
+  }
+
+  @media (min-width: 1024px) {
+    .drawer,
+    .drawer-backdrop {
+      display: none !important;
+    }
+  }
+
+  /* Hero */
+  .hero {
+    position: relative;
+    width: 100%;
+    min-height: 56vh;
+    height: min(75vh, 640px);
+    overflow: hidden;
+    background: #f0f0f0;
+  }
+
+  .hero-track {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .hero-slide {
+    position: absolute;
+    inset: 0;
+    background-image: var(--bg);
+    background-size: cover;
+    background-position: center;
+    opacity: 0;
+    transition: opacity 0.7s ease;
+  }
+
+  .hero-slide.is-active {
+    opacity: 1;
+    z-index: 1;
+  }
+
+  .hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to top, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.35) 45%, rgba(0, 0, 0, 0.15) 100%);
+    z-index: 1;
+  }
+
+  .hero-content {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding-bottom: 56px;
+    padding-top: 24px;
+  }
+
+  .hero-content h1 {
+    margin: 0;
+    font-size: clamp(1.75rem, 4vw, 2.75rem);
+    font-weight: 800;
+    color: #111;
+    line-height: 1.2;
+    max-width: 22ch;
+  }
+
+  .hero-content p {
+    margin: 12px 0 0;
+    font-size: 1rem;
+    color: #444;
+    max-width: 36ch;
+    line-height: 1.6;
+  }
+
+  .hero-dots {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    gap: 8px;
+  }
+
+  .carousel-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #ccc;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+
+  .carousel-dot.is-active {
+    background: #111;
+    transform: scale(1.15);
+  }
+
+  /* 區塊通用 */
+  .section {
+    padding: 48px 0;
+  }
+
+  .section--alt {
+    background: #fafafa;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+  }
+
+  .section-title {
+    margin: 0 0 24px;
+    font-size: clamp(1.5rem, 3vw, 1.75rem);
+    font-weight: 800;
+    text-align: center;
+  }
+
+  #services .section-title {
+    text-align: left;
+  }
+
+  @media (min-width: 768px) {
+    #services .section-title {
+      text-align: center;
+    }
+  }
+
+  .services-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 640px) {
+    .services-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .services-grid {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+
+  .service-card {
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .service-icon {
+    font-size: 1.75rem;
+    color: #222;
+  }
+
+  .service-card h3 {
+    margin: 16px 0 8px;
+    font-size: 1.125rem;
+    font-weight: 700;
+  }
+
+  .service-card p {
+    margin: 0;
+    font-size: 0.9375rem;
+    color: #555;
+    line-height: 1.55;
+  }
+
+  /* 關於 */
+  .about-grid {
+    display: grid;
+    gap: 28px;
+    align-items: center;
+  }
+
+  @media (min-width: 1024px) {
+    .about-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .about-grid .about-img {
+      order: 0;
+    }
+
+    .about-grid .about-text {
+      order: 1;
+    }
+  }
+
+  .about-img {
+    width: 100%;
+    height: auto;
+    min-height: 220px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  }
+
+  .about-text .section-title {
+    text-align: left;
+    margin-bottom: 16px;
+  }
+
+  .about-text p {
+    margin: 0;
+    line-height: 1.85;
+    color: #444;
+    font-size: 1rem;
+  }
+
+  .categories-lead,
+  .products-lead {
+    margin: 0 auto 20px;
+    max-width: 42rem;
+    text-align: center;
+    font-size: 0.9375rem;
+    color: #555;
+    line-height: 1.6;
+  }
+
+  .products-all-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-weight: 700;
+    color: #111;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .products-all-link:hover {
+    color: #333;
+  }
+
+  .products-empty {
+    margin: 0 auto;
+    max-width: 36rem;
+    padding: 20px 16px;
+    text-align: center;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: #555;
+    background: #fafafa;
+    border: 1px solid #eee;
+    border-radius: 12px;
+  }
+
+  .inline-code {
+    padding: 2px 6px;
+    font-size: 0.875em;
+    background: #eee;
+    border-radius: 4px;
+  }
+
+  #categories .section-title {
+    text-align: center;
+  }
+
+  .category-chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .category-chip {
+    display: inline-block;
+    padding: 12px 22px;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    color: #111;
+    border: 1px solid #ddd;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  }
+
+  .category-chip:hover {
+    background: #f5f5f5;
+    border-color: #ccc;
+  }
+
+  .products-page-title {
+    margin: 0 0 10px;
+    font-size: clamp(1.5rem, 4vw, 1.875rem);
+    font-weight: 800;
+    text-align: center;
+    letter-spacing: 0.02em;
+  }
+
+  .product-grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (min-width: 1024px) {
+    .product-grid {
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+  }
+
+  .product-card {
+    background: #fff;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #eee;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.2s;
+  }
+
+  .product-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  }
+
+  .product-card-link {
+    display: block;
+    color: inherit;
+  }
+
+  .product-img-wrap {
+    aspect-ratio: 4 / 3;
+    background: #f5f5f5;
+    overflow: hidden;
+  }
+
+  .product-img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .product-body {
+    padding: 12px 10px 14px;
+  }
+
+  .product-body h3 {
+    margin: 0 0 6px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    line-height: 1.45;
+    color: #111;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  @media (min-width: 640px) {
+    .product-body h3 {
+      font-size: 0.9375rem;
+    }
+  }
+
+  .product-excerpt {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #666;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  @media (min-width: 640px) {
+    .product-excerpt {
+      font-size: 0.8125rem;
+    }
+  }
+
+  .site-footer {
+    border-top: 1px solid #e5e5e5;
+    padding: 28px 16px;
+    background: #fff;
+    margin-top: 24px;
+  }
+
+  .footer-inner {
+    text-align: center;
+  }
+
+  .footer-brand {
+    margin: 0 0 8px;
+    font-weight: 800;
+    font-size: 1rem;
+  }
+
+  .footer-copy {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #666;
+  }
+
+  .footer-copy a {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+</style>
