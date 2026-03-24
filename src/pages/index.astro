@@ -1,44 +1,49 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { CATEGORIES, getFeaturedProducts } from '../data/products';
+import { getAllCategories, getFeaturedProducts } from '../data/products';
 
 const navItems = [
   { name: '首頁', href: '#home' },
   { name: '服務項目', href: '#services' },
   { name: '關於我們', href: '#about' },
+  { name: '聯絡資訊', href: '#contact' },
   { name: '商品分類', href: '#categories' },
   { name: '展示商品', href: '#products' },
   { name: '全部商品', href: '/products' }
 ];
 
 const featuredProducts = await getFeaturedProducts(7);
+const categories = (await getAllCategories()) ?? [];
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 
 const heroSlides = [
   {
-    title: '打造理想水族生活',
-    subtitle: '專業選魚、設備顧問與完整售後服務',
-    image:
-      'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1920&q=80'
-  },
-  {
-    title: '從活體到設備，一站式到位',
-    subtitle: '嚴選健康魚種與高品質器材，讓養魚更安心',
+    title: '水博館水族｜淡水魚水族販售',
+    subtitle: '每週新增極品特選，嚴選健康且具觀賞價值的淡水魚與水草景觀魚缸。',
     image:
       'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?auto=format&fit=crop&w=1920&q=80'
   },
   {
-    title: '水景與生態兼具的專家',
-    subtitle: '讓每一座魚缸都成為家中的亮點',
+    title: '專業、用心、苛求完美',
+    subtitle: '以專業經驗與細節管理，提供穩定水質與健康魚況的門市服務。',
     image:
-      'https://images.unsplash.com/photo-1571752726703-5e7d1f6a0f45?auto=format&fit=crop&w=1920&q=80'
+      'https://images.unsplash.com/photo-1520301255226-bf5f144451c1?auto=format&fit=crop&w=1920&q=80'
+  },
+  {
+    title: '專業養殖與完整售後',
+    subtitle: '服務涵蓋專業養殖、魚病治療、魚缸保養與水族器材銷售。',
+    image:
+      'https://images.unsplash.com/photo-1535591273668-578e31182c4f?auto=format&fit=crop&w=1920&q=80'
   }
 ];
 
 const services = [
-  { icon: 'fa-solid fa-water', title: '魚缸維護', desc: '定期換水、水質檢測與設備保養' },
-  { icon: 'fa-solid fa-fish', title: '活體展示', desc: '健康魚種門市展示與飼養建議' },
-  { icon: 'fa-solid fa-screwdriver-wrench', title: '器材諮詢', desc: '過濾、燈具與耗材規劃建議' }
+  { icon: 'fa-solid fa-fish-fins', title: '專業養殖', desc: '淡水魚健康管理、品系維護與專業飼養建議' },
+  { icon: 'fa-solid fa-ruler-combined', title: '客製化魚缸規劃', desc: '依空間、預算與需求提供魚缸尺寸、設備與造景整體規劃' },
+  { icon: 'fa-solid fa-seedling', title: '水草景觀魚缸', desc: '客製水草造景、魚缸配置與生態平衡規劃' },
+  { icon: 'fa-solid fa-stethoscope', title: '魚病治療', desc: '常見魚病檢測、隔離處理與用藥方向建議' },
+  { icon: 'fa-solid fa-water', title: '魚缸保養', desc: '定期換水、水質檢測與過濾系統保養維護' },
+  { icon: 'fa-solid fa-screwdriver-wrench', title: '水族器材銷售', desc: '過濾、燈具、打氣與耗材一站式選購建議' }
 ];
 ---
 
@@ -129,7 +134,7 @@ const services = [
       <section id="about" class="section section--alt">
         <div class="about-grid wrap">
           <img
-            src="https://images.unsplash.com/photo-1583212292454-1fe6229603b7?auto=format&fit=crop&w=1200&q=80"
+            src="/about-us-store.png"
             alt="水博館水族門市展示空間"
             class="about-img"
             width="1200"
@@ -139,19 +144,49 @@ const services = [
           <div class="about-text">
             <h2 class="section-title">關於我們</h2>
             <p>
-              水博館水族專注於水族生態與生活美學，提供活體展示、魚缸規劃與維護諮詢。本網站僅供門市與商品展示，歡迎來店參觀；實際庫存與服務內容以現場為準。
+              水博館水族專注於淡水魚水族販售，每週新增極品特選。秉持「專業、用心、苛求完美」的理念，提供專業養殖、水草景觀魚缸規劃、魚病治療、魚缸保養與水族器材銷售，歡迎來店參觀諮詢。
             </p>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="section wrap">
+        <h2 class="section-title">聯絡資訊</h2>
+        <div class="contact-layout">
+          <div class="contact-card">
+            <div class="contact-info">
+              <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
+              <p><strong>營業時間：</strong>10:00-21:00</p>
+              <p><strong>電話：</strong><a href="tel:034028721">03-402-8721</a></p>
+              <p>
+                <strong>Facebook：</strong>
+                <a
+                  class="facebook-link"
+                  href="https://www.facebook.com/Taoyuan.Zhongli.Water.Museum"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="前往水博館水族 Facebook 粉絲專頁（另開新視窗）"
+                >
+                  <i class="fa-brands fa-facebook" aria-hidden="true"></i>
+                  桃園中壢水博館水族
+                </a>
+              </p>
+            </div>
+            <iframe
+              class="contact-map"
+              title="水博館水族位置地圖"
+              src="https://www.google.com/maps?q=320%E6%A1%83%E5%9C%92%E5%B8%82%E4%B8%AD%E5%A3%A2%E5%8D%80%E7%92%B0%E8%A5%BF%E8%B7%AF%E4%BA%8C%E6%AE%B569%E8%99%9F&output=embed"
+              loading="lazy"
+              referrerpolicy="no-referrer-when-downgrade"
+            ></iframe>
           </div>
         </div>
       </section>
 
       <section id="categories" class="section wrap">
         <h2 class="section-title">商品分類</h2>
-        <p class="categories-lead">
-          依類別瀏覽展示項目；分類與商品內容於 Sanity Studio 維護，建置後會反映於網站。
-        </p>
         <ul class="category-chips">
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <li>
               <a class="category-chip" href={`/category/${c.id}`}>
                 {c.label}
@@ -642,6 +677,81 @@ const services = [
     line-height: 1.85;
     color: #444;
     font-size: 1rem;
+  }
+
+  .contact-layout {
+    display: block;
+  }
+
+  .contact-card {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 24px;
+    border: 1px solid #e6e6e6;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  .contact-info {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 460px;
+  }
+
+  .contact-card p {
+    margin: 0 0 12px;
+    line-height: 1.7;
+    color: #333;
+  }
+
+  .contact-card p:last-child {
+    margin-bottom: 0;
+  }
+
+  .contact-card a {
+    color: #111;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .facebook-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+  }
+
+  .facebook-link i {
+    color: #1877f2;
+    font-size: 1rem;
+  }
+
+  .contact-map {
+    width: min(360px, 42%);
+    aspect-ratio: 4 / 3;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 10px;
+  }
+
+  @media (max-width: 900px) {
+    .contact-card {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .contact-info {
+      max-width: none;
+    }
+
+    .contact-map {
+      width: 100%;
+      max-width: none;
+    }
   }
 
   .categories-lead,

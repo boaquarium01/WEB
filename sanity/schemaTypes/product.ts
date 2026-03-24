@@ -24,16 +24,8 @@ export const productType = defineType({
     defineField({
       name: 'category',
       title: '分類',
-      type: 'string',
-      options: {
-        list: [
-          { title: '魚類', value: 'fish' },
-          { title: '器材', value: 'equipment' },
-          { title: '水劑', value: 'chemicals' }
-        ],
-        layout: 'radio'
-      },
-      initialValue: 'fish',
+      type: 'reference',
+      to: [{ type: 'category' }],
       validation: (Rule) => Rule.required()
     }),
     defineField({
@@ -79,7 +71,7 @@ export const productType = defineType({
     select: {
       title: 'name',
       media: 'image',
-      cat: 'category',
+      cat: 'category.name',
       ph: 'isPlaceholder'
     },
     prepare({ title, media, cat, ph }) {

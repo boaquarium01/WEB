@@ -1,24 +1,13 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { CATEGORIES, getAllProducts, getCategoryLabel, type Product } from '../../data/products';
-
-export async function getStaticPaths() {
-  const all = await getAllProducts();
-  return CATEGORIES.map((c) => ({
-    params: { category: c.id },
-    props: {
-      list: all.filter((p) => p.category === c.id) as Product[]
-    }
-  }));
-}
-
-interface Props {
-  list: Product[];
-}
+import { getAllCategories, getAllProducts, type Category, type Product } from '../../data/products';
 
 const { category } = Astro.params;
-const { list } = Astro.props;
-const label = getCategoryLabel(category ?? '');
+const categories = ((await getAllCategories()) ?? []) as Category[];
+const all = ((await getAllProducts()) ?? []) as Product[];
+const currentCategory = categories.find((c) => c.id === (category ?? ''));
+const label = currentCategory?.label ?? '未分類';
+const list = all.filter((p) => p.category === category);
 const pageTitle = `${label}｜展示商品｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---
@@ -71,7 +60,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
       <div class="category-nav">
         <p class="category-nav-title">其他分類</p>
         <ul>
-          {CATEGORIES.filter((c) => c.id !== category).map((c) => (
+          {categories.filter((c) => c.id !== category).map((c) => (
             <li>
               <a href={`/category/${c.id}`}>{c.label}</a>
             </li>

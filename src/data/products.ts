@@ -5,13 +5,12 @@
 
 export {
   PRODUCTS_PAGE_SIZE,
-  CATEGORIES,
-  type CategoryId,
-  type Product,
-  getCategoryLabel
+  type Category,
+  type Product
 } from './catalog';
 
 export {
+  getAllCategories,
   getAllProducts,
   getFeaturedProducts,
   getProductsByCategory,

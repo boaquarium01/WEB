@@ -5,22 +5,16 @@
 /** 列表每頁筆數 */
 export const PRODUCTS_PAGE_SIZE = 12;
 
-export const CATEGORIES = [
-  { id: 'fish', label: '魚類' },
-  { id: 'equipment', label: '器材' },
-  { id: 'chemicals', label: '水劑' }
-] as const;
-
-export type CategoryId = (typeof CATEGORIES)[number]['id'];
-
-export function getCategoryLabel(id: string): string {
-  const c = CATEGORIES.find((x) => x.id === id);
-  return c?.label ?? id;
-}
+export type Category = {
+  id: string;
+  label: string;
+  sortOrder: number;
+};
 
 export type Product = {
   slug: string;
-  category: CategoryId;
+  category: string;
+  categoryLabel: string;
   name: string;
   image: string;
   excerpt: string;

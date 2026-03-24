@@ -4,7 +4,6 @@ import {
   getProductsSortedForCatalog,
   PRODUCTS_PAGE_SIZE,
   getCatalogPageCount,
-  getCategoryLabel,
   type Product
 } from '../../data/products';
 
@@ -85,7 +84,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
               <div class="product-body">
                 {product.isPlaceholder && <span class="pill">範例</span>}
                 <h2>{product.name}</h2>
-                <p class="product-cat">{getCategoryLabel(product.category)}</p>
+                <p class="product-cat">{product.categoryLabel}</p>
                 <p class="product-excerpt">{product.excerpt}</p>
               </div>
             </a>

@@ -1,6 +1,6 @@
 import { createClient, type SanityClient } from '@sanity/client';
 import imageUrlBuilder from '@sanity/image-url';
-import type { Product, CategoryId } from '../../data/catalog';
+import type { Category, Product } from '../../data/catalog';
 import { PRODUCTS_PAGE_SIZE } from '../../data/catalog';
 
 const API_VERSION = '2025-03-18';
@@ -13,12 +13,18 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   _id,
   name,
   "slug": slug.current,
-  category,
+  "category": category->slug.current,
+  "categoryLabel": category->name,
   image,
   excerpt,
   description,
   featured,
   isPlaceholder
+}`;
+const CATEGORY_QUERY = `*[_type == "category"] | order(sortOrder asc, name asc) {
+  "id": slug.current,
+  "label": name,
+  "sortOrder": coalesce(sortOrder, 999)
 }`;
 
 const DEFAULT_PROJECT_ID = 'iz7fvprm';
@@ -63,16 +69,11 @@ function warnMissingSanityConfig() {
   );
 }
 
-function normalizeCategory(raw: string | undefined): CategoryId {
-  const allowed: CategoryId[] = ['fish', 'equipment', 'chemicals'];
-  if (raw && (allowed as string[]).includes(raw)) return raw as CategoryId;
-  return 'fish';
-}
-
 type SanityProductDoc = {
   slug?: string;
   name?: string;
   category?: string;
+  categoryLabel?: string;
   image?: Record<string, unknown> | null;
   excerpt?: string;
   description?: string;
@@ -94,7 +95,8 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
   return {
     slug: String(doc.slug ?? '').trim(),
     name: String(doc.name ?? '未命名').trim() || '未命名',
-    category: normalizeCategory(doc.category),
+    category: String(doc.category ?? '').trim() || 'uncategorized',
+    categoryLabel: String(doc.categoryLabel ?? '').trim() || '未分類',
     image: imageUrl,
     excerpt: String(doc.excerpt ?? ''),
     description: String(doc.description ?? ''),
@@ -104,6 +106,24 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
 }
 
 let cache: { at: number; data: Product[] } | null = null;
+let categoryCache: { at: number; data: Category[] } | null = null;
+
+export async function getAllCategories(): Promise<Category[]> {
+  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  if (categoryCache && ttlMs > 0 && Date.now() - categoryCache.at < ttlMs) return categoryCache.data;
+  categoryCache = null;
+
+  const client = getClient();
+  if (!client) {
+    warnMissingSanityConfig();
+    categoryCache = { at: Date.now(), data: [] };
+    return [];
+  }
+  const docs = (await client.fetch<Category[]>(CATEGORY_QUERY)) ?? [];
+  const categories = docs.filter((c) => Boolean(c.id) && Boolean(c.label));
+  categoryCache = { at: Date.now(), data: categories };
+  return categories;
+}
 
 /** 建置／請求期間快取，避免同一 process 重複打 API */
 export async function getAllProducts(): Promise<Product[]> {

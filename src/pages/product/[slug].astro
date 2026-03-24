@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getAllProducts, getCategoryLabel, type Product } from '../../data/products';
+import { getAllProducts, type Product } from '../../data/products';
 
 export async function getStaticPaths() {
   const products = await getAllProducts();
@@ -15,7 +15,7 @@ interface Props {
 }
 
 const { product } = Astro.props;
-const categoryLabel = getCategoryLabel(product.category);
+const categoryLabel = product.categoryLabel;
 const pageTitle = `${product.name}｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
 ---
