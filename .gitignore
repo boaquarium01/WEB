@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # sanity runtime cache
 .sanity/
+
+# vercel local build output
+.vercel/
