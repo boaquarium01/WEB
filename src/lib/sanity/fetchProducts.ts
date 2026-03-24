@@ -21,9 +21,27 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   isPlaceholder
 }`;
 
+const DEFAULT_PROJECT_ID = 'iz7fvprm';
+const DEFAULT_DATASET = 'production';
+
+function readSanityEnv() {
+  const projectId =
+    import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
+    process.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
+    process.env.SANITY_STUDIO_PROJECT_ID?.trim() ||
+    DEFAULT_PROJECT_ID;
+
+  const dataset =
+    import.meta.env.PUBLIC_SANITY_DATASET ||
+    process.env.PUBLIC_SANITY_DATASET ||
+    process.env.SANITY_STUDIO_DATASET ||
+    DEFAULT_DATASET;
+
+  return { projectId, dataset };
+}
+
 function getClient(): SanityClient | null {
-  const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim();
-  const dataset = import.meta.env.PUBLIC_SANITY_DATASET || 'production';
+  const { projectId, dataset } = readSanityEnv();
   if (!projectId) {
     return null;
   }
@@ -100,8 +118,7 @@ export async function getAllProducts(): Promise<Product[]> {
     cache = { at: Date.now(), data: [] };
     return [];
   }
-  const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID as string;
-  const dataset = import.meta.env.PUBLIC_SANITY_DATASET || 'production';
+  const { projectId, dataset } = readSanityEnv();
   const docs = await client.fetch<SanityProductDoc[]>(PRODUCT_QUERY);
   const mapped = docs
     .map((d) => mapToProduct(d, projectId, dataset))
