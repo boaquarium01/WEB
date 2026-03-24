@@ -41,6 +41,7 @@ const pageTitle =
     ? `全部商品｜水博館水族`
     : `全部商品（第 ${currentPage} 頁）｜水博館水族`;
 const pageDesc = `水博館水族展示商品列表，共 ${totalItems} 項，僅供參考，歡迎來店參觀。`;
+Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---
 
 <Layout title={pageTitle} description={pageDesc}>
