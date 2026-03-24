@@ -85,16 +85,20 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
   };
 }
 
-let cache: Product[] | null = null;
+let cache: { at: number; data: Product[] } | null = null;
 
 /** 建置／請求期間快取，避免同一 process 重複打 API */
 export async function getAllProducts(): Promise<Product[]> {
-  if (cache) return cache;
+  // 開發環境希望能「新增後立刻看到」，因此不啟用快取（或 TTL 極短）。
+  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  if (cache && ttlMs > 0 && Date.now() - cache.at < ttlMs) return cache.data;
+  cache = null;
+
   const client = getClient();
   if (!client) {
     warnMissingSanityConfig();
-    cache = [];
-    return cache;
+    cache = { at: Date.now(), data: [] };
+    return [];
   }
   const projectId = import.meta.env.PUBLIC_SANITY_PROJECT_ID as string;
   const dataset = import.meta.env.PUBLIC_SANITY_DATASET || 'production';
@@ -102,8 +106,8 @@ export async function getAllProducts(): Promise<Product[]> {
   const mapped = docs
     .map((d) => mapToProduct(d, projectId, dataset))
     .filter((p) => p.slug.length > 0);
-  cache = mapped;
-  return cache;
+  cache = { at: Date.now(), data: mapped };
+  return mapped;
 }
 
 /** 首頁精選：有勾 featured 的優先；若皆未勾選則取前 limit 筆 */
