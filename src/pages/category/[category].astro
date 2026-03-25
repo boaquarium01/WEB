@@ -8,13 +8,13 @@ const all = ((await getAllProducts()) ?? []) as Product[];
 const currentCategory = categories.find((c) => c.id === (category ?? ''));
 const label = currentCategory?.label ?? '未分類';
 const list = all.filter((p) => p.category === category);
-const pageTitle = `${label}｜展示商品｜水博館水族`;
+const pageTitle = `${label}｜熱銷推薦｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---
 
 <Layout
   title={pageTitle}
-  description={`水博館水族${label}類別展示商品列表，僅供參考，歡迎來店參觀。`}
+  description={`水博館水族${label}類別熱銷推薦列表，僅供參考，歡迎來店參觀。`}
 >
   <div class="page">
     <header class="site-header">

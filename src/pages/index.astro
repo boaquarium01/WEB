@@ -6,9 +6,7 @@ const navItems = [
   { name: '首頁', href: '#home' },
   { name: '服務項目', href: '#services' },
   { name: '關於我們', href: '#about' },
-  { name: '聯絡資訊', href: '#contact' },
-  { name: '展示商品', href: '#products' },
-  { name: '全部商品', href: '/products' }
+  { name: '熱銷推薦', href: '#products' }
 ];
 
 const featuredProducts = await getFeaturedProducts(7);
@@ -58,16 +56,22 @@ const services = [
         </button>
         <a href="/" class="brand">水博館水族</a>
         <nav class="nav-desktop" aria-label="主要導覽">
-          <ul>
+          <ul class="nav-desktop-list">
             {navItems.map((item) => (
               <li>
-                <a href={item.href}>{item.name}</a>
+                <a href={item.href} class="nav-item">
+                  {item.name}
+                </a>
               </li>
             ))}
             <li class="nav-categories">
               <details>
-                <summary>商品分類</summary>
+                <summary class="nav-item nav-item--summary">商品</summary>
                 <ul class="nav-categories-menu">
+                  <li>
+                    <a href="/products">全部商品</a>
+                  </li>
+                  {categories.length > 0 && <li class="nav-categories-menu-divider" aria-hidden="true"></li>}
                   {categories.map((c) => (
                     <li>
                       <a href={`/category/${c.id}`}>{c.label}</a>
@@ -94,16 +98,21 @@ const services = [
         <ul class="drawer-list">
           {navItems.map((item) => (
             <li>
-              <a href={item.href} class="mobile-menu-link">{item.name}</a>
+              <a href={item.href} class="mobile-menu-link drawer-link">
+                {item.name}
+              </a>
             </li>
           ))}
           <li class="drawer-categories">
             <details>
-              <summary>商品分類</summary>
+              <summary>商品</summary>
               <ul class="drawer-category-list">
+                <li>
+                  <a href="/products" class="mobile-menu-link drawer-link drawer-link--all">全部商品</a>
+                </li>
                 {categories.map((c) => (
                   <li>
-                    <a href={`/category/${c.id}`} class="mobile-menu-link">{c.label}</a>
+                    <a href={`/category/${c.id}`} class="mobile-menu-link drawer-link">{c.label}</a>
                   </li>
                 ))}
               </ul>
@@ -156,63 +165,69 @@ const services = [
         </div>
       </section>
 
-      <!-- 關於我們 -->
-      <section id="about" class="section section--alt">
-        <div class="about-grid wrap">
-          <img
-            src="/about-us-store.png"
-            alt="水博館水族門市展示空間"
-            class="about-img"
-            width="1200"
-            height="800"
-            loading="lazy"
-          />
-          <div class="about-text">
-            <h2 class="section-title">關於我們</h2>
-            <p>
-              水博館水族專注於淡水魚水族販售，每週新增極品特選。秉持「專業、用心、苛求完美」的理念，提供專業養殖、水草景觀魚缸規劃、魚病治療、魚缸保養與水族器材銷售，歡迎來店參觀諮詢。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section id="contact" class="section wrap">
-        <h2 class="section-title">聯絡資訊</h2>
-        <div class="contact-layout">
-          <div class="contact-card">
-            <div class="contact-info">
-              <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
-              <p><strong>營業時間：</strong>10:00-21:00</p>
-              <p><strong>電話：</strong><a href="tel:034028721">03-402-8721</a></p>
-              <p>
-                <strong>Facebook：</strong>
-                <a
-                  class="facebook-link"
-                  href="https://www.facebook.com/Taoyuan.Zhongli.Water.Museum"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="前往水博館水族 Facebook 粉絲專頁（另開新視窗）"
-                >
-                  <i class="fa-brands fa-facebook" aria-hidden="true"></i>
-                  桃園中壢水博館水族
-                </a>
-              </p>
+      <!-- 關於我們（與聯絡資訊同一區塊） -->
+      <section id="about" class="section section--alt" aria-labelledby="about-title">
+        <div class="about-unified wrap">
+          <div class="about-panel">
+            <div class="about-grid about-intro-grid">
+              <img
+                src="/about-us-store.png"
+                alt="水博館水族門市展示空間"
+                class="about-img"
+                width="1200"
+                height="800"
+                loading="lazy"
+              />
+              <div class="about-text">
+                <h2 id="about-title" class="section-title">關於我們</h2>
+                <p>
+                  水博館水族專注於淡水魚水族販售，每週新增極品特選。秉持「專業、用心、苛求完美」的理念，提供專業養殖、水草景觀魚缸規劃、魚病治療、魚缸保養與水族器材銷售，歡迎來店參觀諮詢。
+                </p>
+              </div>
             </div>
-            <iframe
-              class="contact-map"
-              title="水博館水族位置地圖"
-              src="https://www.google.com/maps?q=320%E6%A1%83%E5%9C%92%E5%B8%82%E4%B8%AD%E5%A3%A2%E5%8D%80%E7%92%B0%E8%A5%BF%E8%B7%AF%E4%BA%8C%E6%AE%B569%E8%99%9F&output=embed"
-              loading="lazy"
-              referrerpolicy="no-referrer-when-downgrade"
-            ></iframe>
+            <div id="contact" class="about-contact-integrated" aria-labelledby="contact-title">
+              <div class="contact-layout">
+                <div class="contact-card contact-card--integrated">
+                  <div class="contact-info">
+                    <h3 id="contact-title" class="about-contact-heading">聯絡資訊</h3>
+                    <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
+                    <p><strong>營業時間：</strong>10:00-21:00</p>
+                    <p><strong>電話：</strong><a href="tel:034028721">03-402-8721</a></p>
+                    <p>
+                      <strong>Facebook：</strong>
+                      <a
+                        class="facebook-link"
+                        href="https://www.facebook.com/Taoyuan.Zhongli.Water.Museum"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="前往水博館水族 Facebook 粉絲專頁（另開新視窗）"
+                      >
+                        <i class="fa-brands fa-facebook" aria-hidden="true"></i>
+                        桃園中壢水博館水族
+                      </a>
+                    </p>
+                  </div>
+                  <iframe
+                    class="contact-map"
+                    title="水博館水族位置地圖"
+                    src="https://www.google.com/maps?q=320%E6%A1%83%E5%9C%92%E5%B8%82%E4%B8%AD%E5%A3%A2%E5%8D%80%E7%92%B0%E8%A5%BF%E8%B7%AF%E4%BA%8C%E6%AE%B569%E8%99%9F&output=embed"
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade"
+                  ></iframe>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section id="products" class="section wrap">
-        <h2 class="products-page-title">展示商品</h2>
-        <div class="products-cta">
-          <a class="products-all-link" href="/products">查看全部商品（含分頁）</a>
+      <section id="products" class="section wrap" aria-labelledby="products-heading">
+        <div class="products-section-head">
+          <h2 id="products-heading" class="products-page-title">熱銷推薦</h2>
+          <a class="products-all-link" href="/products" aria-label="前往全部商品列表">
+            全部商品
+            <i class="fa-solid fa-chevron-right products-all-icon" aria-hidden="true"></i>
+          </a>
         </div>
         {featuredProducts.length === 0 ? (
           <p class="products-empty">
@@ -307,13 +322,24 @@ const services = [
     color: #111111;
   }
 
-  /* 頂欄：白底、底線，參考電商站 */
+  /* 頂欄：毛玻璃、層次與對齊 */
   .site-header {
     position: sticky;
     top: 0;
     z-index: 100;
-    background: #ffffff;
-    border-bottom: 1px solid #e5e5e5;
+    background: rgba(255, 255, 255, 0.88);
+    border-bottom: 1px solid rgba(17, 17, 17, 0.07);
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.9) inset,
+      0 6px 28px rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  @supports not (backdrop-filter: blur(1px)) {
+    .site-header {
+      background: #ffffff;
+    }
   }
 
   .header-inner {
@@ -323,42 +349,100 @@ const services = [
     gap: 12px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 12px 16px;
-    min-height: 56px;
+    padding: 14px 20px;
+    min-height: 58px;
   }
 
   .brand {
     justify-self: center;
-    font-weight: 800;
-    font-size: 1.125rem;
-    letter-spacing: 0.06em;
-    color: #111;
+    font-weight: 700;
+    font-size: 1.0625rem;
+    letter-spacing: 0.14em;
+    color: #0d0d0d;
+    transition: opacity 0.18s ease;
+  }
+
+  .brand:hover {
+    opacity: 0.72;
   }
 
   .nav-desktop {
     display: none;
   }
 
-  .nav-desktop ul {
+  .nav-desktop-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
-    gap: clamp(12px, 2vw, 22px);
-    justify-content: center;
+    align-items: center;
+    justify-content: flex-end;
     flex-wrap: wrap;
+    gap: 4px 2px;
   }
 
-  .nav-desktop a {
-    font-size: 0.9375rem;
+  .nav-item {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 0.8125rem;
     font-weight: 500;
-    color: #333;
+    letter-spacing: 0.06em;
+    color: #2a2a2a;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition:
+      background 0.18s ease,
+      color 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
   }
 
-  .nav-desktop a:hover {
-    color: #000;
-    text-decoration: underline;
-    text-underline-offset: 4px;
+  .nav-item:hover {
+    background: rgba(17, 17, 17, 0.055);
+    color: #111;
+    text-decoration: none;
+  }
+
+  .nav-item:focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
+  }
+
+  .nav-item--summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    gap: 6px;
+  }
+
+  .nav-item--summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .nav-item--summary::after {
+    content: '';
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 2px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid currentColor;
+    opacity: 0.45;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .nav-categories details[open] .nav-item--summary::after {
+    transform: rotate(180deg);
+    opacity: 0.65;
+  }
+
+  .nav-categories details[open] .nav-item--summary,
+  .nav-item--summary:hover {
+    color: #111;
   }
 
   .nav-categories {
@@ -369,63 +453,62 @@ const services = [
     position: relative;
   }
 
-  .nav-categories summary {
-    list-style: none;
-    cursor: pointer;
-    font-size: 0.9375rem;
-    font-weight: 500;
-    color: #333;
-  }
-
-  .nav-categories summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .nav-categories summary::after {
-    content: '▾';
-    margin-left: 6px;
-    font-size: 0.75rem;
-    color: #666;
-  }
-
-  .nav-categories details[open] summary,
-  .nav-categories summary:hover {
-    color: #000;
-  }
-
   .nav-categories-menu {
     position: absolute;
-    top: calc(100% + 10px);
-    left: 50%;
-    transform: translateX(-50%);
-    min-width: 180px;
-    padding: 8px;
+    top: calc(100% + 12px);
+    right: 0;
+    left: auto;
+    transform: none;
+    min-width: 200px;
+    padding: 6px;
     margin: 0;
     list-style: none;
     display: grid;
     gap: 2px;
-    background: #fff;
-    border: 1px solid #e8e8e8;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid rgba(17, 17, 17, 0.08);
     border-radius: 10px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    box-shadow:
+      0 4px 6px rgba(0, 0, 0, 0.03),
+      0 16px 40px rgba(0, 0, 0, 0.1);
     z-index: 120;
   }
 
   .nav-categories-menu a {
     display: block;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-radius: 8px;
     white-space: nowrap;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: #333;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
   }
 
   .nav-categories-menu a:hover {
-    background: #f5f5f5;
+    background: rgba(17, 17, 17, 0.06);
+    color: #111;
     text-decoration: none;
   }
 
+  .nav-categories-menu li:first-child a {
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+
+  .nav-categories-menu-divider {
+    height: 1px;
+    margin: 6px 10px;
+    padding: 0;
+    background: rgba(17, 17, 17, 0.08);
+    list-style: none;
+  }
+
   .header-end-spacer {
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
     flex-shrink: 0;
   }
 
@@ -433,19 +516,29 @@ const services = [
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 42px;
+    height: 42px;
     padding: 0;
-    border: none;
+    border: 1px solid transparent;
     background: transparent;
-    color: #111;
+    color: #1a1a1a;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: 10px;
     font-size: 1.125rem;
+    transition:
+      background 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
   }
 
   .icon-btn:hover {
-    background: #f5f5f5;
+    background: rgba(17, 17, 17, 0.05);
+    border-color: rgba(17, 17, 17, 0.08);
+  }
+
+  .icon-btn:focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
   }
 
   @media (min-width: 1024px) {
@@ -495,12 +588,13 @@ const services = [
     z-index: 210;
     width: min(300px, 88vw);
     height: 100%;
-    background: #fff;
-    border-right: 1px solid #e5e5e5;
-    padding: 20px;
+    background: #fafafa;
+    border-right: 1px solid rgba(17, 17, 17, 0.08);
+    padding: 22px 20px;
     transform: translateX(-100%);
-    transition: transform 0.28s ease;
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
     overflow-y: auto;
+    box-shadow: 8px 0 40px rgba(0, 0, 0, 0.06);
   }
 
   .drawer.is-open {
@@ -511,14 +605,16 @@ const services = [
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #eee;
+    margin-bottom: 22px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(17, 17, 17, 0.08);
   }
 
   .drawer-title {
     font-weight: 700;
-    font-size: 1.125rem;
+    font-size: 0.9375rem;
+    letter-spacing: 0.12em;
+    color: #0d0d0d;
   }
 
   .drawer-list {
@@ -527,31 +623,55 @@ const services = [
     padding: 0;
   }
 
-  .drawer-list a {
+  .drawer-link {
     display: block;
-    padding: 14px 12px;
-    border-radius: 8px;
-    font-size: 1rem;
-    color: #222;
+    padding: 14px 14px;
+    border-radius: 10px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    color: #2a2a2a;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition:
+      background 0.18s ease,
+      border-color 0.18s ease,
+      color 0.18s ease;
   }
 
-  .drawer-list a:hover {
-    background: #f5f5f5;
+  .drawer-link:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(17, 17, 17, 0.06);
+    color: #111;
+  }
+
+  .drawer-link:focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
+  }
+
+  .drawer-link--all {
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: #111;
   }
 
   .drawer-categories details {
-    border-top: 1px solid #f0f0f0;
-    margin-top: 6px;
-    padding-top: 6px;
+    border-top: 1px solid rgba(17, 17, 17, 0.07);
+    margin-top: 10px;
+    padding-top: 10px;
   }
 
   .drawer-categories summary {
     list-style: none;
-    padding: 14px 12px;
-    border-radius: 8px;
-    font-size: 1rem;
-    color: #222;
+    padding: 14px 14px;
+    border-radius: 10px;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    color: #2a2a2a;
     cursor: pointer;
+    transition: background 0.18s ease;
   }
 
   .drawer-categories summary::-webkit-details-marker {
@@ -559,25 +679,38 @@ const services = [
   }
 
   .drawer-categories summary::after {
-    content: '▾';
+    content: '';
     float: right;
-    color: #666;
+    margin-top: 6px;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #888;
+    opacity: 0.7;
   }
 
   .drawer-categories summary:hover {
-    background: #f5f5f5;
+    background: rgba(255, 255, 255, 0.85);
   }
 
   .drawer-category-list {
     list-style: none;
-    margin: 2px 0 0;
-    padding: 0 0 0 10px;
+    margin: 4px 0 0;
+    padding: 0 0 0 8px;
   }
 
   .drawer-category-list a {
-    padding: 10px 12px;
-    font-size: 0.9375rem;
+    padding: 11px 14px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
     color: #444;
+    border-radius: 8px;
+  }
+
+  .drawer-category-list a:hover {
+    color: #111;
   }
 
   @media (min-width: 1024px) {
@@ -707,6 +840,14 @@ const services = [
     }
   }
 
+  /* 手機：服務項目區左右留白加寬，避免貼邊（含瀏海機安全區） */
+  @media (max-width: 639px) {
+    #services.wrap {
+      padding-left: calc(24px + env(safe-area-inset-left, 0px));
+      padding-right: calc(24px + env(safe-area-inset-right, 0px));
+    }
+  }
+
   .services-grid {
     display: grid;
     gap: 16px;
@@ -751,11 +892,40 @@ const services = [
     line-height: 1.55;
   }
 
-  /* 關於 */
+  /* 關於（與聯絡同一面板） */
+  .about-unified {
+    width: 100%;
+  }
+
+  .about-panel {
+    background: #fff;
+    border: 1px solid #e6e6e6;
+    border-radius: 12px;
+    padding: 24px 16px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  }
+
+  @media (min-width: 768px) {
+    .about-panel {
+      padding: 28px 20px;
+    }
+  }
+
+  @media (max-width: 639px) {
+    #about .about-unified.wrap {
+      padding-left: calc(24px + env(safe-area-inset-left, 0px));
+      padding-right: calc(24px + env(safe-area-inset-right, 0px));
+    }
+  }
+
   .about-grid {
     display: grid;
     gap: 28px;
     align-items: center;
+  }
+
+  .about-intro-grid {
+    margin: 0;
   }
 
   @media (min-width: 1024px) {
@@ -769,6 +939,78 @@ const services = [
 
     .about-grid .about-text {
       order: 1;
+    }
+
+    /* 桌機：與聯絡列同一兩欄比例——左欄圖+聯絡文字、右欄關於我們+地圖 */
+    .about-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) min(360px, 42%);
+      column-gap: 28px;
+      row-gap: 28px;
+      align-items: start;
+    }
+
+    .about-intro-grid,
+    .about-contact-integrated,
+    .about-contact-integrated .contact-layout,
+    .contact-card.contact-card--integrated {
+      display: contents;
+    }
+
+    .about-contact-integrated {
+      margin-top: 0;
+    }
+
+    .about-panel .about-img {
+      grid-column: 1;
+      grid-row: 1;
+      align-self: center;
+    }
+
+    .about-panel .about-text {
+      grid-column: 2;
+      grid-row: 1;
+      align-self: center;
+    }
+
+    .about-panel .contact-info {
+      grid-column: 1;
+      grid-row: 2;
+      align-self: start;
+      max-width: 460px;
+    }
+
+    .about-panel iframe.contact-map {
+      grid-column: 2;
+      grid-row: 2;
+      width: 100%;
+      max-width: none;
+      min-height: 0;
+      align-self: start;
+      justify-self: stretch;
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .about-panel {
+      display: block;
+    }
+
+    .about-intro-grid {
+      display: grid;
+    }
+
+    .about-contact-integrated {
+      display: block;
+      margin-top: 28px;
+    }
+
+    .about-contact-integrated .contact-layout {
+      display: block;
+    }
+
+    .contact-card.contact-card--integrated {
+      display: flex;
     }
   }
 
@@ -791,6 +1033,37 @@ const services = [
     line-height: 1.85;
     color: #444;
     font-size: 1rem;
+  }
+
+  .about-contact-integrated {
+    margin-top: 28px;
+  }
+
+  .contact-info .about-contact-heading {
+    margin: 0 0 14px;
+    font-size: 1rem;
+    font-weight: 800;
+    text-align: left;
+    color: #111;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+  }
+
+  .contact-card--integrated {
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  #about {
+    scroll-margin-top: 72px;
+  }
+
+  #contact {
+    scroll-margin-top: 72px;
   }
 
   .contact-layout {
@@ -877,42 +1150,64 @@ const services = [
     line-height: 1.6;
   }
 
-  .products-cta {
-    margin: 0 0 22px;
+  .products-section-head {
     display: flex;
-    justify-content: center;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    margin: 0 0 20px;
   }
 
   .products-all-link {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    min-height: 42px;
-    padding: 0 18px;
-    font-weight: 700;
+    gap: 6px;
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 8px 4px;
+    margin: -8px -4px;
+    font-weight: 600;
     font-size: 0.9375rem;
-    letter-spacing: 0.01em;
-    color: #fff;
-    background: #111;
-    border: 1px solid #111;
-    border-radius: 999px;
+    letter-spacing: 0.04em;
+    color: #333;
+    text-decoration: none;
+    border-radius: 6px;
     transition:
-      transform 0.12s ease,
-      box-shadow 0.18s ease,
-      background 0.18s ease,
-      border-color 0.18s ease;
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .products-all-icon {
+    font-size: 0.72em;
+    opacity: 0.55;
+    transition: transform 0.15s ease, opacity 0.15s ease;
   }
 
   .products-all-link:hover {
-    background: #222;
-    border-color: #222;
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
-    transform: translateY(-1px);
+    color: #000;
+  }
+
+  .products-all-link:hover .products-all-icon {
+    opacity: 0.9;
+    transform: translateX(2px);
   }
 
   .products-all-link:focus-visible {
     outline: 2px solid #111;
     outline-offset: 2px;
+  }
+
+  @media (max-width: 520px) {
+    .products-section-head {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .products-all-link {
+      margin: 0;
+    }
   }
 
   .products-empty {
@@ -936,11 +1231,17 @@ const services = [
   }
 
   .products-page-title {
-    margin: 0 0 10px;
+    margin: 0;
     font-size: clamp(1.5rem, 4vw, 1.875rem);
     font-weight: 800;
-    text-align: center;
+    text-align: left;
     letter-spacing: 0.02em;
+  }
+
+  @media (max-width: 520px) {
+    .products-page-title {
+      text-align: center;
+    }
   }
 
   .product-grid {
