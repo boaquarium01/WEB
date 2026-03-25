@@ -16,6 +16,7 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   "category": category->slug.current,
   "categoryLabel": category->name,
   image,
+  gallery,
   excerpt,
   description,
   featured,
@@ -75,29 +76,60 @@ type SanityProductDoc = {
   category?: string;
   categoryLabel?: string;
   image?: Record<string, unknown> | null;
+  gallery?: (Record<string, unknown> | null)[] | null;
   excerpt?: string;
   description?: string;
   featured?: boolean;
   isPlaceholder?: boolean;
 };
 
-function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string): Product {
-  const builder = imageUrlBuilder({ projectId, dataset });
-  let imageUrl = FALLBACK_IMAGE;
-  if (doc.image) {
-    try {
-      imageUrl = builder.image(doc.image).width(1200).fit('max').auto('format').url();
-    } catch {
-      imageUrl = FALLBACK_IMAGE;
+function urlFromSanityImage(
+  ref: Record<string, unknown> | null | undefined,
+  builder: ReturnType<typeof imageUrlBuilder>
+): string | null {
+  if (!ref) return null;
+  try {
+    return builder.image(ref).width(1200).fit('max').auto('format').url();
+  } catch {
+    return null;
+  }
+}
+
+function collectImageUrls(doc: SanityProductDoc, builder: ReturnType<typeof imageUrlBuilder>): string[] {
+  const raw: string[] = [];
+  const push = (u: string | null) => {
+    if (u) raw.push(u);
+  };
+  push(urlFromSanityImage(doc.image, builder));
+  const gallery = doc.gallery;
+  if (Array.isArray(gallery)) {
+    for (const item of gallery) {
+      if (item && typeof item === 'object') push(urlFromSanityImage(item as Record<string, unknown>, builder));
     }
   }
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const u of raw) {
+    if (!seen.has(u)) {
+      seen.add(u);
+      urls.push(u);
+    }
+  }
+  if (urls.length === 0) urls.push(FALLBACK_IMAGE);
+  return urls;
+}
+
+function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string): Product {
+  const builder = imageUrlBuilder({ projectId, dataset });
+  const images = collectImageUrls(doc, builder);
 
   return {
     slug: String(doc.slug ?? '').trim(),
     name: String(doc.name ?? '未命名').trim() || '未命名',
     category: String(doc.category ?? '').trim() || 'uncategorized',
     categoryLabel: String(doc.categoryLabel ?? '').trim() || '未分類',
-    image: imageUrl,
+    image: images[0] ?? FALLBACK_IMAGE,
+    images,
     excerpt: String(doc.excerpt ?? ''),
     description: String(doc.description ?? ''),
     featured: Boolean(doc.featured),
@@ -157,6 +189,36 @@ export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
 
 export async function getProductsByCategory(categoryId: string): Promise<Product[]> {
   return (await getAllProducts()).filter((p) => p.category === categoryId);
+}
+
+const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0] {
+  _id,
+  name,
+  "slug": slug.current,
+  "category": category->slug.current,
+  "categoryLabel": category->name,
+  image,
+  gallery,
+  excerpt,
+  description,
+  featured,
+  isPlaceholder
+}`;
+
+/** SSR 商品詳情頁：依 slug 查單筆（不依賴 getStaticPaths） */
+export async function getProductBySlug(slug: string): Promise<Product | null> {
+  const s = String(slug ?? '').trim();
+  if (!s) return null;
+
+  const client = getClient();
+  if (!client) {
+    warnMissingSanityConfig();
+    return null;
+  }
+  const { projectId, dataset } = readSanityEnv();
+  const doc = await client.fetch<SanityProductDoc | null>(PRODUCT_BY_SLUG_QUERY, { slug: s });
+  if (!doc?.slug) return null;
+  return mapToProduct(doc, projectId, dataset);
 }
 
 export async function getProductsSortedForCatalog(): Promise<Product[]> {

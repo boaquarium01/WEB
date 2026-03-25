@@ -7,34 +7,32 @@ import {
   type Product
 } from '../../data/products';
 
-export async function getStaticPaths() {
-  const sorted = await getProductsSortedForCatalog();
-  const pageSize = PRODUCTS_PAGE_SIZE;
-  const totalPages = getCatalogPageCount(sorted.length, pageSize);
-  const totalItems = sorted.length;
+/** SSR（output: 'server'）下不會執行 getStaticPaths，須依 params 即時查資料（同 product/[slug].astro） */
+const pageSize = PRODUCTS_PAGE_SIZE;
+const rawPage = String(Astro.params.page ?? '').trim();
+const parsed = parseInt(rawPage, 10);
 
-  return Array.from({ length: totalPages }, (_, i) => {
-    const currentPage = i + 1;
-    return {
-      params: { page: String(currentPage) },
-      props: {
-        currentPage,
-        totalPages,
-        totalItems,
-        items: sorted.slice(i * pageSize, i * pageSize + pageSize) as Product[]
-      }
-    };
-  });
+if (!rawPage || !Number.isFinite(parsed) || parsed < 1) {
+  return Astro.redirect('/products/1');
 }
 
-interface Props {
-  currentPage: number;
-  totalPages: number;
-  totalItems: number;
-  items: Product[];
+const sorted = await getProductsSortedForCatalog();
+const totalItems = sorted.length;
+const totalPages = getCatalogPageCount(totalItems, pageSize);
+const currentPage = parsed;
+
+if (currentPage > totalPages) {
+  return Astro.redirect(`/products/${totalPages}`);
 }
 
-const { currentPage, totalPages, totalItems, items } = Astro.props;
+if (String(currentPage) !== rawPage) {
+  return Astro.redirect(`/products/${currentPage}`);
+}
+
+const items = sorted.slice(
+  (currentPage - 1) * pageSize,
+  currentPage * pageSize
+) as Product[];
 const pageTitle =
   currentPage === 1
     ? `全部商品｜水博館水族`
@@ -132,8 +130,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
 
     <footer class="site-footer">
       <div class="wrap footer-inner">
-        <p class="footer-brand">水博館水族</p>
-        <p class="footer-copy">© {new Date().getFullYear()} 門市展示網頁</p>
+        <p class="footer-copy">© {new Date().getFullYear()} 水博館水族</p>
       </div>
     </footer>
   </div>
@@ -412,11 +409,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
 
   .footer-inner {
     text-align: center;
-  }
-
-  .footer-brand {
-    margin: 0 0 6px;
-    font-weight: 800;
   }
 
   .footer-copy {

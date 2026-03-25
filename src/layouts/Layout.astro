@@ -1,13 +1,8 @@
 ---
-interface Props {
-	title?: string;
-	description?: string;
-}
+const title = '水博館水族｜官方網站';
+const description = '淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售';
 
-const {
-	title = '水博館水族｜門市與商品展示',
-	description = '水博館水族：門市環境、服務項目與展示商品介紹（僅展示，非線上購物）。'
-} = Astro.props;
+const pageUrl = Astro.url.href;
 ---
 
 <!doctype html>
@@ -20,6 +15,15 @@ const {
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
 		<title>{title}</title>
+		<link rel="canonical" href={pageUrl} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:type" content="website" />
+		<meta property="og:url" content={pageUrl} />
+		<meta property="og:locale" content="zh_TW" />
+		<meta name="twitter:card" content="summary" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
 		<link
 			rel="stylesheet"
 			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"

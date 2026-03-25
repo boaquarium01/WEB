@@ -1,20 +1,14 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getAllProducts, type Product } from '../../data/products';
+import { getProductBySlug } from '../../data/products';
 
-export async function getStaticPaths() {
-  const products = await getAllProducts();
-  return products.map((product) => ({
-    params: { slug: product.slug },
-    props: { product }
-  }));
+const slug = String(Astro.params.slug ?? '').trim();
+const product = await getProductBySlug(slug);
+
+if (!product) {
+  return Astro.redirect('/products');
 }
 
-interface Props {
-  product: Product;
-}
-
-const { product } = Astro.props;
 const categoryLabel = product.categoryLabel;
 const pageTitle = `${product.name}｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
@@ -49,7 +43,52 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 
       <article class="detail">
         <div class="detail-media">
-          <img src={product.image} alt={product.name} width="1000" height="750" loading="eager" />
+          <div
+            class="product-carousel"
+            data-product-carousel
+            aria-roledescription="輪播"
+            aria-label={`${product.name} 商品圖片`}
+          >
+            <div class="carousel-main">
+              <div class="carousel-viewport" tabindex="0">
+                <div class="carousel-track">
+                  {product.images.map((src, i) => (
+                    <div class="carousel-slide" aria-hidden={i === 0 ? 'false' : 'true'}>
+                      <img
+                        src={src}
+                        alt={i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`}
+                        width="1000"
+                        height="750"
+                        loading={i === 0 ? 'eager' : 'lazy'}
+                        decoding="async"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {product.images.length > 1 && (
+                <>
+                  <button type="button" class="carousel-nav carousel-prev" aria-label="上一張圖片">
+                    <i class="fa-solid fa-chevron-left" aria-hidden="true" />
+                  </button>
+                  <button type="button" class="carousel-nav carousel-next" aria-label="下一張圖片">
+                    <i class="fa-solid fa-chevron-right" aria-hidden="true" />
+                  </button>
+                  <div class="carousel-dots" role="tablist" aria-label="選擇圖片">
+                    {product.images.map((_, i) => (
+                      <button
+                        type="button"
+                        class:list={['carousel-dot', { 'is-active': i === 0 }]}
+                        aria-label={`第 ${i + 1} 張，共 ${product.images.length} 張`}
+                        aria-selected={i === 0 ? 'true' : 'false'}
+                        role="tab"
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
         <div class="detail-body">
           <p class="category-pill">{categoryLabel}</p>
@@ -60,7 +99,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
               <p>{para}</p>
             ))}
           </div>
-          <p class="note">以上為門市展示資訊，實際庫存與規格請以現場為準。歡迎來店參觀選購。</p>
+          <p class="note">網站僅供參考請以現場為準，歡迎來店參觀選購。</p>
           <a href="/products/1" class="btn-secondary">返回全部商品</a>
         </div>
       </article>
@@ -68,8 +107,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 
     <footer class="site-footer">
       <div class="wrap footer-inner">
-        <p class="footer-brand">水博館水族</p>
-        <p class="footer-copy">© {new Date().getFullYear()} 門市展示網頁</p>
+        <p class="footer-copy">© {new Date().getFullYear()} 水博館水族</p>
       </div>
     </footer>
   </div>
@@ -186,13 +224,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     background: #f5f5f5;
   }
 
-  .detail-media img {
-    width: 100%;
-    height: auto;
-    display: block;
-    object-fit: cover;
-  }
-
   .category-pill {
     display: inline-block;
     margin: 0 0 12px;
@@ -261,14 +292,266 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     text-align: center;
   }
 
-  .footer-brand {
-    margin: 0 0 6px;
-    font-weight: 800;
-  }
-
   .footer-copy {
     margin: 0;
     font-size: 0.8125rem;
     color: #666;
   }
+
+  .product-carousel {
+    position: relative;
+  }
+
+  .carousel-main {
+    position: relative;
+  }
+
+  .carousel-viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .carousel-viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .carousel-track {
+    display: flex;
+  }
+
+  .carousel-slide {
+    flex: 0 0 100%;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+
+  .carousel-slide img {
+    width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+  }
+
+  .carousel-nav {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 999px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    color: #333;
+    background: rgba(255, 255, 255, 0.88);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 0.2s ease,
+      color 0.15s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .carousel-main:hover .carousel-nav,
+  .carousel-main:focus-within .carousel-nav,
+  .carousel-main.carousel-show-nav .carousel-nav {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .carousel-nav:hover {
+    color: #111;
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+
+  .carousel-nav:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    outline: 2px solid #111;
+    outline-offset: 2px;
+  }
+
+  .carousel-prev {
+    left: 10px;
+  }
+
+  .carousel-next {
+    right: 10px;
+  }
+
+  @media (min-width: 480px) {
+    .carousel-nav {
+      width: 36px;
+      height: 36px;
+      font-size: 0.75rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .carousel-nav {
+      transition: none;
+    }
+  }
+
+  .carousel-dots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 12px;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .carousel-dots .carousel-dot {
+    pointer-events: auto;
+  }
+
+  .carousel-dot {
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+
+  .carousel-dot.is-active {
+    background: #111;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
+    transform: scale(1.2);
+  }
+
+  .carousel-dot:focus-visible {
+    outline: 2px solid #fff;
+    outline-offset: 2px;
+  }
 </style>
+
+<script>
+  function setupProductCarousels() {
+    document.querySelectorAll('[data-product-carousel]').forEach((root) => {
+      if (!(root instanceof HTMLElement)) return;
+      if (root.dataset.carouselInit === '1') return;
+      root.dataset.carouselInit = '1';
+
+      const main = root.querySelector('.carousel-main');
+      const viewport = root.querySelector('.carousel-viewport');
+      const slides = root.querySelectorAll('.carousel-slide');
+      const prevBtn = root.querySelector('.carousel-prev');
+      const nextBtn = root.querySelector('.carousel-next');
+      const dots = root.querySelectorAll('.carousel-dot');
+
+      if (
+        !(main instanceof HTMLElement) ||
+        !(viewport instanceof HTMLElement) ||
+        slides.length < 2
+      ) {
+        return;
+      }
+
+      const TOUCH_NAV_MS = 4200;
+      let hideNavTimer = 0;
+      function revealNavForTouch() {
+        main.classList.add('carousel-show-nav');
+        window.clearTimeout(hideNavTimer);
+        hideNavTimer = window.setTimeout(() => {
+          main.classList.remove('carousel-show-nav');
+        }, TOUCH_NAV_MS);
+      }
+
+      main.addEventListener(
+        'pointerdown',
+        (e) => {
+          if (e.pointerType === 'touch') revealNavForTouch();
+        },
+        { passive: true }
+      );
+
+      let index = 0;
+      let ticking = false;
+
+      const slideWidth = () => viewport.clientWidth;
+
+      function syncDots(active) {
+        dots.forEach((dot, j) => {
+          dot.classList.toggle('is-active', j === active);
+          dot.setAttribute('aria-selected', String(j === active));
+        });
+        slides.forEach((slide, j) => {
+          slide.setAttribute('aria-hidden', String(j !== active));
+        });
+      }
+
+      function goTo(i) {
+        const n = slides.length;
+        index = ((i % n) + n) % n;
+        viewport.scrollTo({ left: index * slideWidth(), behavior: 'smooth' });
+        syncDots(index);
+      }
+
+      const extendTouchNav = (el) => {
+        el?.addEventListener(
+          'pointerdown',
+          (e) => {
+            if (e.pointerType === 'touch') revealNavForTouch();
+          },
+          { passive: true }
+        );
+      };
+
+      prevBtn?.addEventListener('click', () => goTo(index - 1));
+      nextBtn?.addEventListener('click', () => goTo(index + 1));
+      extendTouchNav(prevBtn);
+      extendTouchNav(nextBtn);
+      dots.forEach((dot, i) => {
+        dot.addEventListener('click', () => goTo(i));
+        extendTouchNav(dot);
+      });
+
+      viewport.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          ticking = false;
+          const w = Math.max(1, slideWidth());
+          const i = Math.round(viewport.scrollLeft / w);
+          if (i >= 0 && i < slides.length && i !== index) {
+            index = i;
+            syncDots(index);
+          }
+        });
+      }, { passive: true });
+
+      let resizeTimer;
+      window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = window.setTimeout(() => {
+          viewport.scrollTo({ left: index * slideWidth(), behavior: 'auto' });
+        }, 120);
+      });
+    });
+  }
+
+  setupProductCarousels();
+</script>

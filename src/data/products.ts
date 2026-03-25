@@ -13,6 +13,7 @@ export {
   getAllCategories,
   getAllProducts,
   getFeaturedProducts,
+  getProductBySlug,
   getProductsByCategory,
   getProductsSortedForCatalog,
   getCatalogPageCount

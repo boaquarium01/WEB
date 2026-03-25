@@ -1,4 +1,4 @@
-import { defineField, defineType } from 'sanity';
+import { defineArrayMember, defineField, defineType } from 'sanity';
 
 export const productType = defineType({
   name: 'product',
@@ -30,7 +30,7 @@ export const productType = defineType({
     }),
     defineField({
       name: 'image',
-      title: '圖片',
+      title: '圖片（列表主圖／輪播第一張）',
       type: 'image',
       options: { hotspot: true },
       fields: [
@@ -40,6 +40,26 @@ export const productType = defineType({
           title: '替代文字（無障礙）'
         })
       ]
+    }),
+    defineField({
+      name: 'gallery',
+      title: '更多圖片（詳情頁輪播）',
+      description: '選填。會與上方主圖合併顯示；卡片列表仍只使用主圖。',
+      type: 'array',
+      of: [
+        defineArrayMember({
+          type: 'image',
+          options: { hotspot: true },
+          fields: [
+            defineField({
+              name: 'alt',
+              type: 'string',
+              title: '替代文字（無障礙）'
+            })
+          ]
+        })
+      ],
+      options: { layout: 'grid' }
     }),
     defineField({
       name: 'excerpt',

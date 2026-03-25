@@ -7,7 +7,6 @@ const navItems = [
   { name: '服務項目', href: '#services' },
   { name: '關於我們', href: '#about' },
   { name: '聯絡資訊', href: '#contact' },
-  { name: '商品分類', href: '#categories' },
   { name: '展示商品', href: '#products' },
   { name: '全部商品', href: '/products' }
 ];
@@ -47,7 +46,10 @@ const services = [
 ];
 ---
 
-<Layout title="水博館水族｜門市與商品展示">
+<Layout
+  title="水博館水族｜官方網站"
+  description="淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售"
+>
   <div class="site" id="home">
     <header class="site-header">
       <div class="header-inner">
@@ -62,6 +64,18 @@ const services = [
                 <a href={item.href}>{item.name}</a>
               </li>
             ))}
+            <li class="nav-categories">
+              <details>
+                <summary>商品分類</summary>
+                <ul class="nav-categories-menu">
+                  {categories.map((c) => (
+                    <li>
+                      <a href={`/category/${c.id}`}>{c.label}</a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
           </ul>
         </nav>
         <div class="header-end-spacer" aria-hidden="true"></div>
@@ -83,6 +97,18 @@ const services = [
               <a href={item.href} class="mobile-menu-link">{item.name}</a>
             </li>
           ))}
+          <li class="drawer-categories">
+            <details>
+              <summary>商品分類</summary>
+              <ul class="drawer-category-list">
+                {categories.map((c) => (
+                  <li>
+                    <a href={`/category/${c.id}`} class="mobile-menu-link">{c.label}</a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          </li>
         </ul>
       </nav>
     </aside>
@@ -183,25 +209,11 @@ const services = [
         </div>
       </section>
 
-      <section id="categories" class="section wrap">
-        <h2 class="section-title">商品分類</h2>
-        <ul class="category-chips">
-          {categories.map((c) => (
-            <li>
-              <a class="category-chip" href={`/category/${c.id}`}>
-                {c.label}
-              </a>
-            </li>
-          ))}
-        </ul>
-      </section>
-
       <section id="products" class="section wrap">
         <h2 class="products-page-title">展示商品</h2>
-        <p class="products-lead">
-          精選內容來自 Sanity；點擊卡片可開啟介紹分頁（不含價格與購物功能）。
+        <div class="products-cta">
           <a class="products-all-link" href="/products">查看全部商品（含分頁）</a>
-        </p>
+        </div>
         {featuredProducts.length === 0 ? (
           <p class="products-empty">
             尚無商品資料。請執行 <code class="inline-code">npm run studio</code> 新增 <strong>product</strong> 文件（可勾選「首頁精選」），再重新建置網站。
@@ -228,8 +240,7 @@ const services = [
 
     <footer class="site-footer">
       <div class="wrap footer-inner">
-        <p class="footer-brand">水博館水族</p>
-        <p class="footer-copy">© {new Date().getFullYear()} 門市展示用 · 非電商購物網站</p>
+        <p class="footer-copy">© {new Date().getFullYear()} 水博館水族</p>
       </div>
     </footer>
   </div>
@@ -350,6 +361,68 @@ const services = [
     text-underline-offset: 4px;
   }
 
+  .nav-categories {
+    position: relative;
+  }
+
+  .nav-categories details {
+    position: relative;
+  }
+
+  .nav-categories summary {
+    list-style: none;
+    cursor: pointer;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: #333;
+  }
+
+  .nav-categories summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .nav-categories summary::after {
+    content: '▾';
+    margin-left: 6px;
+    font-size: 0.75rem;
+    color: #666;
+  }
+
+  .nav-categories details[open] summary,
+  .nav-categories summary:hover {
+    color: #000;
+  }
+
+  .nav-categories-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 180px;
+    padding: 8px;
+    margin: 0;
+    list-style: none;
+    display: grid;
+    gap: 2px;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+    z-index: 120;
+  }
+
+  .nav-categories-menu a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  .nav-categories-menu a:hover {
+    background: #f5f5f5;
+    text-decoration: none;
+  }
+
   .header-end-spacer {
     width: 40px;
     height: 40px;
@@ -464,6 +537,47 @@ const services = [
 
   .drawer-list a:hover {
     background: #f5f5f5;
+  }
+
+  .drawer-categories details {
+    border-top: 1px solid #f0f0f0;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .drawer-categories summary {
+    list-style: none;
+    padding: 14px 12px;
+    border-radius: 8px;
+    font-size: 1rem;
+    color: #222;
+    cursor: pointer;
+  }
+
+  .drawer-categories summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .drawer-categories summary::after {
+    content: '▾';
+    float: right;
+    color: #666;
+  }
+
+  .drawer-categories summary:hover {
+    background: #f5f5f5;
+  }
+
+  .drawer-category-list {
+    list-style: none;
+    margin: 2px 0 0;
+    padding: 0 0 0 10px;
+  }
+
+  .drawer-category-list a {
+    padding: 10px 12px;
+    font-size: 0.9375rem;
+    color: #444;
   }
 
   @media (min-width: 1024px) {
@@ -754,8 +868,7 @@ const services = [
     }
   }
 
-  .categories-lead,
-  .products-lead {
+  .categories-lead {
     margin: 0 auto 20px;
     max-width: 42rem;
     text-align: center;
@@ -764,17 +877,42 @@ const services = [
     line-height: 1.6;
   }
 
+  .products-cta {
+    margin: 0 0 22px;
+    display: flex;
+    justify-content: center;
+  }
+
   .products-all-link {
-    display: inline-block;
-    margin-top: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 18px;
     font-weight: 700;
-    color: #111;
-    text-decoration: underline;
-    text-underline-offset: 3px;
+    font-size: 0.9375rem;
+    letter-spacing: 0.01em;
+    color: #fff;
+    background: #111;
+    border: 1px solid #111;
+    border-radius: 999px;
+    transition:
+      transform 0.12s ease,
+      box-shadow 0.18s ease,
+      background 0.18s ease,
+      border-color 0.18s ease;
   }
 
   .products-all-link:hover {
-    color: #333;
+    background: #222;
+    border-color: #222;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .products-all-link:focus-visible {
+    outline: 2px solid #111;
+    outline-offset: 2px;
   }
 
   .products-empty {
@@ -795,37 +933,6 @@ const services = [
     font-size: 0.875em;
     background: #eee;
     border-radius: 4px;
-  }
-
-  #categories .section-title {
-    text-align: center;
-  }
-
-  .category-chips {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    justify-content: center;
-  }
-
-  .category-chip {
-    display: inline-block;
-    padding: 12px 22px;
-    font-size: 0.9375rem;
-    font-weight: 700;
-    color: #111;
-    border: 1px solid #ddd;
-    border-radius: 999px;
-    background: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  }
-
-  .category-chip:hover {
-    background: #f5f5f5;
-    border-color: #ccc;
   }
 
   .products-page-title {
@@ -929,20 +1036,9 @@ const services = [
     text-align: center;
   }
 
-  .footer-brand {
-    margin: 0 0 8px;
-    font-weight: 800;
-    font-size: 1rem;
-  }
-
   .footer-copy {
     margin: 0;
     font-size: 0.8125rem;
     color: #666;
-  }
-
-  .footer-copy a {
-    text-decoration: underline;
-    text-underline-offset: 2px;
   }
 </style>

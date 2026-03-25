@@ -16,7 +16,10 @@ export type Product = {
   category: string;
   categoryLabel: string;
   name: string;
+  /** 列表與卡片用主圖（等同 images[0]） */
   image: string;
+  /** 詳情頁輪播：主圖 + gallery，至少一張 */
+  images: string[];
   excerpt: string;
   description: string;
   featured?: boolean;
