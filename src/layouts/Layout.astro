@@ -1,8 +1,15 @@
 ---
-const title = '水博館水族｜官方網站';
-const description = '淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售';
+const defaultTitle = '水博館水族｜官方網站';
+const defaultDescription = '淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售';
+
+const {
+  title = defaultTitle,
+  description = defaultDescription,
+  keywords
+} = Astro.props;
 
 const pageUrl = Astro.url.href;
+const keywordsContent = Array.isArray(keywords) ? keywords.join(', ') : typeof keywords === 'string' ? keywords : '';
 ---
 
 <!doctype html>
@@ -14,6 +21,7 @@ const pageUrl = Astro.url.href;
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
+		{keywordsContent ? <meta name="keywords" content={keywordsContent} /> : null}
 		<title>{title}</title>
 		<link rel="canonical" href={pageUrl} />
 		<meta property="og:title" content={title} />

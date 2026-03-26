@@ -15,12 +15,14 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   "slug": slug.current,
   "category": category->slug.current,
   "categoryLabel": category->name,
+  enabled,
+  sortOrder,
   image,
   gallery,
   excerpt,
   description,
   featured,
-  isPlaceholder
+  seoKeywords
 }`;
 const CATEGORY_QUERY = `*[_type == "category"] | order(sortOrder asc, name asc) {
   "id": slug.current,
@@ -71,16 +73,19 @@ function warnMissingSanityConfig() {
 }
 
 type SanityProductDoc = {
+  _id?: string;
   slug?: string;
   name?: string;
   category?: string;
   categoryLabel?: string;
+  enabled?: boolean;
+  sortOrder?: number;
   image?: Record<string, unknown> | null;
   gallery?: (Record<string, unknown> | null)[] | null;
   excerpt?: string;
   description?: string;
   featured?: boolean;
-  isPlaceholder?: boolean;
+  seoKeywords?: string[];
 };
 
 function urlFromSanityImage(
@@ -123,17 +128,28 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
   const builder = imageUrlBuilder({ projectId, dataset });
   const images = collectImageUrls(doc, builder);
 
+  const computeExcerpt = () => {
+    const raw = String(doc.excerpt ?? '').trim();
+    if (raw) return raw;
+    const desc = String(doc.description ?? '').trim();
+    if (!desc) return '';
+    return desc.length > 140 ? `${desc.slice(0, 140).trim()}...` : desc;
+  };
+
   return {
+    _id: doc._id ? String(doc._id) : undefined,
     slug: String(doc.slug ?? '').trim(),
     name: String(doc.name ?? '未命名').trim() || '未命名',
     category: String(doc.category ?? '').trim() || 'uncategorized',
     categoryLabel: String(doc.categoryLabel ?? '').trim() || '未分類',
+    enabled: doc.enabled !== false,
+    sortOrder: Number.isFinite(Number(doc.sortOrder)) ? Number(doc.sortOrder) : 100,
     image: images[0] ?? FALLBACK_IMAGE,
     images,
-    excerpt: String(doc.excerpt ?? ''),
+    excerpt: computeExcerpt(),
     description: String(doc.description ?? ''),
     featured: Boolean(doc.featured),
-    isPlaceholder: Boolean(doc.isPlaceholder)
+    seoKeywords: Array.isArray(doc.seoKeywords) ? doc.seoKeywords : undefined
   };
 }
 
@@ -174,7 +190,7 @@ export async function getAllProducts(): Promise<Product[]> {
   const docs = await client.fetch<SanityProductDoc[]>(PRODUCT_QUERY);
   const mapped = docs
     .map((d) => mapToProduct(d, projectId, dataset))
-    .filter((p) => p.slug.length > 0);
+    .filter((p) => p.slug.length > 0 && p.enabled);
   cache = { at: Date.now(), data: mapped };
   return mapped;
 }
@@ -182,13 +198,19 @@ export async function getAllProducts(): Promise<Product[]> {
 /** 首頁精選：有勾 featured 的優先；若皆未勾選則取前 limit 筆 */
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
   const all = await getAllProducts();
-  const featured = all.filter((p) => p.featured);
+  const featured = [...all].filter((p) => p.featured).sort((a, b) => a.sortOrder - b.sortOrder);
   if (featured.length > 0) return featured.slice(0, limit);
-  return all.slice(0, limit);
+  return [...all].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, limit);
 }
 
 export async function getProductsByCategory(categoryId: string): Promise<Product[]> {
-  return (await getAllProducts()).filter((p) => p.category === categoryId);
+  return (await getAllProducts())
+    .filter((p) => p.category === categoryId)
+    .sort((a, b) => {
+      const d = a.sortOrder - b.sortOrder;
+      if (d !== 0) return d;
+      return a.name.localeCompare(b.name, 'zh-Hant');
+    });
 }
 
 const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0] {
@@ -197,12 +219,13 @@ const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0]
   "slug": slug.current,
   "category": category->slug.current,
   "categoryLabel": category->name,
+  enabled,
+  sortOrder,
   image,
   gallery,
   excerpt,
   description,
   featured,
-  isPlaceholder
 }`;
 
 /** SSR 商品詳情頁：依 slug 查單筆（不依賴 getStaticPaths） */
@@ -218,15 +241,23 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   const { projectId, dataset } = readSanityEnv();
   const doc = await client.fetch<SanityProductDoc | null>(PRODUCT_BY_SLUG_QUERY, { slug: s });
   if (!doc?.slug) return null;
-  return mapToProduct(doc, projectId, dataset);
+  const p = mapToProduct(doc, projectId, dataset);
+  if (!p.enabled) return null;
+  return p;
 }
 
 export async function getProductsSortedForCatalog(): Promise<Product[]> {
-  const all = await getAllProducts();
+  const [all, categories] = await Promise.all([getAllProducts(), getAllCategories()]);
+  const orderMap = new Map<string, number>();
+  for (const c of categories) orderMap.set(c.id, c.sortOrder);
+
   return [...all].sort((a, b) => {
-    const pa = a.isPlaceholder ? 1 : 0;
-    const pb = b.isPlaceholder ? 1 : 0;
-    if (pa !== pb) return pa - pb;
+    const ca = orderMap.get(a.category) ?? 999;
+    const cb = orderMap.get(b.category) ?? 999;
+    if (ca !== cb) return ca - cb;
+
+    const d = a.sortOrder - b.sortOrder;
+    if (d !== 0) return d;
     return a.name.localeCompare(b.name, 'zh-Hant');
   });
 }

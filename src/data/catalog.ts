@@ -12,9 +12,13 @@ export type Category = {
 };
 
 export type Product = {
+  /** Sanity document id（夥伴管理更新/刪除用） */
+  _id?: string;
   slug: string;
   category: string;
   categoryLabel: string;
+  enabled: boolean;
+  sortOrder: number;
   name: string;
   /** 列表與卡片用主圖（等同 images[0]） */
   image: string;
@@ -23,5 +27,5 @@ export type Product = {
   excerpt: string;
   description: string;
   featured?: boolean;
-  isPlaceholder?: boolean;
+  seoKeywords?: string[];
 };

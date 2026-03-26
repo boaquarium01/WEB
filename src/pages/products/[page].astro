@@ -74,13 +74,12 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
 
       <div class="product-grid">
         {items.map((product) => (
-          <article class:list={['product-card', product.isPlaceholder && 'is-placeholder']}>
+          <article class="product-card">
             <a href={`/product/${product.slug}`} class="product-card-link">
               <div class="product-img-wrap">
                 <img src={product.image} alt="" width="600" height="450" loading="lazy" />
               </div>
               <div class="product-body">
-                {product.isPlaceholder && <span class="pill">範例</span>}
                 <h2>{product.name}</h2>
                 <p class="product-cat">{product.categoryLabel}</p>
                 <p class="product-excerpt">{product.excerpt}</p>
@@ -254,11 +253,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     border: 1px solid #eee;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
     transition: box-shadow 0.2s;
-  }
-
-  .product-card.is-placeholder {
-    border-style: dashed;
-    border-color: #ccc;
   }
 
   .product-card:hover {

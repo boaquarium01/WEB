@@ -1,13 +1,12 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getAllCategories, getAllProducts, type Category, type Product } from '../../data/products';
+import { getAllCategories, getProductsByCategory, type Category, type Product } from '../../data/products';
 
 const { category } = Astro.params;
 const categories = ((await getAllCategories()) ?? []) as Category[];
-const all = ((await getAllProducts()) ?? []) as Product[];
 const currentCategory = categories.find((c) => c.id === (category ?? ''));
 const label = currentCategory?.label ?? '未分類';
-const list = all.filter((p) => p.category === category);
+const list = ((await getProductsByCategory(String(category ?? ''))) ?? []) as Product[];
 const pageTitle = `${label}｜熱銷推薦｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---

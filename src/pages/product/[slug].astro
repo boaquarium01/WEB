@@ -10,11 +10,79 @@ if (!product) {
 }
 
 const categoryLabel = product.categoryLabel;
+function truncateForMeta(input: string, maxLen: number) {
+  const s = String(input ?? '').trim();
+  if (!s) return '';
+  if (s.length <= maxLen) return s;
+  return `${s.slice(0, maxLen).trim()}...`;
+}
+
+// SEO 固定由主要欄位自動產生：標題用名稱、描述用介紹內文
 const pageTitle = `${product.name}｜水博館水族`;
+const seoDescription = truncateForMeta(product.description ?? product.excerpt, 160);
+
+function normalizeKeyword(input: unknown) {
+  return String(input ?? '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/^,|,$/g, '');
+}
+
+function extractAutoKeywords(text: string, limit = 12): string[] {
+  const t = String(text ?? '').trim();
+  if (!t) return [];
+
+  // 粗略抓取「中文詞組（連續兩字以上）」與英文/數字（兩個以上）
+  const tokens = t.match(/[\u4e00-\u9fff]{2,}|[a-zA-Z0-9]{2,}/g) ?? [];
+  if (tokens.length === 0) return [];
+
+  const freq = new Map<string, number>();
+  const firstIndex = new Map<string, number>();
+
+  tokens.forEach((tok, i) => {
+    // 避免抓到很長的純數字（例如時間戳/ID），讓 keywords 更像「關鍵字」
+    if (/^\d+$/.test(tok) && tok.length > 6) return;
+
+    const k = tok.toLowerCase();
+    freq.set(k, (freq.get(k) ?? 0) + 1);
+    if (!firstIndex.has(k)) firstIndex.set(k, i);
+  });
+
+  return [...freq.keys()]
+    .sort((a, b) => {
+      const fa = freq.get(a) ?? 0;
+      const fb = freq.get(b) ?? 0;
+      if (fa !== fb) return fb - fa;
+      return (firstIndex.get(a) ?? 0) - (firstIndex.get(b) ?? 0);
+    })
+    .slice(0, limit);
+}
+
+// 1) 手動關鍵字：Studio 的 seoKeywords（tags）
+// 2) 自動關鍵字：由名稱+內文抓取
+// 排序要求：手動在前，接著才是自動抓到的（去重後補上）
+const manualKeywords = (product.seoKeywords ?? [])
+  .flatMap((k) => String(k).split(/[,，]/g))
+  .map(normalizeKeyword)
+  .filter(Boolean);
+
+const manualLower = new Set(manualKeywords.map((k) => k.toLowerCase()));
+const autoKeywords = extractAutoKeywords(`${product.name} ${product.description ?? ''}`);
+
+const finalKeywords: string[] = [...manualKeywords];
+for (const k of autoKeywords) {
+  const lk = k.toLowerCase();
+  if (manualLower.has(lk)) continue;
+  if (finalKeywords.some((x) => x.toLowerCase() === lk)) continue;
+  finalKeywords.push(k);
+  manualLower.add(lk);
+}
+
+const keywordsMeta = finalKeywords.join(', ');
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
 ---
 
-<Layout title={pageTitle} description={product.excerpt}>
+<Layout title={pageTitle} description={seoDescription} keywords={keywordsMeta}>
   <div class="page">
     <header class="site-header">
       <div class="header-inner">
@@ -36,10 +104,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         <span class="sep">/</span>
         <span class="current">{product.name}</span>
       </nav>
-
-      {product.isPlaceholder && (
-        <p class="placeholder-banner">此筆在 Sanity 後台標為「占位範例」，正式營運請取消勾選或刪除文件。</p>
-      )}
 
       <article class="detail">
         <div class="detail-media">
@@ -170,17 +234,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     max-width: 1200px;
     margin: 0 auto;
     padding: 24px 16px 48px;
-  }
-
-  .placeholder-banner {
-    margin: 0 0 20px;
-    padding: 12px 16px;
-    font-size: 0.875rem;
-    line-height: 1.5;
-    color: #664d00;
-    background: #fff8e1;
-    border: 1px solid #ffe082;
-    border-radius: 8px;
   }
 
   .breadcrumb {
