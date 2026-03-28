@@ -112,6 +112,14 @@ export const productType = defineType({
       initialValue: false,
       group: 'display'
     }),
+    defineField({
+      name: 'featuredSortOrder',
+      title: '首頁熱銷排序（數字越小越前面）',
+      description:
+        '有勾「首頁精選」時：有填此欄的商品會排在熱銷區前段（數字越小越前）；未填者排在後段，依「分類內排序」。',
+      type: 'number',
+      group: 'display'
+    }),
     // —— 圖片 ——
     defineField({
       name: 'image',

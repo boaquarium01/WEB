@@ -32,6 +32,8 @@ export type Product = {
   /** Portable Text 商品介紹 */
   body?: unknown[] | null;
   featured?: boolean;
+  /** 首頁熱銷專用排序；未設定時前台以 sortOrder 代替 */
+  featuredSortOrder?: number;
   seoKeywords?: string[];
   seoTitle?: string;
   seoDescription?: string;

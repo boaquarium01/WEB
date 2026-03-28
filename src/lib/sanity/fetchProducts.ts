@@ -6,8 +6,8 @@ import { portableBlocksToPlainText } from '../portableText';
 
 const API_VERSION = '2025-03-18';
 
-/** 與 Studio schema 欄位對應 */
-const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
+/** 與 Studio schema 欄位對應（列表／首頁熱銷／單筆詳情共用投影） */
+const PRODUCT_PROJECTION = `
   _id,
   name,
   "slug": slug.current,
@@ -20,10 +20,20 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   excerpt,
   body,
   featured,
+  featuredSortOrder,
   seoKeywords,
   seoTitle,
   seoDescription
-}`;
+`;
+
+const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {${PRODUCT_PROJECTION}}`;
+
+/**
+ * 首頁熱銷：僅精選且上架；排序與 getFeaturedProducts 一致——
+ * `defined(featuredSortOrder) desc` 讓「有填熱銷排序」在前，其餘在後；
+ * 再以 coalesce(featuredSortOrder, sortOrder) 作同段內次序，最後 name。
+ */
+const FEATURED_PRODUCTS_QUERY = `*[_type == "product" && defined(slug.current) && featured == true && enabled != false] | order(defined(featuredSortOrder) desc, coalesce(featuredSortOrder, sortOrder) asc, name asc) {${PRODUCT_PROJECTION}}`;
 /** 分類順序：與 Studio「商品分類（拖曳排序）」一致；無 orderRank 時退回 sortOrder、名稱 */
 const CATEGORY_QUERY = `*[_type == "category"] | order(orderRank asc, sortOrder asc, name asc) {
   "id": slug.current,
@@ -75,6 +85,14 @@ function warnMissingSanityConfig() {
   );
 }
 
+/** 避免 Number(null)===0、Number('')===0 把「未填」當成有效排序數字 */
+function parseOptionalFiniteNumber(v: unknown): number | undefined {
+  if (v === null || v === undefined) return undefined;
+  if (typeof v === 'string' && v.trim() === '') return undefined;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 type SanityProductDoc = {
   _id?: string;
   slug?: string;
@@ -88,6 +106,7 @@ type SanityProductDoc = {
   excerpt?: string;
   body?: unknown[] | null;
   featured?: boolean;
+  featuredSortOrder?: number;
   seoKeywords?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -183,6 +202,7 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
     excerpt: computeExcerpt(),
     body: Array.isArray(doc.body) && doc.body.length > 0 ? doc.body : null,
     featured: Boolean(doc.featured),
+    featuredSortOrder: parseOptionalFiniteNumber(doc.featuredSortOrder),
     seoKeywords: Array.isArray(doc.seoKeywords) ? doc.seoKeywords : undefined,
     seoTitle: st || undefined,
     seoDescription: sd || undefined
@@ -191,6 +211,7 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
 
 let cache: { at: number; data: Product[] } | null = null;
 let categoryCache: { at: number; data: Category[] } | null = null;
+let featuredCache: { at: number; limit: number; data: Product[] } | null = null;
 
 export async function getAllCategories(): Promise<Category[]> {
   const ttlMs = import.meta.env.DEV ? 0 : 60_000;
@@ -255,14 +276,60 @@ export async function getAllProducts(): Promise<Product[]> {
 }
 
 /**
- * 首頁熱銷：僅顯示 Sanity 勾選「首頁精選」的商品；未勾選任何一筆時為空陣列（不再用「全部商品前 N 筆」當備援）。
+ * 首頁熱銷：專用 GROQ 查詢並 order，避免依賴全列表順序或錯誤的數字映射。
+ * 先「有填首頁熱銷排序」再「未填」（以分類內 sortOrder）；同段內最後依名稱。
  */
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
-  const all = await getAllProducts();
-  return [...all]
-    .filter((p) => p.featured === true)
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .slice(0, limit);
+  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  const cap = Math.max(0, Math.floor(Number(limit)) || 0);
+  if (cap === 0) return [];
+
+  if (
+    featuredCache &&
+    ttlMs > 0 &&
+    featuredCache.limit === cap &&
+    Date.now() - featuredCache.at < ttlMs
+  ) {
+    return featuredCache.data;
+  }
+  featuredCache = null;
+
+  const client = getClient();
+  if (!client) {
+    warnMissingSanityConfig();
+    return [];
+  }
+  const { projectId, dataset } = readSanityEnv();
+  let docs: SanityProductDoc[];
+  try {
+    docs = await client.fetch<SanityProductDoc[]>(FEATURED_PRODUCTS_QUERY);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 首頁熱銷查詢失敗，改為自全列表篩選。', msg);
+    const all = await getAllProducts();
+    return [...all]
+      .filter((p) => p.featured === true)
+      .sort((a, b) => {
+        const aHas = typeof a.featuredSortOrder === 'number' && Number.isFinite(a.featuredSortOrder);
+        const bHas = typeof b.featuredSortOrder === 'number' && Number.isFinite(b.featuredSortOrder);
+        if (aHas !== bHas) return aHas ? -1 : 1;
+        if (aHas && bHas) {
+          const d = a.featuredSortOrder! - b.featuredSortOrder!;
+          if (d !== 0) return d;
+          return a.name.localeCompare(b.name, 'zh-Hant');
+        }
+        const d = a.sortOrder - b.sortOrder;
+        if (d !== 0) return d;
+        return a.name.localeCompare(b.name, 'zh-Hant');
+      })
+      .slice(0, cap);
+  }
+  const mapped = (docs ?? [])
+    .map((d) => mapToProduct(d, projectId, dataset))
+    .filter((p) => p.slug.length > 0 && p.enabled)
+    .slice(0, cap);
+  featuredCache = { at: Date.now(), limit: cap, data: mapped };
+  return mapped;
 }
 
 export async function getProductsByCategory(categoryId: string): Promise<Product[]> {
@@ -275,23 +342,7 @@ export async function getProductsByCategory(categoryId: string): Promise<Product
     });
 }
 
-const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0] {
-  _id,
-  name,
-  "slug": slug.current,
-  "category": category->slug.current,
-  "categoryLabel": category->name,
-  enabled,
-  sortOrder,
-  image,
-  gallery,
-  excerpt,
-  body,
-  featured,
-  seoKeywords,
-  seoTitle,
-  seoDescription
-}`;
+const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0] {${PRODUCT_PROJECTION}}`;
 
 /** SSR 商品詳情頁：依 slug 查單筆（不依賴 getStaticPaths） */
 export async function getProductBySlug(slug: string): Promise<Product | null> {
