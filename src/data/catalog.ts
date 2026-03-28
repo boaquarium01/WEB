@@ -20,12 +20,19 @@ export type Product = {
   enabled: boolean;
   sortOrder: number;
   name: string;
-  /** 列表與卡片用主圖（等同 images[0]） */
+  /** 列表與卡片用主圖（等同 images[0]）；未上傳時為空字串 */
   image: string;
-  /** 詳情頁輪播：主圖 + gallery，至少一張 */
+  /** 詳情頁輪播：主圖 + gallery；無圖時為空陣列 */
   images: string[];
+  /** 與 images 對應的 Sanity 圖片參考（供 SanityImage / srcset） */
+  carouselImageRefs?: (Record<string, unknown> | null)[];
+  /** 主圖 Sanity 參考（卡片優化用） */
+  imageRef?: Record<string, unknown> | null;
   excerpt: string;
-  description: string;
+  /** Portable Text 商品介紹 */
+  body?: unknown[] | null;
   featured?: boolean;
   seoKeywords?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
 };

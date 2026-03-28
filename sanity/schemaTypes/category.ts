@@ -1,10 +1,13 @@
+import { orderRankField, orderRankOrdering } from '@sanity/orderable-document-list';
 import { defineField, defineType } from 'sanity';
 
 export const categoryType = defineType({
   name: 'category',
   title: '商品分類',
   type: 'document',
+  orderings: [orderRankOrdering],
   fields: [
+    orderRankField({ type: 'category', newItemPosition: 'after' }),
     defineField({
       name: 'name',
       title: '分類名稱',
@@ -23,21 +26,22 @@ export const categoryType = defineType({
     }),
     defineField({
       name: 'sortOrder',
-      title: '排序（數字越小越前面）',
+      title: '排序（備援，舊資料）',
+      description: '請改由左側「商品分類（拖曳排序）」調整順序；此欄已隱藏，僅作舊資料相容。',
       type: 'number',
+      hidden: true,
       initialValue: 100
     })
   ],
   preview: {
     select: {
       title: 'name',
-      order: 'sortOrder',
       slug: 'slug.current'
     },
-    prepare({ title, order, slug }) {
+    prepare({ title, slug }) {
       return {
         title,
-        subtitle: `排序: ${order ?? 100} · ${slug ?? ''}`
+        subtitle: slug ?? ''
       };
     }
   }

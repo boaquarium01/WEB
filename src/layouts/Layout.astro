@@ -1,15 +1,20 @@
 ---
+import '../styles/global.css';
+
 const defaultTitle = '水博館水族｜官方網站';
 const defaultDescription = '淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售';
 
 const {
   title = defaultTitle,
   description = defaultDescription,
-  keywords
+  keywords,
+  ogImage,
+  ogType = 'website'
 } = Astro.props;
 
 const pageUrl = Astro.url.href;
 const keywordsContent = Array.isArray(keywords) ? keywords.join(', ') : typeof keywords === 'string' ? keywords : '';
+const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 ---
 
 <!doctype html>
@@ -26,10 +31,17 @@ const keywordsContent = Array.isArray(keywords) ? keywords.join(', ') : typeof k
 		<link rel="canonical" href={pageUrl} />
 		<meta property="og:title" content={title} />
 		<meta property="og:description" content={description} />
-		<meta property="og:type" content="website" />
+		<meta property="og:type" content={ogType} />
 		<meta property="og:url" content={pageUrl} />
 		<meta property="og:locale" content="zh_TW" />
-		<meta name="twitter:card" content="summary" />
+		{ogImage ? (
+			<>
+				<meta property="og:image" content={ogImage} />
+				<meta property="og:image:alt" content={title} />
+				<meta name="twitter:image" content={ogImage} />
+			</>
+		) : null}
+		<meta name="twitter:card" content={twitterCard} />
 		<meta name="twitter:title" content={title} />
 		<meta name="twitter:description" content={description} />
 		<link
@@ -50,8 +62,8 @@ const keywordsContent = Array.isArray(keywords) ? keywords.join(', ') : typeof k
 		margin: 0;
 		width: 100%;
 		min-height: 100%;
-		background: #ffffff;
-		color: #111111;
+		background: var(--aq-sand, #faf8f4);
+		color: var(--aq-ink, #1a2221);
 		font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
 		-webkit-font-smoothing: antialiased;
 	}

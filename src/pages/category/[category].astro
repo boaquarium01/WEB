@@ -1,5 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
+import ProductGridStagger from '../../components/ProductGridStagger.astro';
 import { getAllCategories, getProductsByCategory, type Category, type Product } from '../../data/products';
 
 const { category } = Astro.params;
@@ -7,6 +8,13 @@ const categories = ((await getAllCategories()) ?? []) as Category[];
 const currentCategory = categories.find((c) => c.id === (category ?? ''));
 const label = currentCategory?.label ?? '未分類';
 const list = ((await getProductsByCategory(String(category ?? ''))) ?? []) as Product[];
+const staggerItems = list.map((p) => ({
+  slug: p.slug,
+  name: p.name,
+  excerpt: p.excerpt,
+  categoryLabel: p.categoryLabel,
+  imageUrl: p.image
+}));
 const pageTitle = `${label}｜熱銷推薦｜水博館水族`;
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---
@@ -16,7 +24,9 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
   description={`水博館水族${label}類別熱銷推薦列表，僅供參考，歡迎來店參觀。`}
 >
   <div class="page">
-    <header class="site-header">
+    <header
+      class="site-header sticky top-0 z-50 border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
+    >
       <div class="header-inner">
         <a href="/" class="back-link" aria-label="返回首頁">
           <i class="fa-solid fa-arrow-left"></i>
@@ -39,21 +49,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
       {list.length === 0 ? (
         <p class="empty">此分類尚無展示資料，請改選其他分類或洽門市。</p>
       ) : (
-        <div class="product-grid">
-          {list.map((product) => (
-            <article class="product-card">
-              <a href={`/product/${product.slug}`} class="product-card-link">
-                <div class="product-img-wrap">
-                  <img src={product.image} alt="" width="600" height="450" loading="lazy" />
-                </div>
-                <div class="product-body">
-                  <h2>{product.name}</h2>
-                  <p class="product-excerpt">{product.excerpt}</p>
-                </div>
-              </a>
-            </article>
-          ))}
-        </div>
+        <ProductGridStagger items={staggerItems} />
       )}
 
       <div class="category-nav">
@@ -81,14 +77,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     min-height: 100vh;
     background: #fff;
     color: #111;
-  }
-
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: #fff;
-    border-bottom: 1px solid #e5e5e5;
   }
 
   .header-inner {

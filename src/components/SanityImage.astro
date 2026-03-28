@@ -1,0 +1,62 @@
+---
+import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import { buildSrcSet, buildLqipUrl, buildDefaultSrc, SANITY_IMAGE_WIDTHS } from '../lib/sanity/image';
+
+type Props = {
+  source: SanityImageSource | null | undefined;
+  alt: string;
+  sizes?: string;
+  class?: string;
+  imgClass?: string;
+  priority?: boolean;
+  width?: number;
+  height?: number;
+};
+
+const {
+  source,
+  alt,
+  sizes = '(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 400px',
+  class: cls,
+  imgClass,
+  priority = false,
+  width = 800,
+  height = 600
+} = Astro.props as Props;
+
+const srcSet = source ? buildSrcSet(source, SANITY_IMAGE_WIDTHS) : '';
+const lqip = source ? buildLqipUrl(source) : null;
+const src = source ? buildDefaultSrc(source, 800) : null;
+---
+
+{
+  src && srcSet ? (
+    <div
+      class:list={['relative overflow-hidden bg-slate-100', cls]}
+      style={
+        lqip
+          ? {
+              backgroundImage: `url(${lqip})`,
+              backgroundSize: 'contain',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat'
+            }
+          : undefined
+      }
+    >
+      <img
+        src={src}
+        srcset={srcSet}
+        sizes={sizes}
+        alt={alt}
+        width={width}
+        height={height}
+        loading={priority ? 'eager' : 'lazy'}
+        fetchpriority={priority ? 'high' : undefined}
+        decoding="async"
+        class:list={['h-full w-full object-contain object-center transition-opacity duration-500 opacity-0', imgClass]}
+        onload="this.classList.remove('opacity-0')"
+      />
+    </div>
+  ) : null
+}

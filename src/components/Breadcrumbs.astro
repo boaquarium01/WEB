@@ -1,0 +1,54 @@
+---
+export type Crumb = { label: string; href?: string };
+
+type Props = {
+  items: Crumb[];
+  class?: string;
+};
+
+const { items, class: cls } = Astro.props as Props;
+const origin = Astro.url.origin;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: items.map((item, i) => {
+    const abs =
+      item.href != null && item.href !== ''
+        ? item.href.startsWith('http')
+          ? item.href
+          : new URL(item.href, origin).href
+        : undefined;
+    return {
+      '@type': 'ListItem',
+      position: i + 1,
+      name: item.label,
+      ...(abs ? { item: abs } : {})
+    };
+  })
+};
+---
+
+<nav class:list={['text-sm text-slate-600', cls]} aria-label="麵包屑">
+  <ol class="flex flex-wrap items-center gap-x-1 gap-y-1">
+    {
+      items.map((item, i) => (
+        <li class="inline-flex items-center gap-1">
+          {i > 0 ? <span class="text-slate-300">/</span> : null}
+          {item.href != null && item.href !== '' ? (
+            <a
+              href={item.href}
+              class="text-slate-900 underline decoration-slate-300 underline-offset-4 hover:decoration-slate-500"
+            >
+              {item.label}
+            </a>
+          ) : (
+            <span class="text-slate-700">{item.label}</span>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />

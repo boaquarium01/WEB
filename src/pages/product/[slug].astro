@@ -1,6 +1,16 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getProductBySlug } from '../../data/products';
+import Breadcrumbs from '../../components/Breadcrumbs.astro';
+import SanityImage from '../../components/SanityImage.astro';
+import { getAllProductSlugs, getProductBySlug } from '../../data/products';
+import { portableTextToHtml, portableBlocksToPlainText } from '../../lib/portableText';
+
+export const prerender = true;
+
+export async function getStaticPaths() {
+  const slugs = await getAllProductSlugs();
+  return slugs.map((slug) => ({ params: { slug } }));
+}
 
 const slug = String(Astro.params.slug ?? '').trim();
 const product = await getProductBySlug(slug);
@@ -17,9 +27,27 @@ function truncateForMeta(input: string, maxLen: number) {
   return `${s.slice(0, maxLen).trim()}...`;
 }
 
-// SEO 固定由主要欄位自動產生：標題用名稱、描述用介紹內文
-const pageTitle = `${product.name}｜水博館水族`;
-const seoDescription = truncateForMeta(product.description ?? product.excerpt, 160);
+function absUrl(href: string) {
+  const s = String(href ?? '').trim();
+  if (!s) return '';
+  if (s.startsWith('http://') || s.startsWith('https://')) return s;
+  return new URL(s, Astro.url.origin).href;
+}
+
+const bodyHtml = portableTextToHtml(product.body);
+const usePortableBody = Boolean(bodyHtml);
+const bodyPlain = portableBlocksToPlainText(product.body);
+
+// SEO：優先 Studio 的 seo 欄位，否則由短述或富文本純文字產生
+const pageTitle = product.seoTitle
+  ? `${product.seoTitle}｜水博館水族`
+  : `${product.name}｜水博館水族`;
+const seoDescription =
+  product.seoDescription?.trim() ||
+  truncateForMeta(product.excerpt || bodyPlain, 160);
+
+const firstImageSrc = String(product.images[0] ?? '').trim();
+const ogImageUrl = firstImageSrc ? absUrl(firstImageSrc) : '';
 
 function normalizeKeyword(input: unknown) {
   return String(input ?? '')
@@ -67,7 +95,7 @@ const manualKeywords = (product.seoKeywords ?? [])
   .filter(Boolean);
 
 const manualLower = new Set(manualKeywords.map((k) => k.toLowerCase()));
-const autoKeywords = extractAutoKeywords(`${product.name} ${product.description ?? ''}`);
+const autoKeywords = extractAutoKeywords(`${product.name} ${bodyPlain}`);
 
 const finalKeywords: string[] = [...manualKeywords];
 for (const k of autoKeywords) {
@@ -82,9 +110,17 @@ const keywordsMeta = finalKeywords.join(', ');
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
 ---
 
-<Layout title={pageTitle} description={seoDescription} keywords={keywordsMeta}>
+<Layout
+  title={pageTitle}
+  description={seoDescription}
+  keywords={keywordsMeta}
+  ogImage={ogImageUrl || undefined}
+  ogType="article"
+>
   <div class="page">
-    <header class="site-header">
+    <header
+      class="site-header sticky top-0 z-50 border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
+    >
       <div class="header-inner">
         <a href="/" class="back-link" aria-label="返回首頁">
           <i class="fa-solid fa-arrow-left"></i>
@@ -95,74 +131,108 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     </header>
 
     <main class="wrap">
-      <nav class="breadcrumb" aria-label="麵包屑">
-        <a href="/">首頁</a>
-        <span class="sep">/</span>
-        <a href="/products/1">全部商品</a>
-        <span class="sep">/</span>
-        <a href={`/category/${product.category}`}>{categoryLabel}</a>
-        <span class="sep">/</span>
-        <span class="current">{product.name}</span>
-      </nav>
+      <Breadcrumbs
+        class="mb-6"
+        items={[
+          { label: '首頁', href: '/' },
+          { label: '全部商品', href: '/products/1' },
+          { label: categoryLabel, href: `/category/${product.category}` },
+          { label: product.name }
+        ]}
+      />
 
       <article class="detail">
         <div class="detail-media">
-          <div
-            class="product-carousel"
-            data-product-carousel
-            aria-roledescription="輪播"
-            aria-label={`${product.name} 商品圖片`}
-          >
-            <div class="carousel-main">
-              <div class="carousel-viewport" tabindex="0">
-                <div class="carousel-track">
-                  {product.images.map((src, i) => (
-                    <div class="carousel-slide" aria-hidden={i === 0 ? 'false' : 'true'}>
-                      <img
-                        src={src}
-                        alt={i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`}
-                        width="1000"
-                        height="750"
-                        loading={i === 0 ? 'eager' : 'lazy'}
-                        decoding="async"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {product.images.length > 1 && (
-                <>
-                  <button type="button" class="carousel-nav carousel-prev" aria-label="上一張圖片">
-                    <i class="fa-solid fa-chevron-left" aria-hidden="true" />
-                  </button>
-                  <button type="button" class="carousel-nav carousel-next" aria-label="下一張圖片">
-                    <i class="fa-solid fa-chevron-right" aria-hidden="true" />
-                  </button>
-                  <div class="carousel-dots" role="tablist" aria-label="選擇圖片">
-                    {product.images.map((_, i) => (
-                      <button
-                        type="button"
-                        class:list={['carousel-dot', { 'is-active': i === 0 }]}
-                        aria-label={`第 ${i + 1} 張，共 ${product.images.length} 張`}
-                        aria-selected={i === 0 ? 'true' : 'false'}
-                        role="tab"
-                      />
-                    ))}
+          {product.images.length > 0 ? (
+            <div
+              class="product-carousel"
+              data-product-carousel
+              data-product-lightbox-group
+              aria-roledescription="輪播"
+              aria-label={`${product.name} 商品圖片`}
+            >
+              <div class="carousel-main">
+                <div class="carousel-viewport" tabindex="0">
+                  <div class="carousel-track">
+                    {product.images.map((src, i) => {
+                      const ref = product.carouselImageRefs?.[i] ?? null;
+                      const alt = i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`;
+                      return (
+                        <div class="carousel-slide" aria-hidden={i === 0 ? 'false' : 'true'}>
+                          {ref ? (
+                            <SanityImage
+                              source={ref}
+                              alt={alt}
+                              sizes="(max-width: 900px) 100vw, 50vw"
+                              priority={i === 0}
+                              width={1000}
+                              height={750}
+                              class="carousel-slide__img-wrap"
+                              imgClass="!object-contain !object-center"
+                            />
+                          ) : (
+                            <img
+                              class="carousel-slide__img"
+                              src={src}
+                              alt={alt}
+                              width="1000"
+                              height="750"
+                              loading={i === 0 ? 'eager' : 'lazy'}
+                              decoding="async"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </>
-              )}
+                </div>
+                {product.images.length > 1 && (
+                  <>
+                    <button type="button" class="carousel-nav carousel-prev" aria-label="上一張圖片">
+                      <i class="fa-solid fa-chevron-left" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="carousel-nav carousel-next" aria-label="下一張圖片">
+                      <i class="fa-solid fa-chevron-right" aria-hidden="true" />
+                    </button>
+                    <div class="carousel-dots" role="tablist" aria-label="選擇圖片">
+                      {product.images.map((_, i) => (
+                        <button
+                          type="button"
+                          class:list={['carousel-dot', { 'is-active': i === 0 }]}
+                          aria-label={`第 ${i + 1} 張，共 ${product.images.length} 張`}
+                          aria-selected={i === 0 ? 'true' : 'false'}
+                          role="tab"
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              class="product-detail-no-image"
+              role="img"
+              aria-label={`${product.name} 尚無照片`}
+            >
+              <i class="fa-solid fa-fish-fins" aria-hidden="true"></i>
+              <span class="product-detail-no-image-title">照片準備中</span>
+              <span class="product-detail-no-image-hint">上架後可於後台補上圖片</span>
+            </div>
+          )}
         </div>
         <div class="detail-body">
           <p class="category-pill">{categoryLabel}</p>
           <h1>{product.name}</h1>
           <p class="excerpt">{product.excerpt}</p>
-          <div class="prose">
-            {product.description.split('\n').map((para) => (
-              <p>{para}</p>
-            ))}
-          </div>
+          {usePortableBody ? (
+            <div
+              class="prose prose-slate max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed"
+              set:html={bodyHtml}
+            />
+          ) : (
+            <p class="product-body-empty">尚未填寫商品介紹，請至 Sanity 編輯「內文（富文本）」。</p>
+          )}
           <p class="note">網站僅供參考請以現場為準，歡迎來店參觀選購。</p>
           <a href="/products/1" class="btn-secondary">返回全部商品</a>
         </div>
@@ -174,6 +244,25 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         <p class="footer-copy">© {new Date().getFullYear()} 水博館水族</p>
       </div>
     </footer>
+
+    <div
+      id="productImageLightbox"
+      class="product-lightbox"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-label="放大檢視商品圖"
+    >
+      <button
+        type="button"
+        id="productLightboxBackdrop"
+        class="product-lightbox__backdrop"
+        aria-label="關閉放大圖"
+      ></button>
+      <div class="product-lightbox__shell">
+        <img id="productLightboxImg" class="product-lightbox__img" alt="" decoding="async" />
+      </div>
+    </div>
   </div>
 </Layout>
 
@@ -182,14 +271,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     min-height: 100vh;
     background: #fff;
     color: #111;
-  }
-
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: #fff;
-    border-bottom: 1px solid #e5e5e5;
   }
 
   .header-inner {
@@ -236,27 +317,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     padding: 24px 16px 48px;
   }
 
-  .breadcrumb {
-    font-size: 0.875rem;
-    color: #666;
-    margin-bottom: 24px;
-  }
-
-  .breadcrumb a {
-    color: #111;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  .sep {
-    margin: 0 6px;
-    color: #bbb;
-  }
-
-  .current {
-    color: #333;
-  }
-
   .detail {
     display: grid;
     gap: 28px;
@@ -275,6 +335,39 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     border: 1px solid #eee;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     background: #f5f5f5;
+  }
+
+  .product-detail-no-image {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 200px;
+    aspect-ratio: 4 / 3;
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+    background: linear-gradient(145deg, #ecfeff 0%, #f1f5f9 50%, #e8f4f8 100%);
+    color: #64748b;
+  }
+
+  .product-detail-no-image .fa-fish-fins {
+    font-size: 2.25rem;
+    color: rgba(14, 116, 144, 0.38);
+  }
+
+  .product-detail-no-image-title {
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: #475569;
+  }
+
+  .product-detail-no-image-hint {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    max-width: 15rem;
+    line-height: 1.45;
   }
 
   .category-pill {
@@ -300,6 +393,17 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     font-size: 1rem;
     color: #444;
     line-height: 1.6;
+  }
+
+  .product-body-empty {
+    margin: 0 0 14px;
+    padding: 16px 18px;
+    font-size: 0.9375rem;
+    line-height: 1.65;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
   }
 
   .prose p {
@@ -381,13 +485,31 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     flex: 0 0 100%;
     scroll-snap-align: start;
     scroll-snap-stop: always;
+    position: relative;
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #e8e8e8;
   }
 
-  .carousel-slide img {
+  /* 商品詳情：完整顯示圖片，不裁切（優先於任何 utility） */
+  .carousel-slide__img,
+  .carousel-slide > img,
+  .carousel-slide :global(.carousel-slide__img-wrap) img {
+    position: absolute;
+    inset: 0;
     width: 100%;
-    height: auto;
+    height: 100%;
     display: block;
-    object-fit: cover;
+    object-fit: contain !important;
+    object-position: center !important;
+  }
+
+  .carousel-slide :global(.carousel-slide__img-wrap) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
   }
 
   .carousel-nav {
@@ -499,6 +621,79 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     outline: 2px solid #fff;
     outline-offset: 2px;
   }
+
+  .carousel-slide__img,
+  .carousel-slide :global(.carousel-slide__img-wrap) img {
+    cursor: zoom-in;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .product-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
+  }
+
+  .product-lightbox[hidden] {
+    display: none !important;
+  }
+
+  .product-lightbox:not([hidden]) {
+    animation: product-lb-fade-in 0.22s ease-out;
+  }
+
+  @keyframes product-lb-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .product-lightbox__backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.78);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .product-lightbox__shell {
+    position: relative;
+    z-index: 1;
+    max-width: min(96vw, 1400px);
+    max-height: min(92vh, 900px);
+    margin: 0;
+    pointer-events: none;
+  }
+
+  .product-lightbox__img {
+    display: block;
+    max-width: 100%;
+    max-height: min(92vh, 900px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    pointer-events: auto;
+    border-radius: 4px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .product-lightbox:not([hidden]) {
+      animation: none;
+    }
+  }
 </style>
 
 <script>
@@ -607,4 +802,70 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
   }
 
   setupProductCarousels();
+
+  function setupProductImageLightbox() {
+    const lightbox = document.getElementById('productImageLightbox');
+    const backdrop = document.getElementById('productLightboxBackdrop');
+    const lbImg = document.getElementById('productLightboxImg');
+    if (!lightbox || !backdrop || !lbImg) return;
+
+    let open = false;
+
+    function closeLightbox() {
+      if (!open) return;
+      open = false;
+      lightbox.hidden = true;
+      lightbox.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      lbImg.removeAttribute('src');
+      lbImg.alt = '';
+    }
+
+    function openLightboxFromImg(img) {
+      if (!(img instanceof HTMLImageElement)) return;
+      const src = img.currentSrc || img.src;
+      if (!src) return;
+      lbImg.alt = img.alt || '';
+      lbImg.src = src;
+      open = true;
+      lightbox.hidden = false;
+      lightbox.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      backdrop.focus();
+    }
+
+    function onCarouselClick(e) {
+      const t = e.target;
+      if (!(t instanceof Element)) return;
+      if (t.closest('.carousel-nav') || t.closest('.carousel-dot')) return;
+
+      const slide = t.closest('.carousel-slide');
+      const img = slide?.querySelector('img');
+      if (!img || !(img instanceof HTMLImageElement)) return;
+
+      openLightboxFromImg(img);
+    }
+
+    document.querySelectorAll('[data-product-lightbox-group]:not([data-lightbox-bound])').forEach((root) => {
+      root.setAttribute('data-lightbox-bound', '1');
+      root.addEventListener('click', onCarouselClick);
+    });
+
+    if (lightbox.dataset.lightboxGlobalBound === '1') return;
+    lightbox.dataset.lightboxGlobalBound = '1';
+
+    backdrop.addEventListener('click', () => {
+      closeLightbox();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && open) {
+        e.preventDefault();
+        closeLightbox();
+      }
+    });
+  }
+
+  setupProductImageLightbox();
+  document.addEventListener('astro:page-load', setupProductImageLightbox);
 </script>

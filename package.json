@@ -6,19 +6,31 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "dev": "astro dev",
+    "postinstall": "patch-package",
+    "dev": "astro dev --host --port 3333",
     "build": "astro build",
+    "build:local": "cross-env ASTRO_LOCAL_NODE=1 astro build",
     "preview": "astro preview",
+    "preview:local": "npm run build:local && cross-env ASTRO_LOCAL_NODE=1 astro preview",
     "astro": "astro",
-    "studio": "sanity dev",
-    "studio:deploy": "sanity deploy"
+    "studio": "sanity dev --host --port 3334",
+    "studio:deploy": "sanity deploy",
+    "migrate:product-slugs": "node scripts/migrate-product-slugs.mjs",
+    "migrate:product-slugs:dry": "node scripts/migrate-product-slugs.mjs --dry-run",
+    "check:product-slugs": "node scripts/check-product-slugs.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^5.0.1",
+    "@astrojs/tailwind": "^6.0.2",
     "@astrojs/vercel": "^10.0.2",
+    "@portabletext/to-html": "^5.0.2",
+    "@portabletext/types": "^4.0.2",
     "@sanity/astro": "^3.3.1",
     "@sanity/client": "^7.20.0",
     "@sanity/image-url": "^1.2.0",
+    "@sanity/orderable-document-list": "^1.5.1",
+    "@tailwindcss/typography": "^0.5.19",
+    "@tailwindcss/vite": "^4.2.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "astro": "^6.0.8",
@@ -26,6 +38,12 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sanity": "^3.99.0",
-    "styled-components": "^6.3.12"
+    "styled-components": "^6.3.12",
+    "tailwindcss": "^4.2.2"
+  },
+  "devDependencies": {
+    "@astrojs/node": "^10.0.4",
+    "cross-env": "^10.1.0",
+    "patch-package": "^8.0.1"
   }
 }

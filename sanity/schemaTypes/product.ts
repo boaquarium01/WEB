@@ -1,29 +1,53 @@
 import { defineArrayMember, defineField, defineType } from 'sanity';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
-function random6(): string {
-  // Sanity schema 內用於產生不可編輯的文件 slug
-  return Array.from({ length: 6 }, () => SLUG_ALPHABET[Math.floor(Math.random() * SLUG_ALPHABET.length)]).join(
+const SLUG_LEN = 4;
+
+/** Studio 新建文件時初始 slug：小寫英文 + 數字，共 36^SLUG_LEN 種 */
+function randomProductSlug(): string {
+  return Array.from({ length: SLUG_LEN }, () => SLUG_ALPHABET[Math.floor(Math.random() * SLUG_ALPHABET.length)]).join(
     ''
   );
 }
 
-function defaultCategorySortOrder(): number {
-  // 新建商品預設排在分類最後：用目前時間戳，通常會比既有的 1..N 大很多
-  return Date.now();
+/**
+ * 與 4 碼 slug 符號空間一致：每位 36 種、共 4 位 → 36^4 種組合，此處用「序號上限」36^4 - 1 作預設，
+ * 比一般手填 1、2、3… 都大，新建商品預設排在該分類最後（仍可比此值更大以微調）。
+ */
+const SORT_ORDER_DEFAULT_LAST = 36 ** SLUG_LEN - 1;
+
+function defaultCategorySortOrderStudio(): number {
+  return SORT_ORDER_DEFAULT_LAST;
 }
 
 export const productType = defineType({
   name: 'product',
   title: '商品／展示項目',
   type: 'document',
+  orderings: [
+    {
+      title: '分類內排序（小→大）',
+      name: 'sortOrderAsc',
+      by: [
+        { field: 'sortOrder', direction: 'asc' },
+        { field: 'name', direction: 'asc' }
+      ]
+    },
+    {
+      title: '名稱',
+      name: 'nameAsc',
+      by: [{ field: 'name', direction: 'asc' }]
+    }
+  ],
   groups: [
     { name: 'basic', title: '基本資訊' },
     { name: 'display', title: '顯示/排序' },
     { name: 'images', title: '圖片' },
     { name: 'seo', title: 'SEO' }
   ],
+  // 陣列順序＝Studio「全部欄位」由上而下；與 groups 順序一致：基本 → 顯示/排序 → 圖片 → SEO
   fields: [
+    // —— 基本資訊 ——
     defineField({
       name: 'name',
       title: '名稱',
@@ -33,12 +57,12 @@ export const productType = defineType({
     }),
     defineField({
       name: 'slug',
-      title: '網址 slug（系統自動生成）',
+      title: '網址 slug（系統自動生成，4 碼）',
       type: 'slug',
-      hidden: true, // 不讓使用者手動自訂
-      readOnly: true, // 保障後續不被編輯
+      hidden: true,
+      readOnly: true,
       group: 'basic',
-      initialValue: () => ({ current: random6() }),
+      initialValue: () => ({ current: randomProductSlug() }),
       validation: (Rule) => Rule.required()
     }),
     defineField({
@@ -50,11 +74,29 @@ export const productType = defineType({
       validation: (Rule) => Rule.required()
     }),
     defineField({
+      name: 'excerpt',
+      title: '短述（列表用）',
+      type: 'text',
+      rows: 2,
+      group: 'basic'
+    }),
+    defineField({
+      name: 'body',
+      title: '內文（富文本）',
+      description: '商品介紹頁主要內容；未填「短述」時會從此處摘錄列表預覽。',
+      type: 'array',
+      of: [{ type: 'block' }],
+      group: 'basic'
+    }),
+    // —— 顯示/排序 ——
+    defineField({
       name: 'sortOrder',
       title: '分類內排序（數字越小越前面）',
+      description:
+        `建議用左側「依分類調整順序」對照列表調整排序`,
       type: 'number',
       group: 'display',
-      initialValue: defaultCategorySortOrder
+      initialValue: defaultCategorySortOrderStudio
     }),
     defineField({
       name: 'enabled',
@@ -63,6 +105,14 @@ export const productType = defineType({
       group: 'display',
       initialValue: true
     }),
+    defineField({
+      name: 'featured',
+      title: '首頁精選',
+      type: 'boolean',
+      initialValue: false,
+      group: 'display'
+    }),
+    // —— 圖片 ——
     defineField({
       name: 'image',
       title: '圖片（列表主圖／輪播第一張）',
@@ -87,7 +137,7 @@ export const productType = defineType({
     defineField({
       name: 'gallery',
       title: '更多圖片（詳情頁輪播）',
-      description: '選填。會與上方主圖合併顯示；卡片列表仍只使用主圖。',
+      description: '選填。',
       group: 'images',
       type: 'array',
       of: [
@@ -112,27 +162,7 @@ export const productType = defineType({
       ],
       options: { layout: 'grid' }
     }),
-    defineField({
-      name: 'excerpt',
-      title: '短述（列表用）',
-      type: 'text',
-      rows: 2,
-      group: 'basic',
-    }),
-    defineField({
-      name: 'description',
-      title: '內文（介紹頁）',
-      type: 'text',
-      rows: 8,
-      group: 'basic'
-    }),
-    defineField({
-      name: 'featured',
-      title: '首頁精選',
-      type: 'boolean',
-      initialValue: false,
-      group: 'display'
-    }),
+    // —— SEO ——
     defineField({
       name: 'seoTitle',
       title: 'SEO 標題',
@@ -146,8 +176,7 @@ export const productType = defineType({
       type: 'array',
       group: 'seo',
       of: [{ type: 'string' }],
-      options: { layout: 'tags' },
-      // 讓你手動填寫 SEO 關鍵字
+      options: { layout: 'tags' }
     }),
     defineField({
       name: 'seoDescription',
@@ -156,7 +185,7 @@ export const productType = defineType({
       rows: 3,
       group: 'seo',
       hidden: true
-    }),
+    })
   ],
   preview: {
     select: {
@@ -184,7 +213,7 @@ export const productType = defineType({
     }) {
       return {
         title,
-        subtitle: `${cat ?? ''} · ${enabled ? '上架' : '下架'} · 排序:${sortOrder ?? 100}${featured ? ' · 熱銷' : ''}`,
+        subtitle: `${cat ?? ''} · ${enabled ? '上架' : '下架'} · 排序:${sortOrder ?? SORT_ORDER_DEFAULT_LAST}${featured ? ' · 熱銷' : ''}`,
         media: media as any
       };
     }

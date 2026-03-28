@@ -1,5 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import ProductGridStagger from '../components/ProductGridStagger.astro';
 import { getAllCategories, getFeaturedProducts } from '../data/products';
 
 const navItems = [
@@ -9,8 +10,17 @@ const navItems = [
   { name: '熱銷推薦', href: '#products' }
 ];
 
-const featuredProducts = await getFeaturedProducts(7);
-const categories = (await getAllCategories()) ?? [];
+const [featuredProducts, categories] = await Promise.all([
+  getFeaturedProducts(10),
+  getAllCategories()
+]);
+
+const featuredStaggerItems = featuredProducts.map((p) => ({
+  slug: p.slug,
+  name: p.name,
+  excerpt: p.excerpt,
+  imageUrl: p.image
+}));
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 
 const heroSlides = [
@@ -49,7 +59,10 @@ const services = [
   description="淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售"
 >
   <div class="site" id="home">
-    <header class="site-header">
+    <header
+      id="siteHeader"
+      class="site-header sticky top-0 z-[100] border-b border-[var(--aq-line)] bg-[color-mix(in_srgb,var(--aq-sand)_88%,white)] shadow-[0_6px_24px_rgba(26,34,33,0.05)] backdrop-blur-[14px] backdrop-saturate-150 supports-[backdrop-filter]:bg-[color-mix(in_srgb,var(--aq-sand)_78%,white)]"
+    >
       <div class="header-inner">
         <button type="button" id="menuButton" class="icon-btn" aria-label="開啟選單">
           <i class="fa-solid fa-bars"></i>
@@ -59,14 +72,14 @@ const services = [
           <ul class="nav-desktop-list">
             {navItems.map((item) => (
               <li>
-                <a href={item.href} class="nav-item">
+                <a href={item.href} class="nav-item nav-item--mark">
                   {item.name}
                 </a>
               </li>
             ))}
             <li class="nav-categories">
               <details>
-                <summary class="nav-item nav-item--summary">商品</summary>
+                <summary class="nav-item nav-item--summary">本店商品</summary>
                 <ul class="nav-categories-menu">
                   <li>
                     <a href="/products">全部商品</a>
@@ -104,8 +117,8 @@ const services = [
             </li>
           ))}
           <li class="drawer-categories">
-            <details>
-              <summary>商品</summary>
+            <details id="drawerProductDetails">
+              <summary>本店商品</summary>
               <ul class="drawer-category-list">
                 <li>
                   <a href="/products" class="mobile-menu-link drawer-link drawer-link--all">全部商品</a>
@@ -125,16 +138,29 @@ const services = [
     <main>
       <!-- Hero 輪播：滿版大圖 -->
       <section class="hero" aria-label="主視覺輪播">
+        <div class="hero-shimmer" aria-hidden="true"></div>
+        <svg class="hero-accent-line" viewBox="0 0 100 100" aria-hidden="true">
+          <path
+            class="hero-accent-line__path"
+            d="M 88 12 Q 52 38 14 86"
+            fill="none"
+            stroke="rgba(250,248,244,0.22)"
+            stroke-width="1.25"
+            stroke-linecap="round"
+            pathLength="1"></path>
+        </svg>
         <div class="hero-track">
           {heroSlides.map((slide, idx) => (
-            <article
-              class:list={['hero-slide', idx === 0 && 'is-active']}
-              style={`--bg: url('${slide.image}')`}
-            >
+            <article class:list={['hero-slide', idx === 0 && 'is-active']}>
+              <div class="hero-slide-bg" style={`--bg: url('${slide.image}')`}></div>
               <div class="hero-overlay"></div>
               <div class="hero-content wrap">
-                <h1>{slide.title}</h1>
-                <p>{slide.subtitle}</p>
+                <div class="hero-content-inner">
+                  <div class="hero-drift-layer">
+                    <h1>{slide.title}</h1>
+                    <p>{slide.subtitle}</p>
+                  </div>
+                </div>
               </div>
             </article>
           ))}
@@ -151,10 +177,11 @@ const services = [
         </div>
       </section>
 
+      <div class="home-below-hero">
       <!-- 服務項目 -->
-      <section id="services" class="section wrap">
-        <h2 class="section-title">服務項目</h2>
-        <div class="services-grid">
+      <section id="services" class="section home-section wrap">
+        <h2 class="home-section-title reveal-on-scroll">服務項目</h2>
+        <div class="services-grid reveal-stagger">
           {services.map((service) => (
             <div class="service-card">
               <i class:list={[service.icon, 'service-icon']}></i>
@@ -166,20 +193,20 @@ const services = [
       </section>
 
       <!-- 關於我們（與聯絡資訊同一區塊） -->
-      <section id="about" class="section section--alt" aria-labelledby="about-title">
-        <div class="about-unified wrap">
+      <section id="about" class="section home-section wrap" aria-labelledby="about-title">
+        <h2 id="about-title" class="home-section-title reveal-on-scroll">關於我們</h2>
+        <div class="about-unified">
           <div class="about-panel">
             <div class="about-grid about-intro-grid">
               <img
                 src="/about-us-store.png"
                 alt="水博館水族門市展示空間"
-                class="about-img"
+                class="about-img reveal-on-scroll reveal-on-scroll--delay-md"
                 width="1200"
                 height="800"
                 loading="lazy"
               />
-              <div class="about-text">
-                <h2 id="about-title" class="section-title">關於我們</h2>
+              <div class="about-text reveal-on-scroll reveal-on-scroll--delay-sm">
                 <p>
                   水博館水族專注於淡水魚水族販售，每週新增極品特選。秉持「專業、用心、苛求完美」的理念，提供專業養殖、水草景觀魚缸規劃、魚病治療、魚缸保養與水族器材銷售，歡迎來店參觀諮詢。
                 </p>
@@ -187,7 +214,7 @@ const services = [
             </div>
             <div id="contact" class="about-contact-integrated" aria-labelledby="contact-title">
               <div class="contact-layout">
-                <div class="contact-card contact-card--integrated">
+                <div class="contact-card contact-card--integrated reveal-on-scroll reveal-on-scroll--delay-lg">
                   <div class="contact-info">
                     <h3 id="contact-title" class="about-contact-heading">聯絡資訊</h3>
                     <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
@@ -221,36 +248,35 @@ const services = [
         </div>
       </section>
 
-      <section id="products" class="section wrap" aria-labelledby="products-heading">
-        <div class="products-section-head">
-          <h2 id="products-heading" class="products-page-title">熱銷推薦</h2>
-          <a class="products-all-link" href="/products" aria-label="前往全部商品列表">
+      <section id="products" class="section home-section wrap" aria-labelledby="products-heading">
+        <div class="products-section-head reveal-on-scroll">
+          <h2 id="products-heading" class="home-section-title">熱銷推薦</h2>
+          <a
+            id="homeProductsAllLink"
+            class="products-all-link"
+            href="/products"
+            aria-label="前往全部商品列表"
+          >
             全部商品
             <i class="fa-solid fa-chevron-right products-all-icon" aria-hidden="true"></i>
           </a>
         </div>
         {featuredProducts.length === 0 ? (
-          <p class="products-empty">
-            尚無商品資料。請執行 <code class="inline-code">npm run studio</code> 新增 <strong>product</strong> 文件（可勾選「首頁精選」），再重新建置網站。
-          </p>
-        ) : (
-          <div class="product-grid">
-            {featuredProducts.map((product) => (
-              <article class="product-card">
-                <a href={`/product/${product.slug}`} class="product-card-link">
-                  <div class="product-img-wrap">
-                    <img src={product.image} alt="" width="600" height="450" loading="lazy" />
-                  </div>
-                  <div class="product-body">
-                    <h3>{product.name}</h3>
-                    <p class="product-excerpt">{product.excerpt}</p>
-                  </div>
-                </a>
-              </article>
-            ))}
+          <div class="products-empty reveal-on-scroll">
+            <p class="products-empty__guest">
+              目前尚未展示精選商品。歡迎直接來店參觀選購，或前往
+              <a href="/products">全部商品</a>
+              瀏覽更多。
+            </p>
+            <p class="products-empty__admin-hint">
+              若為站長：請至 Sanity Studio 為商品勾選「首頁精選」並發布更新。
+            </p>
           </div>
+        ) : (
+          <ProductGridStagger items={featuredStaggerItems} compact />
         )}
       </section>
+      </div>
     </main>
 
     <footer class="site-footer">
@@ -284,6 +310,38 @@ const services = [
     mobileMenuBackdrop?.addEventListener('click', closeMenu);
     mobileLinks.forEach((link) => link.addEventListener('click', closeMenu));
 
+    const drawerProductDetails = document.getElementById('drawerProductDetails');
+    const homeProductsAllLink = document.getElementById('homeProductsAllLink');
+    const mobileNavMq = window.matchMedia('(max-width: 1023.98px)');
+
+    function isMobileDrawerLayout() {
+      return mobileNavMq.matches;
+    }
+
+    function openDrawerWithProductsExpanded() {
+      openMenu();
+      if (drawerProductDetails instanceof HTMLDetailsElement) {
+        drawerProductDetails.open = true;
+        requestAnimationFrame(() => {
+          drawerProductDetails.querySelector('summary')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        });
+      }
+    }
+
+    function bindHomeProductsAllLink() {
+      const link = document.getElementById('homeProductsAllLink');
+      if (!link || link.dataset.drawerNavBound === '1') return;
+      link.dataset.drawerNavBound = '1';
+      link.addEventListener('click', (e) => {
+        if (!isMobileDrawerLayout()) return;
+        e.preventDefault();
+        openDrawerWithProductsExpanded();
+      });
+    }
+
+    bindHomeProductsAllLink();
+    document.addEventListener('astro:page-load', bindHomeProductsAllLink);
+
     const slides = Array.from(document.querySelectorAll('.hero-slide'));
     const dots = Array.from(document.querySelectorAll('.carousel-dot'));
     let currentSlide = 0;
@@ -303,6 +361,43 @@ const services = [
     });
 
     setInterval(() => setSlide(currentSlide + 1), 5000);
+
+    const siteHeader = document.getElementById('siteHeader');
+    const heroEl = document.querySelector('.hero');
+    const syncHeaderScroll = () => {
+      if (!siteHeader || !heroEl) return;
+      const pastHero = window.scrollY > Math.max(0, heroEl.offsetHeight - 48);
+      siteHeader.classList.toggle('site-header--past-hero', pastHero);
+    };
+    syncHeaderScroll();
+    window.addEventListener('scroll', syncHeaderScroll, { passive: true });
+
+    const revealReduced =
+      typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const revealOpts = { rootMargin: '0px 0px -7% 0px', threshold: 0.14 };
+    if (revealReduced) {
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
+      document.querySelectorAll('.reveal-stagger').forEach((el) => el.classList.add('is-revealed'));
+    } else {
+      const revealIo = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-revealed');
+          revealIo.unobserve(entry.target);
+        });
+      }, revealOpts);
+      document.querySelectorAll('.reveal-on-scroll').forEach((el) => revealIo.observe(el));
+
+      const staggerIo = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          entry.target.classList.add('is-revealed');
+          staggerIo.unobserve(entry.target);
+        });
+      }, revealOpts);
+      document.querySelectorAll('.reveal-stagger').forEach((el) => staggerIo.observe(el));
+    }
   </script>
 </Layout>
 
@@ -318,28 +413,24 @@ const services = [
 
   .site {
     min-height: 100vh;
-    background: #ffffff;
-    color: #111111;
+    background: var(--aq-sand);
+    color: var(--aq-ink);
   }
 
-  /* 頂欄：毛玻璃、層次與對齊 */
-  .site-header {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    background: rgba(255, 255, 255, 0.88);
-    border-bottom: 1px solid rgba(17, 17, 17, 0.07);
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.9) inset,
-      0 6px 28px rgba(0, 0, 0, 0.05);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-  }
-
-  @supports not (backdrop-filter: blur(1px)) {
-    .site-header {
-      background: #ffffff;
+  /**
+   * 錨點捲動：略小於頂欄實高，讓標題更靠近導覽列下緣。
+   */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
     }
+  }
+
+  #services,
+  #about,
+  #products,
+  #contact {
+    scroll-margin-top: calc(14px + 58px + 14px + 1px - 24px);
   }
 
   .header-inner {
@@ -358,12 +449,15 @@ const services = [
     font-weight: 700;
     font-size: 1.0625rem;
     letter-spacing: 0.14em;
-    color: #0d0d0d;
-    transition: opacity 0.18s ease;
+    color: var(--aq-ink);
+    transition:
+      color 0.2s ease,
+      opacity 0.2s ease;
   }
 
   .brand:hover {
-    opacity: 0.72;
+    color: var(--aq-primary);
+    opacity: 0.92;
   }
 
   .nav-desktop {
@@ -386,29 +480,56 @@ const services = [
     align-items: center;
     justify-content: center;
     padding: 9px 14px;
-    border-radius: 8px;
+    border-radius: var(--aq-radius-sm);
     font-size: 0.8125rem;
     font-weight: 500;
     letter-spacing: 0.06em;
-    color: #2a2a2a;
+    color: var(--aq-muted);
     text-decoration: none;
     border: 1px solid transparent;
     transition:
-      background 0.18s ease,
-      color 0.18s ease,
-      border-color 0.18s ease,
-      box-shadow 0.18s ease;
+      background 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
   }
 
   .nav-item:hover {
-    background: rgba(17, 17, 17, 0.055);
-    color: #111;
+    background: var(--aq-primary-soft);
+    color: var(--aq-ink);
     text-decoration: none;
   }
 
   .nav-item:focus-visible {
-    outline: 2px solid #111;
+    outline: 2px solid var(--aq-primary);
     outline-offset: 2px;
+  }
+
+  .nav-item--mark {
+    position: relative;
+  }
+
+  .nav-item--mark::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    bottom: 5px;
+    width: 0;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--aq-primary), transparent);
+    transform: translateX(-50%);
+    transition:
+      width 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.2s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .nav-item--mark:hover::after,
+  .nav-item--mark:focus-visible::after {
+    width: 72%;
+    opacity: 1;
   }
 
   .nav-item--summary {
@@ -442,7 +563,7 @@ const services = [
 
   .nav-categories details[open] .nav-item--summary,
   .nav-item--summary:hover {
-    color: #111;
+    color: var(--aq-ink);
   }
 
   .nav-categories {
@@ -466,8 +587,8 @@ const services = [
     display: grid;
     gap: 2px;
     background: rgba(255, 255, 255, 0.98);
-    border: 1px solid rgba(17, 17, 17, 0.08);
-    border-radius: 10px;
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius);
     box-shadow:
       0 4px 6px rgba(0, 0, 0, 0.03),
       0 16px 40px rgba(0, 0, 0, 0.1);
@@ -477,19 +598,19 @@ const services = [
   .nav-categories-menu a {
     display: block;
     padding: 10px 12px;
-    border-radius: 8px;
+    border-radius: var(--aq-radius-sm);
     white-space: nowrap;
     font-size: 0.8125rem;
     font-weight: 500;
     letter-spacing: 0.04em;
-    color: #333;
+    color: var(--aq-muted);
     text-decoration: none;
     transition: background 0.15s ease, color 0.15s ease;
   }
 
   .nav-categories-menu a:hover {
-    background: rgba(17, 17, 17, 0.06);
-    color: #111;
+    background: var(--aq-primary-soft);
+    color: var(--aq-ink);
     text-decoration: none;
   }
 
@@ -502,7 +623,7 @@ const services = [
     height: 1px;
     margin: 6px 10px;
     padding: 0;
-    background: rgba(17, 17, 17, 0.08);
+    background: var(--aq-line);
     list-style: none;
   }
 
@@ -521,23 +642,23 @@ const services = [
     padding: 0;
     border: 1px solid transparent;
     background: transparent;
-    color: #1a1a1a;
+    color: var(--aq-ink);
     cursor: pointer;
-    border-radius: 10px;
+    border-radius: var(--aq-radius-sm);
     font-size: 1.125rem;
     transition:
-      background 0.18s ease,
-      border-color 0.18s ease,
-      color 0.18s ease;
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
   }
 
   .icon-btn:hover {
-    background: rgba(17, 17, 17, 0.05);
-    border-color: rgba(17, 17, 17, 0.08);
+    background: var(--aq-primary-soft);
+    border-color: var(--aq-line);
   }
 
   .icon-btn:focus-visible {
-    outline: 2px solid #111;
+    outline: 2px solid var(--aq-primary);
     outline-offset: 2px;
   }
 
@@ -588,8 +709,8 @@ const services = [
     z-index: 210;
     width: min(300px, 88vw);
     height: 100%;
-    background: #fafafa;
-    border-right: 1px solid rgba(17, 17, 17, 0.08);
+    background: var(--aq-sand);
+    border-right: 1px solid var(--aq-line);
     padding: 22px 20px;
     transform: translateX(-100%);
     transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
@@ -607,14 +728,14 @@ const services = [
     justify-content: space-between;
     margin-bottom: 22px;
     padding-bottom: 18px;
-    border-bottom: 1px solid rgba(17, 17, 17, 0.08);
+    border-bottom: 1px solid var(--aq-line);
   }
 
   .drawer-title {
     font-weight: 700;
     font-size: 0.9375rem;
     letter-spacing: 0.12em;
-    color: #0d0d0d;
+    color: var(--aq-ink);
   }
 
   .drawer-list {
@@ -624,13 +745,14 @@ const services = [
   }
 
   .drawer-link {
+    position: relative;
     display: block;
     padding: 14px 14px;
-    border-radius: 10px;
+    border-radius: var(--aq-radius-sm);
     font-size: 0.9375rem;
     font-weight: 500;
     letter-spacing: 0.05em;
-    color: #2a2a2a;
+    color: var(--aq-muted);
     text-decoration: none;
     border: 1px solid transparent;
     transition:
@@ -639,25 +761,47 @@ const services = [
       color 0.18s ease;
   }
 
+  .drawer-link::after {
+    content: '';
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 10px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--aq-primary), transparent);
+    opacity: 0;
+    transform: scaleX(0.35);
+    transition:
+      opacity 0.24s ease,
+      transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .drawer-link:hover::after,
+  .drawer-link:focus-visible::after {
+    opacity: 0.55;
+    transform: scaleX(1);
+  }
+
   .drawer-link:hover {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(17, 17, 17, 0.06);
-    color: #111;
+    background: color-mix(in srgb, white 92%, var(--aq-sand));
+    border-color: var(--aq-line);
+    color: var(--aq-ink);
   }
 
   .drawer-link:focus-visible {
-    outline: 2px solid #111;
+    outline: 2px solid var(--aq-primary);
     outline-offset: 2px;
   }
 
   .drawer-link--all {
     font-weight: 600;
     letter-spacing: 0.06em;
-    color: #111;
+    color: var(--aq-ink);
   }
 
   .drawer-categories details {
-    border-top: 1px solid rgba(17, 17, 17, 0.07);
+    border-top: 1px solid var(--aq-line);
     margin-top: 10px;
     padding-top: 10px;
   }
@@ -665,11 +809,11 @@ const services = [
   .drawer-categories summary {
     list-style: none;
     padding: 14px 14px;
-    border-radius: 10px;
+    border-radius: var(--aq-radius-sm);
     font-size: 0.9375rem;
     font-weight: 500;
     letter-spacing: 0.05em;
-    color: #2a2a2a;
+    color: var(--aq-muted);
     cursor: pointer;
     transition: background 0.18s ease;
   }
@@ -705,12 +849,12 @@ const services = [
     font-size: 0.875rem;
     font-weight: 500;
     letter-spacing: 0.03em;
-    color: #444;
-    border-radius: 8px;
+    color: var(--aq-muted);
+    border-radius: var(--aq-radius-sm);
   }
 
   .drawer-category-list a:hover {
-    color: #111;
+    color: var(--aq-ink);
   }
 
   @media (min-width: 1024px) {
@@ -720,14 +864,92 @@ const services = [
     }
   }
 
-  /* Hero */
+  #siteHeader.site-header {
+    transition:
+      box-shadow 0.38s ease,
+      border-color 0.38s ease;
+  }
+
+  #siteHeader.site-header--past-hero {
+    box-shadow: 0 12px 40px rgba(26, 34, 33, 0.09);
+    border-bottom-color: color-mix(in srgb, var(--aq-primary) 14%, var(--aq-line));
+  }
+
+  /* Hero：僅此區偏深底，其餘頁面維持淺色可讀 */
   .hero {
     position: relative;
     width: 100%;
     min-height: 56vh;
     height: min(75vh, 640px);
     overflow: hidden;
-    background: #f0f0f0;
+    background: var(--aq-primary-dark);
+  }
+
+  .hero-shimmer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0.55;
+    background:
+      radial-gradient(ellipse 58% 42% at 82% 14%, rgba(255, 255, 255, 0.22) 0%, transparent 62%),
+      radial-gradient(ellipse 40% 32% at 18% 88%, rgba(255, 255, 255, 0.06) 0%, transparent 55%);
+    mix-blend-mode: soft-light;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-shimmer {
+      animation: hero-shimmer-drift 36s ease-in-out infinite alternate;
+    }
+  }
+
+  @keyframes hero-shimmer-drift {
+    0%,
+    100% {
+      opacity: 0.48;
+      filter: saturate(1);
+    }
+    50% {
+      opacity: 0.62;
+      filter: saturate(1.08);
+    }
+  }
+
+  .hero-accent-line {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 3;
+    width: min(38vw, 200px);
+    height: min(38vw, 200px);
+    pointer-events: none;
+    opacity: 0.85;
+  }
+
+  .hero-accent-line__path {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-accent-line__path {
+      animation: hero-accent-draw 42s ease-in-out infinite;
+    }
+  }
+
+  @keyframes hero-accent-draw {
+    0%,
+    12% {
+      stroke-dashoffset: 1;
+    }
+    22%,
+    38% {
+      stroke-dashoffset: 0;
+    }
+    48%,
+    100% {
+      stroke-dashoffset: 1;
+    }
   }
 
   .hero-track {
@@ -739,11 +961,9 @@ const services = [
   .hero-slide {
     position: absolute;
     inset: 0;
-    background-image: var(--bg);
-    background-size: cover;
-    background-position: center;
+    overflow: hidden;
     opacity: 0;
-    transition: opacity 0.7s ease;
+    transition: opacity 0.75s ease;
   }
 
   .hero-slide.is-active {
@@ -751,16 +971,49 @@ const services = [
     z-index: 1;
   }
 
+  .hero-slide-bg {
+    position: absolute;
+    inset: 0;
+    background-image: var(--bg);
+    background-size: cover;
+    background-position: center;
+    transform: scale(1);
+    will-change: transform;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-slide.is-active .hero-slide-bg {
+      animation: hero-ken-burns 26s ease-out forwards;
+    }
+  }
+
+  @keyframes hero-ken-burns {
+    from {
+      transform: scale(1);
+    }
+    to {
+      transform: scale(1.045);
+    }
+  }
+
   .hero-overlay {
     position: absolute;
     inset: 0;
-    background: linear-gradient(to top, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.35) 45%, rgba(0, 0, 0, 0.15) 100%);
+    background:
+      linear-gradient(
+        to top,
+        rgba(10, 38, 36, 0.88) 0%,
+        rgba(14, 58, 55, 0.42) 38%,
+        rgba(8, 24, 23, 0.35) 72%,
+        rgba(0, 0, 0, 0.2) 100%
+      ),
+      radial-gradient(ellipse 90% 55% at 50% 100%, rgba(21, 106, 102, 0.35) 0%, transparent 58%);
     z-index: 1;
   }
 
   .hero-content {
     position: relative;
-    z-index: 2;
+    z-index: 3;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -769,21 +1022,63 @@ const services = [
     padding-top: 24px;
   }
 
+  .hero-content-inner {
+    max-width: 100%;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-slide.is-active .hero-drift-layer {
+      animation: hero-content-drift 14s ease-in-out infinite;
+    }
+  }
+
+  @keyframes hero-content-drift {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-4px);
+    }
+  }
+
+  .hero-slide .hero-content-inner {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+      opacity 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.08s,
+      transform 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.08s;
+  }
+
+  .hero-slide.is-active .hero-content-inner {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-slide .hero-content-inner {
+      transition-duration: 0.15s;
+      transition-delay: 0s;
+    }
+  }
+
   .hero-content h1 {
     margin: 0;
     font-size: clamp(1.75rem, 4vw, 2.75rem);
     font-weight: 800;
-    color: #111;
+    color: #faf8f4;
     line-height: 1.2;
     max-width: 22ch;
+    text-shadow: 0 1px 24px rgba(0, 0, 0, 0.25);
   }
 
   .hero-content p {
     margin: 12px 0 0;
     font-size: 1rem;
-    color: #444;
+    color: rgba(250, 248, 244, 0.9);
     max-width: 36ch;
-    line-height: 1.6;
+    line-height: 1.65;
+    text-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
   }
 
   .hero-dots {
@@ -791,7 +1086,7 @@ const services = [
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 3;
+    z-index: 4;
     display: flex;
     gap: 8px;
   }
@@ -802,47 +1097,185 @@ const services = [
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: #ccc;
+    background: rgba(250, 248, 244, 0.35);
     cursor: pointer;
-    transition: background 0.2s, transform 0.2s;
+    transition:
+      background 0.25s ease,
+      transform 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+
+  .carousel-dot:hover {
+    background: rgba(250, 248, 244, 0.55);
+    transform: scale(1.08);
   }
 
   .carousel-dot.is-active {
-    background: #111;
-    transform: scale(1.15);
+    background: #faf8f4;
+    box-shadow: 0 0 0 1px rgba(21, 106, 102, 0.45);
+    transform: scale(1.12);
   }
 
-  /* 區塊通用 */
+  /* 區塊通用：大留白，展缸間走道感 */
   .section {
-    padding: 48px 0;
+    padding: clamp(3rem, 6vw, 4.5rem) 0;
   }
 
-  .section--alt {
-    background: #fafafa;
-    border-top: 1px solid #eee;
-    border-bottom: 1px solid #eee;
+  /**
+   * 服務／關於／熱銷：淺沙底 + 極淡微粒質感（面積小）
+   */
+  .home-below-hero {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      var(--aq-sand) 0%,
+      color-mix(in srgb, var(--aq-sand-2) 55%, var(--aq-sand)) 48%,
+      var(--aq-sand) 100%
+    );
   }
 
-  .section-title {
-    margin: 0 0 24px;
-    font-size: clamp(1.5rem, 3vw, 1.75rem);
-    font-weight: 800;
-    text-align: center;
+  .home-below-hero::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 18%;
+    height: min(42%, 320px);
+    pointer-events: none;
+    opacity: 0.045;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    mix-blend-mode: multiply;
   }
 
-  #services .section-title {
-    text-align: left;
-  }
-
-  @media (min-width: 768px) {
-    #services .section-title {
-      text-align: center;
+  @media (prefers-reduced-motion: no-preference) {
+    .home-below-hero::before {
+      animation: home-grain-breathe 72s ease-in-out infinite alternate;
     }
   }
 
-  /* 手機：服務項目區左右留白加寬，避免貼邊（含瀏海機安全區） */
+  @keyframes home-grain-breathe {
+    from {
+      opacity: 0.036;
+    }
+    to {
+      opacity: 0.054;
+    }
+  }
+
+  .home-below-hero .home-section {
+    position: relative;
+    z-index: 1;
+    padding-bottom: clamp(2.75rem, 5vw, 4rem);
+  }
+
+  .home-below-hero .home-section:first-child {
+    padding-top: clamp(3rem, 6.5vw, 4.5rem);
+  }
+
+  .home-below-hero .home-section:not(:first-child) {
+    padding-top: clamp(2.25rem, 5vw, 3.5rem);
+    border-top: 1px solid color-mix(in srgb, var(--aq-ink) 6%, transparent);
+  }
+
+  /* 服務項目／關於／熱銷：統一標題層級 */
+  .home-section-title {
+    margin: 0 auto clamp(1.5rem, 3.8vw, 2rem);
+    max-width: 40rem;
+    font-size: clamp(1.375rem, 2.8vw, 1.75rem);
+    font-weight: 700;
+    text-align: center;
+    letter-spacing: 0.08em;
+    color: var(--aq-ink);
+    line-height: 1.25;
+  }
+
+  .home-section-title::after {
+    content: '';
+    display: block;
+    width: 2.25rem;
+    height: 2px;
+    margin: 0.75rem auto 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, var(--aq-primary), transparent);
+    opacity: 0.85;
+  }
+
+  /* 捲動進場（尊重 prefers-reduced-motion：腳本會直接加 is-revealed） */
+  .reveal-on-scroll {
+    --reveal-delay: 0ms;
+    transition:
+      opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay),
+      transform 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal-on-scroll:not(.is-revealed) {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  .reveal-on-scroll.is-revealed {
+    opacity: 1;
+    transform: none;
+  }
+
+  .reveal-on-scroll--delay-sm {
+    --reveal-delay: 85ms;
+  }
+
+  .reveal-on-scroll--delay-md {
+    --reveal-delay: 150ms;
+  }
+
+  .reveal-on-scroll--delay-lg {
+    --reveal-delay: 220ms;
+  }
+
+  /* 服務卡網格：僅用 opacity 進場，避免與漂浮動畫的 transform 衝突 */
+  .reveal-stagger .service-card {
+    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal-stagger:not(.is-revealed) .service-card {
+      opacity: 0;
+      animation: none;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(1) {
+      transition-delay: 0ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(2) {
+      transition-delay: 55ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(3) {
+      transition-delay: 110ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(4) {
+      transition-delay: 165ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(5) {
+      transition-delay: 220ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6) {
+      transition-delay: 275ms;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(n + 7) {
+      transition-delay: 320ms;
+    }
+  }
+
+  /* 手機：服務／熱銷左右留白加寬，避免貼邊（含瀏海機安全區） */
   @media (max-width: 639px) {
-    #services.wrap {
+    #services.wrap,
+    #products.home-section {
       padding-left: calc(24px + env(safe-area-inset-left, 0px));
       padding-right: calc(24px + env(safe-area-inset-right, 0px));
     }
@@ -850,7 +1283,7 @@ const services = [
 
   .services-grid {
     display: grid;
-    gap: 16px;
+    gap: clamp(1rem, 2.5vw, 1.35rem);
     grid-template-columns: 1fr;
   }
 
@@ -867,29 +1300,86 @@ const services = [
   }
 
   .service-card {
-    background: #fff;
-    border: 1px solid #e8e8e8;
-    border-radius: 12px;
+    background: color-mix(in srgb, white 94%, var(--aq-sand));
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius);
     padding: 24px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    box-shadow:
+      0 1px 2px rgba(26, 34, 33, 0.04),
+      0 14px 36px rgba(26, 34, 33, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition:
+      border-color 0.28s ease,
+      box-shadow 0.28s ease,
+      transform 0.28s ease;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal-stagger.is-revealed .service-card {
+      animation: service-card-drift 12s ease-in-out infinite;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 1) {
+      animation-delay: 0s;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 2) {
+      animation-delay: -2s;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 3) {
+      animation-delay: -4s;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 4) {
+      animation-delay: -1s;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 5) {
+      animation-delay: -3s;
+    }
+
+    .reveal-stagger.is-revealed .service-card:nth-child(6n + 6) {
+      animation-delay: -5s;
+    }
+  }
+
+  @keyframes service-card-drift {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-3px);
+    }
+  }
+
+  .service-card:hover {
+    border-color: color-mix(in srgb, var(--aq-primary) 22%, var(--aq-line));
+    box-shadow:
+      0 2px 4px rgba(26, 34, 33, 0.05),
+      0 18px 44px rgba(21, 106, 102, 0.09);
   }
 
   .service-icon {
     font-size: 1.75rem;
-    color: #222;
+    color: var(--aq-primary);
   }
 
   .service-card h3 {
     margin: 16px 0 8px;
     font-size: 1.125rem;
     font-weight: 700;
+    color: var(--aq-ink);
+    letter-spacing: 0.02em;
   }
 
   .service-card p {
     margin: 0;
     font-size: 0.9375rem;
-    color: #555;
-    line-height: 1.55;
+    color: var(--aq-muted);
+    line-height: 1.6;
   }
 
   /* 關於（與聯絡同一面板） */
@@ -898,11 +1388,25 @@ const services = [
   }
 
   .about-panel {
-    background: #fff;
-    border: 1px solid #e6e6e6;
-    border-radius: 12px;
+    background: color-mix(in srgb, white 95%, var(--aq-sand));
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius-lg);
     padding: 24px 16px;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    box-shadow:
+      0 1px 2px rgba(26, 34, 33, 0.04),
+      0 14px 36px rgba(26, 34, 33, 0.06);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition:
+      border-color 0.28s ease,
+      box-shadow 0.28s ease;
+  }
+
+  .about-panel:hover {
+    border-color: color-mix(in srgb, var(--aq-primary) 15%, var(--aq-line));
+    box-shadow:
+      0 2px 4px rgba(26, 34, 33, 0.05),
+      0 18px 44px rgba(26, 34, 33, 0.07);
   }
 
   @media (min-width: 768px) {
@@ -912,9 +1416,9 @@ const services = [
   }
 
   @media (max-width: 639px) {
-    #about .about-unified.wrap {
-      padding-left: calc(24px + env(safe-area-inset-left, 0px));
-      padding-right: calc(24px + env(safe-area-inset-right, 0px));
+    #about.home-section {
+      padding-left: calc(16px + env(safe-area-inset-left, 0px));
+      padding-right: calc(16px + env(safe-area-inset-right, 0px));
     }
   }
 
@@ -1019,20 +1523,21 @@ const services = [
     height: auto;
     min-height: 220px;
     object-fit: cover;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  }
-
-  .about-text .section-title {
-    text-align: left;
-    margin-bottom: 16px;
+    border-radius: var(--aq-radius);
+    box-shadow: 0 10px 32px rgba(26, 34, 33, 0.1);
   }
 
   .about-text p {
     margin: 0;
     line-height: 1.85;
-    color: #444;
+    color: var(--aq-muted);
     font-size: 1rem;
+  }
+
+  @media (min-width: 1024px) {
+    .about-text p {
+      font-size: 1.02rem;
+    }
   }
 
   .about-contact-integrated {
@@ -1041,11 +1546,11 @@ const services = [
 
   .contact-info .about-contact-heading {
     margin: 0 0 14px;
-    font-size: 1rem;
-    font-weight: 800;
+    font-size: 0.9375rem;
+    font-weight: 700;
     text-align: left;
-    color: #111;
-    letter-spacing: 0.04em;
+    color: var(--aq-ink);
+    letter-spacing: 0.08em;
     line-height: 1.3;
   }
 
@@ -1056,14 +1561,6 @@ const services = [
     border-radius: 0;
     background: transparent;
     box-shadow: none;
-  }
-
-  #about {
-    scroll-margin-top: 72px;
-  }
-
-  #contact {
-    scroll-margin-top: 72px;
   }
 
   .contact-layout {
@@ -1077,10 +1574,10 @@ const services = [
     justify-content: center;
     gap: 16px;
     padding: 24px;
-    border: 1px solid #e6e6e6;
-    border-radius: 12px;
-    background: #fff;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius);
+    background: color-mix(in srgb, white 97%, var(--aq-sand));
+    box-shadow: 0 4px 20px rgba(26, 34, 33, 0.05);
   }
 
   .contact-info {
@@ -1092,7 +1589,7 @@ const services = [
   .contact-card p {
     margin: 0 0 12px;
     line-height: 1.7;
-    color: #333;
+    color: var(--aq-muted);
   }
 
   .contact-card p:last-child {
@@ -1100,9 +1597,14 @@ const services = [
   }
 
   .contact-card a {
-    color: #111;
+    color: var(--aq-primary-dark);
     text-decoration: underline;
     text-underline-offset: 2px;
+    transition: color 0.2s ease;
+  }
+
+  .contact-card a:hover {
+    color: var(--aq-primary);
   }
 
   .facebook-link {
@@ -1122,7 +1624,7 @@ const services = [
     aspect-ratio: 4 / 3;
     flex: 0 0 auto;
     border: 0;
-    border-radius: 10px;
+    border-radius: var(--aq-radius);
   }
 
   @media (max-width: 900px) {
@@ -1146,17 +1648,22 @@ const services = [
     max-width: 42rem;
     text-align: center;
     font-size: 0.9375rem;
-    color: #555;
+    color: var(--aq-muted);
     line-height: 1.6;
   }
 
   .products-section-head {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px 20px;
-    margin: 0 0 20px;
+    text-align: center;
+    gap: 0.25rem 0;
+    margin: 0 auto clamp(1.25rem, 3vw, 1.75rem);
+    max-width: 40rem;
+  }
+
+  .products-section-head .home-section-title {
+    margin-bottom: 0.35rem;
   }
 
   .products-all-link {
@@ -1165,17 +1672,21 @@ const services = [
     gap: 6px;
     flex-shrink: 0;
     min-height: 44px;
-    padding: 8px 4px;
-    margin: -8px -4px;
+    padding: 10px 16px;
+    margin: 0;
     font-weight: 600;
-    font-size: 0.9375rem;
-    letter-spacing: 0.04em;
-    color: #333;
+    font-size: 0.875rem;
+    letter-spacing: 0.06em;
+    color: var(--aq-primary-dark);
     text-decoration: none;
-    border-radius: 6px;
+    border-radius: var(--aq-radius-sm);
+    border: 1px solid color-mix(in srgb, var(--aq-primary) 25%, transparent);
+    background: color-mix(in srgb, var(--aq-primary) 8%, white);
     transition:
-      color 0.15s ease,
-      background 0.15s ease;
+      color 0.22s ease,
+      background 0.22s ease,
+      border-color 0.22s ease,
+      box-shadow 0.22s ease;
   }
 
   .products-all-icon {
@@ -1185,29 +1696,20 @@ const services = [
   }
 
   .products-all-link:hover {
-    color: #000;
+    color: var(--aq-ink);
+    background: color-mix(in srgb, var(--aq-primary) 14%, white);
+    border-color: color-mix(in srgb, var(--aq-primary) 38%, transparent);
+    box-shadow: 0 4px 18px rgba(21, 106, 102, 0.12);
   }
 
   .products-all-link:hover .products-all-icon {
     opacity: 0.9;
-    transform: translateX(2px);
+    transform: translateX(5px);
   }
 
   .products-all-link:focus-visible {
-    outline: 2px solid #111;
+    outline: 2px solid var(--aq-primary);
     outline-offset: 2px;
-  }
-
-  @media (max-width: 520px) {
-    .products-section-head {
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-    }
-
-    .products-all-link {
-      margin: 0;
-    }
   }
 
   .products-empty {
@@ -1215,33 +1717,44 @@ const services = [
     max-width: 36rem;
     padding: 20px 16px;
     text-align: center;
+    background: color-mix(in srgb, white 92%, var(--aq-sand));
+    border: 1px solid var(--aq-line);
+    border-radius: var(--aq-radius);
+    box-shadow: 0 8px 24px rgba(26, 34, 33, 0.05);
+  }
+
+  .products-empty__guest {
+    margin: 0;
     font-size: 0.9375rem;
     line-height: 1.65;
-    color: #555;
-    background: #fafafa;
-    border: 1px solid #eee;
-    border-radius: 12px;
+    color: var(--aq-muted);
+  }
+
+  .products-empty__guest a {
+    color: var(--aq-primary-dark);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .products-empty__guest a:hover {
+    color: var(--aq-primary);
+  }
+
+  .products-empty__admin-hint {
+    margin: 14px 0 0;
+    padding-top: 12px;
+    border-top: 1px solid var(--aq-line);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: color-mix(in srgb, var(--aq-muted) 88%, var(--aq-ink));
   }
 
   .inline-code {
     padding: 2px 6px;
     font-size: 0.875em;
-    background: #eee;
-    border-radius: 4px;
-  }
-
-  .products-page-title {
-    margin: 0;
-    font-size: clamp(1.5rem, 4vw, 1.875rem);
-    font-weight: 800;
-    text-align: left;
-    letter-spacing: 0.02em;
-  }
-
-  @media (max-width: 520px) {
-    .products-page-title {
-      text-align: center;
-    }
+    background: var(--aq-sand-2);
+    border-radius: var(--aq-radius-sm);
   }
 
   .product-grid {
@@ -1327,10 +1840,10 @@ const services = [
   }
 
   .site-footer {
-    border-top: 1px solid #e5e5e5;
-    padding: 28px 16px;
-    background: #fff;
-    margin-top: 24px;
+    border-top: 1px solid var(--aq-line);
+    padding: clamp(2rem, 4vw, 2.75rem) 16px;
+    background: color-mix(in srgb, var(--aq-sand-2) 40%, var(--aq-sand));
+    margin-top: 0;
   }
 
   .footer-inner {
@@ -1340,6 +1853,7 @@ const services = [
   .footer-copy {
     margin: 0;
     font-size: 0.8125rem;
-    color: #666;
+    color: var(--aq-muted);
+    letter-spacing: 0.02em;
   }
 </style>

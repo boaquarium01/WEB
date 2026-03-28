@@ -14,5 +14,8 @@ export default defineCliConfig({
   api: {
     projectId,
     dataset
-  }
+  },
+  // 讓 `sanity deploy` 不需互動選擇 hostname，直接部署到既有
+  // `https://<studioHost>.sanity.studio`（本專案是 `boaquarium`）
+  studioHost: 'boaquarium'
 });

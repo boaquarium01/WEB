@@ -1,0 +1,164 @@
+---
+export type ProductCardItem = {
+  slug: string;
+  name: string;
+  excerpt: string;
+  categoryLabel?: string;
+  /** 空字串或缺漏時顯示佔位；圖片載入失敗也會改顯佔位 */
+  imageUrl?: string | null;
+};
+
+type Props = {
+  items: ProductCardItem[];
+  /** 首頁精選為 true 時不顯示分類行 */
+  compact?: boolean;
+};
+
+const { items, compact = false } = Astro.props as Props;
+---
+
+<div
+  class="product-stagger-grid group mx-auto grid w-full grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 lg:gap-6"
+  data-product-stagger
+>
+  {
+    items.map((product, i) => {
+      const imageSrc = String(product.imageUrl ?? '').trim();
+      const hasImage = imageSrc.length > 0;
+
+      return (
+      <article
+        data-stagger-card
+        class="product-stagger-card group/card opacity-0 translate-y-4 transition-[opacity,transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] [transition-delay:var(--stagger-delay)] group-[.is-visible]:opacity-100 group-[.is-visible]:translate-y-0"
+        style={`--stagger-delay: ${i * 70}ms`}
+      >
+        <a
+          href={`/product/${product.slug}`}
+          class="product-stagger-card__link block overflow-hidden rounded-[var(--aq-radius-lg)] border border-[color-mix(in_srgb,var(--aq-ink)_10%,transparent)] bg-[color-mix(in_srgb,white_94%,var(--aq-sand))] text-inherit no-underline shadow-[0_1px_2px_rgba(26,34,33,0.04),0_10px_28px_rgba(26,34,33,0.07)] outline-none ring-[color-mix(in_srgb,var(--aq-ink)_4%,transparent)] ring-1 transition-[transform,box-shadow,border-color] duration-200 ease-out [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:border-[color-mix(in_srgb,var(--aq-primary)_22%,transparent)] hover:shadow-[0_4px_14px_rgba(26,34,33,0.06),0_18px_40px_rgba(21,106,102,0.1)] active:scale-[0.98] active:shadow-[0_2px_8px_rgba(26,34,33,0.05)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--aq-primary)_65%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--aq-sand)]"
+        >
+          <div class="product-stagger-card__media relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-[var(--aq-mist)] to-[color-mix(in_srgb,var(--aq-sand-2)_85%,var(--aq-muted))]">
+            <div
+              data-product-img-fallback
+              class:list={[
+                'absolute inset-0 z-0 flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-[color-mix(in_srgb,var(--aq-primary)_6%,white)] via-[var(--aq-sand)] to-[var(--aq-sand-2)] px-2 text-center sm:gap-2',
+                hasImage ? 'hidden' : 'flex'
+              ]}
+              role="img"
+              aria-label="尚無商品照片"
+            >
+              <i class="fa-solid fa-fish-fins text-2xl text-[color-mix(in_srgb,var(--aq-primary)_38%,transparent)] sm:text-3xl" aria-hidden="true" />
+              <span class="text-[0.65rem] font-semibold tracking-wide text-[var(--aq-muted)] sm:text-xs">照片準備中</span>
+              <span class="sr-only">可至後台上傳商品圖，或連結已失效</span>
+            </div>
+            {hasImage ? (
+              <img
+                src={imageSrc}
+                alt=""
+                width={600}
+                height={450}
+                loading="lazy"
+                decoding="async"
+                class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-contain object-center transition-[filter] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
+                onerror="this.classList.add('hidden'); const m=this.closest('.product-stagger-card__media'); const fb=m&&m.querySelector('[data-product-img-fallback]'); if(fb){ fb.classList.remove('hidden'); fb.classList.add('flex'); }"
+              />
+            ) : null}
+            <div
+              class="product-stagger-card__media-overlay pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-[color-mix(in_srgb,var(--aq-primary-dark)_35%,transparent)] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+          </div>
+          <div class="px-3 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
+            {!compact && product.categoryLabel ? (
+              <p class="mb-1 text-[0.6875rem] font-medium uppercase tracking-wider text-[color-mix(in_srgb,var(--aq-primary)_78%,var(--aq-muted))] sm:text-[0.75rem]">
+                {product.categoryLabel}
+              </p>
+            ) : null}
+            <h2 class="mb-1 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
+              {product.name}
+            </h2>
+            <p class="line-clamp-2 text-[0.75rem] leading-relaxed text-[var(--aq-muted)] sm:text-[0.8125rem]">
+              {product.excerpt}
+            </p>
+          </div>
+        </a>
+      </article>
+      );
+    })
+  }
+</div>
+
+<script>
+  function initProductStagger() {
+    document.querySelectorAll('[data-product-stagger]').forEach((root) => {
+      if (!(root instanceof HTMLElement)) return;
+      if (root.dataset.staggerInit === '1') return;
+      root.dataset.staggerInit = '1';
+
+      const show = () => root.classList.add('is-visible');
+
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        show();
+        return;
+      }
+
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              show();
+              io.unobserve(e.target);
+            }
+          });
+        },
+        { threshold: 0.12, rootMargin: '-32px 0px 0px 0px' }
+      );
+      io.observe(root);
+    });
+  }
+
+  initProductStagger();
+  document.addEventListener('astro:page-load', initProductStagger);
+</script>
+
+<style is:global>
+  @media (prefers-reduced-motion: reduce) {
+    [data-product-stagger] [data-stagger-card] {
+      opacity: 1 !important;
+      transform: none !important;
+      transition: none !important;
+    }
+
+    .product-stagger-card__img,
+    .product-stagger-card__media-overlay {
+      transition: none !important;
+      transform: none !important;
+    }
+
+    .product-stagger-card__link:active {
+      transform: none !important;
+    }
+  }
+
+  /* 手機：略縮卡片最大寬度，避免雙欄在寬型手機上過扁過滿 */
+  @media (max-width: 639.98px) {
+    .product-stagger-grid {
+      max-width: min(100%, 22.5rem);
+      margin-left: auto;
+      margin-right: auto;
+      column-gap: 0.625rem;
+      row-gap: 0.75rem;
+    }
+  }
+
+  @media (min-width: 400px) and (max-width: 639.98px) {
+    .product-stagger-grid {
+      max-width: min(100%, 26rem);
+    }
+  }
+
+  @media (min-width: 640px) {
+    .product-stagger-grid {
+      max-width: none;
+    }
+  }
+</style>

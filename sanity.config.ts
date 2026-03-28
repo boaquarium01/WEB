@@ -1,3 +1,4 @@
+import { orderableDocumentListDeskItem } from '@sanity/orderable-document-list';
 import { buildLegacyTheme, defineConfig } from 'sanity';
 import { structureTool } from 'sanity/structure';
 import { schemaTypes } from './sanity/schemaTypes';
@@ -13,26 +14,44 @@ const FishIcon = () =>
     createElement('circle', { cx: 12.8, cy: 11.2, r: 1 })
   );
 
-const structure = (S: any) => {
-  const productList: any = S.documentTypeList('product')
-    .title('商品清單');
-    // 使用 preview.media 顯示縮圖；preview.media 來源是你 schema 內的 `preview.media: 'image'`
-    //（你的 product.image 欄位就是「列表主圖／輪播第一張」）
-    // 不強制 defaultLayout，交由 Sanity 使用預設列表樣式（避免顯示成“大圖 media”）
+const structure = (S: any, context: any) => {
+  const allProducts: any = S.documentTypeList('product').title('全部商品');
+  // 使用 preview.media 顯示縮圖；preview.media 來源是你 schema 內的 `preview.media: 'image'`
+  //（你的 product.image 欄位就是「列表主圖／輪播第一張」）
+
+  /** 分類內順序：@sanity/orderable-document-list 不支援「同 type 多組篩選清單」的 orderRank，改為依分類列出商品並預設 sortOrder 排序，方便對照改「分類內排序」數字 */
+  const productsByCategorySort: any = S.listItem()
+    .id('products-by-category-sort')
+    .title('依分類調整順序')
+    .child(
+      S.documentTypeList('category')
+        .title('選擇分類')
+        .child((categoryId: string) =>
+          S.documentList()
+            .id(`products-in-category-${categoryId}`)
+            .title('此分類商品（列表順序＝前台順序）')
+            .filter('_type == "product" && category._ref == $catId')
+            .params({ catId: categoryId })
+            .defaultOrdering([
+              { field: 'sortOrder', direction: 'asc' },
+              { field: 'name', direction: 'asc' }
+            ])
+        )
+    );
 
   return S.list()
     .id('aquarium-content')
     .title('水博館官網管理系統')
     .defaultLayout('detail')
     .items([
-      S.listItem()
-        .id('products')
-        .title('商品管理')
-        .child(productList),
-      S.listItem()
-        .id('categories')
-        .title('分類')
-        .child(S.documentTypeList('category').title('商品分類'))
+      S.listItem().id('products-all').title('全部商品').child(allProducts),
+      productsByCategorySort,
+      orderableDocumentListDeskItem({
+        type: 'category',
+        S,
+        context,
+        title: '商品分類（拖曳排序）'
+      })
     ]);
 };
 
@@ -60,8 +79,6 @@ const getEnv = (key: string): string | undefined => {
 
 const projectId = getEnv('SANITY_STUDIO_PROJECT_ID') || getEnv('PUBLIC_SANITY_PROJECT_ID') || 'iz7fvprm';
 const dataset = getEnv('SANITY_STUDIO_DATASET') || getEnv('PUBLIC_SANITY_DATASET') || 'production';
-const studioToken =
-  getEnv('SANITY_STUDIO_TOKEN') || getEnv('SANITY_AUTH_TOKEN') || getEnv('SANITY_API_TOKEN') || undefined;
 
 // 美化 Sanity Studio：用官網偏深色的字色/品牌色
 const studioTheme = buildLegacyTheme({
@@ -96,7 +113,9 @@ export default defineConfig({
   icon: FishIcon,
   projectId,
   dataset,
-  auth: studioToken ? { token: studioToken } : undefined,
+  // 寫入／拖曳排序：請在 Studio 右上角登入；並在 sanity.io/manage → API → CORS 加入
+  // http://localhost:3334（npm run studio）、http://localhost:3333（npm run dev 的 /admin）
+  // 勿設定 auth: { token }（v3 的 AuthConfig 不支援，無法以此帶入寫入權限）
   plugins: [structureTool({ structure })],
   theme: studioTheme,
   schema: {

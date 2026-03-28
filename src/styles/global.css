@@ -1,0 +1,22 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* 門市明亮系：湖水綠主色 + 沙色／淡灰輔色（首頁與元件共用） */
+:root {
+  --aq-primary: #156a66;
+  --aq-primary-dark: #0f4d4a;
+  --aq-primary-soft: rgba(21, 106, 102, 0.12);
+  --aq-sand: #faf8f4;
+  --aq-sand-2: #f0ebe2;
+  --aq-mist: #eef1ef;
+  --aq-ink: #1a2221;
+  --aq-muted: #5c6563;
+  --aq-line: rgba(26, 34, 33, 0.08);
+  --aq-radius-sm: 10px;
+  --aq-radius: 14px;
+  --aq-radius-lg: 18px;
+}
+
+@theme {
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+}

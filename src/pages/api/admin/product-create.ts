@@ -1,23 +1,62 @@
 import { createClient } from '@sanity/client';
 import type { APIRoute } from 'astro';
+import { nextSortOrderForCategory } from '../../../lib/nextProductSortOrder';
 
 const API_VERSION = '2025-03-18';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
-function random6(): string {
-  return Array.from({ length: 6 }, () => SLUG_ALPHABET[Math.floor(Math.random() * SLUG_ALPHABET.length)]).join('');
+const SLUG_LEN = 4;
+
+/** 小寫英文 + 數字，長度 SLUG_LEN（共 36^SLUG_LEN 種組合） */
+function randomProductSlug(): string {
+  return Array.from({ length: SLUG_LEN }, () => SLUG_ALPHABET[Math.floor(Math.random() * SLUG_ALPHABET.length)]).join(
+    ''
+  );
 }
 
-// 站台網址 slug 不需要人工自訂：一律隨機生成 6 碼
-function slugify(_input: string): string {
-  return random6();
+async function pickUniqueProductSlug(client: ReturnType<typeof createClient>): Promise<string> {
+  const maxAttempts = 100;
+  for (let i = 0; i < maxAttempts; i++) {
+    const candidate = randomProductSlug();
+    const taken = await client.fetch<string | null>(
+      `*[_type == "product" && slug.current == $slug][0]._id`,
+      { slug: candidate }
+    );
+    if (!taken) return candidate;
+  }
+  throw new Error('無法產生唯一商品 slug（碰撞過多），請稍後再試');
 }
 
-function excerptFromDescription(description: string): string {
-  const d = String(description ?? '').trim();
+function excerptFromContent(text: string): string {
+  const d = String(text ?? '').trim();
   if (!d) return '';
-  // Sanity 的 excerpt 顯示 2 列，這裡用長度做保守截斷
   return d.length > 140 ? `${d.slice(0, 140).trim()}...` : d;
+}
+
+function randomBlockKey(): string {
+  return Math.random().toString(36).slice(2, 11);
+}
+
+/** 表單多行純文字 → Portable Text blocks（寫入 body，不再使用 description 欄位） */
+function linesToPortableBody(text: string): Record<string, unknown>[] {
+  const lines = String(text)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return lines.map((line, i) => ({
+    _type: 'block',
+    _key: `b${i}-${randomBlockKey()}`,
+    style: 'normal',
+    markDefs: [],
+    children: [
+      {
+        _type: 'span',
+        _key: `s${i}-${randomBlockKey()}`,
+        text: line,
+        marks: []
+      }
+    ]
+  }));
 }
 
 function readSanityEnvForWrite() {
@@ -67,7 +106,7 @@ export const POST: APIRoute = async ({ request }) => {
     const formData = await request.formData();
 
     const name = String(formData.get('name') ?? '').trim();
-    const description = String(formData.get('description') ?? '').trim();
+    const contentText = String(formData.get('description') ?? '').trim();
     const categoryId = String(formData.get('categoryId') ?? '').trim(); // 這裡使用 category.slug.current
     const featured = formData.get('featured') === 'true' || formData.get('featured') === 'on';
     const images = formData.getAll('images').filter(Boolean) as File[];
@@ -78,8 +117,8 @@ export const POST: APIRoute = async ({ request }) => {
         headers: { 'content-type': 'application/json; charset=utf-8' }
       });
     }
-    if (!description) {
-      return new Response(JSON.stringify({ ok: false, message: '請輸入敘述' }), {
+    if (!contentText) {
+      return new Response(JSON.stringify({ ok: false, message: '請輸入商品介紹（將存為富文本內文）' }), {
         status: 400,
         headers: { 'content-type': 'application/json; charset=utf-8' }
       });
@@ -130,8 +169,10 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const slugCurrent = slugify(name);
-    const excerpt = excerptFromDescription(description);
+    const slugCurrent = await pickUniqueProductSlug(client);
+    const sortOrder = await nextSortOrderForCategory(client, categoryDocId);
+    const excerpt = excerptFromContent(contentText);
+    const body = linesToPortableBody(contentText);
 
     const mainImage = {
       _type: 'image',
@@ -159,6 +200,7 @@ export const POST: APIRoute = async ({ request }) => {
         _type: 'slug',
         current: slugCurrent
       },
+      sortOrder,
       category: {
         _type: 'reference',
         _ref: categoryDocId
@@ -166,7 +208,7 @@ export const POST: APIRoute = async ({ request }) => {
       image: mainImage,
       ...(gallery ? { gallery } : {}),
       excerpt,
-      description,
+      body,
       featured,
       // slug / placeholder 由 schema 控制；這裡不再寫入 isPlaceholder
     });

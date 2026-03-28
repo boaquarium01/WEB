@@ -2,11 +2,9 @@ import { createClient, type SanityClient } from '@sanity/client';
 import imageUrlBuilder from '@sanity/image-url';
 import type { Category, Product } from '../../data/catalog';
 import { PRODUCTS_PAGE_SIZE } from '../../data/catalog';
+import { portableBlocksToPlainText } from '../portableText';
 
 const API_VERSION = '2025-03-18';
-
-const FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=1200&q=80';
 
 /** 與 Studio schema 欄位對應 */
 const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
@@ -20,14 +18,16 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {
   image,
   gallery,
   excerpt,
-  description,
+  body,
   featured,
-  seoKeywords
+  seoKeywords,
+  seoTitle,
+  seoDescription
 }`;
-const CATEGORY_QUERY = `*[_type == "category"] | order(sortOrder asc, name asc) {
+/** 分類順序：與 Studio「商品分類（拖曳排序）」一致；無 orderRank 時退回 sortOrder、名稱 */
+const CATEGORY_QUERY = `*[_type == "category"] | order(orderRank asc, sortOrder asc, name asc) {
   "id": slug.current,
-  "label": name,
-  "sortOrder": coalesce(sortOrder, 999)
+  "label": name
 }`;
 
 const DEFAULT_PROJECT_ID = 'iz7fvprm';
@@ -58,7 +58,10 @@ function getClient(): SanityClient | null {
     projectId,
     dataset,
     useCdn: false,
-    apiVersion: API_VERSION
+    apiVersion: API_VERSION,
+    /** 預設 5 分鐘過長；連線失敗時盡快走 catch 回退 */
+    timeout: 12_000,
+    maxRetries: 1
   });
 }
 
@@ -83,9 +86,11 @@ type SanityProductDoc = {
   image?: Record<string, unknown> | null;
   gallery?: (Record<string, unknown> | null)[] | null;
   excerpt?: string;
-  description?: string;
+  body?: unknown[] | null;
   featured?: boolean;
   seoKeywords?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
 };
 
 function urlFromSanityImage(
@@ -94,47 +99,74 @@ function urlFromSanityImage(
 ): string | null {
   if (!ref) return null;
   try {
-    return builder.image(ref).width(1200).fit('max').auto('format').url();
+    return builder.image(ref).ignoreImageParams().width(1200).fit('max').auto('format').url();
   } catch {
     return null;
   }
 }
 
-function collectImageUrls(doc: SanityProductDoc, builder: ReturnType<typeof imageUrlBuilder>): string[] {
-  const raw: string[] = [];
-  const push = (u: string | null) => {
-    if (u) raw.push(u);
+/**
+ * 主圖 + 相簿：只保留「能從 Sanity 解出網址」的項目，讓 urls 與 refs 索引對齊。
+ * 若 image 僅有 _type/alt 而無 asset（如 Studio 殘留空欄位），會略過，避免詳情頁 SanityImage 拋錯。
+ */
+function collectMedia(
+  doc: SanityProductDoc,
+  builder: ReturnType<typeof imageUrlBuilder>
+): { urls: string[]; refs: (Record<string, unknown> | null)[] } {
+  type Pair = { url: string; ref: Record<string, unknown> };
+  const pairs: Pair[] = [];
+
+  const tryAdd = (ref: Record<string, unknown> | null | undefined) => {
+    if (!ref) return;
+    const url = urlFromSanityImage(ref, builder);
+    if (url) pairs.push({ url, ref });
   };
-  push(urlFromSanityImage(doc.image, builder));
-  const gallery = doc.gallery;
-  if (Array.isArray(gallery)) {
-    for (const item of gallery) {
-      if (item && typeof item === 'object') push(urlFromSanityImage(item as Record<string, unknown>, builder));
+
+  tryAdd(doc.image ?? undefined);
+  if (Array.isArray(doc.gallery)) {
+    for (const item of doc.gallery) {
+      if (item && typeof item === 'object') tryAdd(item as Record<string, unknown>);
     }
   }
+
   const seen = new Set<string>();
   const urls: string[] = [];
-  for (const u of raw) {
-    if (!seen.has(u)) {
-      seen.add(u);
-      urls.push(u);
+  const refs: (Record<string, unknown> | null)[] = [];
+
+  for (const { url, ref } of pairs) {
+    if (!seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+      refs.push(ref);
     }
   }
-  if (urls.length === 0) urls.push(FALLBACK_IMAGE);
-  return urls;
+
+  return { urls, refs };
 }
 
 function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string): Product {
   const builder = imageUrlBuilder({ projectId, dataset });
-  const images = collectImageUrls(doc, builder);
+  const { urls: images, refs: carouselRefs } = collectMedia(doc, builder);
+  const hasSanityRef = carouselRefs.some((r) => r != null);
+  const mainImageOk =
+    doc.image && typeof doc.image === 'object'
+      ? Boolean(urlFromSanityImage(doc.image as Record<string, unknown>, builder))
+      : false;
+  const imageRef =
+    mainImageOk && doc.image && typeof doc.image === 'object'
+      ? (doc.image as Record<string, unknown>)
+      : null;
 
   const computeExcerpt = () => {
     const raw = String(doc.excerpt ?? '').trim();
     if (raw) return raw;
-    const desc = String(doc.description ?? '').trim();
-    if (!desc) return '';
-    return desc.length > 140 ? `${desc.slice(0, 140).trim()}...` : desc;
+    const fromBody = portableBlocksToPlainText(doc.body as unknown[] | null);
+    if (!fromBody) return '';
+    return fromBody.length > 140 ? `${fromBody.slice(0, 140).trim()}...` : fromBody;
   };
+
+  const st = doc.seoTitle != null ? String(doc.seoTitle).trim() : '';
+  const sd = doc.seoDescription != null ? String(doc.seoDescription).trim() : '';
 
   return {
     _id: doc._id ? String(doc._id) : undefined,
@@ -144,12 +176,16 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
     categoryLabel: String(doc.categoryLabel ?? '').trim() || '未分類',
     enabled: doc.enabled !== false,
     sortOrder: Number.isFinite(Number(doc.sortOrder)) ? Number(doc.sortOrder) : 100,
-    image: images[0] ?? FALLBACK_IMAGE,
+    image: images[0] ?? '',
     images,
+    carouselImageRefs: hasSanityRef ? carouselRefs : undefined,
+    imageRef,
     excerpt: computeExcerpt(),
-    description: String(doc.description ?? ''),
+    body: Array.isArray(doc.body) && doc.body.length > 0 ? doc.body : null,
     featured: Boolean(doc.featured),
-    seoKeywords: Array.isArray(doc.seoKeywords) ? doc.seoKeywords : undefined
+    seoKeywords: Array.isArray(doc.seoKeywords) ? doc.seoKeywords : undefined,
+    seoTitle: st || undefined,
+    seoDescription: sd || undefined
   };
 }
 
@@ -167,8 +203,23 @@ export async function getAllCategories(): Promise<Category[]> {
     categoryCache = { at: Date.now(), data: [] };
     return [];
   }
-  const docs = (await client.fetch<Category[]>(CATEGORY_QUERY)) ?? [];
-  const categories = docs.filter((c) => Boolean(c.id) && Boolean(c.label));
+  type CategoryRow = { id?: string; label?: string };
+  let docs: CategoryRow[] = [];
+  try {
+    docs = (await client.fetch<CategoryRow[]>(CATEGORY_QUERY)) ?? [];
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 分類 API 無法連線，先顯示空清單。', msg);
+    categoryCache = null;
+    return [];
+  }
+  const categories: Category[] = docs
+    .filter((c) => Boolean(c.id) && Boolean(c.label))
+    .map((c, i) => ({
+      id: String(c.id).trim(),
+      label: String(c.label).trim(),
+      sortOrder: i
+    }));
   categoryCache = { at: Date.now(), data: categories };
   return categories;
 }
@@ -187,7 +238,15 @@ export async function getAllProducts(): Promise<Product[]> {
     return [];
   }
   const { projectId, dataset } = readSanityEnv();
-  const docs = await client.fetch<SanityProductDoc[]>(PRODUCT_QUERY);
+  let docs: SanityProductDoc[];
+  try {
+    docs = await client.fetch<SanityProductDoc[]>(PRODUCT_QUERY);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 商品列表 API 無法連線，先顯示空清單。', msg);
+    cache = null;
+    return [];
+  }
   const mapped = docs
     .map((d) => mapToProduct(d, projectId, dataset))
     .filter((p) => p.slug.length > 0 && p.enabled);
@@ -195,12 +254,15 @@ export async function getAllProducts(): Promise<Product[]> {
   return mapped;
 }
 
-/** 首頁精選：有勾 featured 的優先；若皆未勾選則取前 limit 筆 */
+/**
+ * 首頁熱銷：僅顯示 Sanity 勾選「首頁精選」的商品；未勾選任何一筆時為空陣列（不再用「全部商品前 N 筆」當備援）。
+ */
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
   const all = await getAllProducts();
-  const featured = [...all].filter((p) => p.featured).sort((a, b) => a.sortOrder - b.sortOrder);
-  if (featured.length > 0) return featured.slice(0, limit);
-  return [...all].sort((a, b) => a.sortOrder - b.sortOrder).slice(0, limit);
+  return [...all]
+    .filter((p) => p.featured === true)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, limit);
 }
 
 export async function getProductsByCategory(categoryId: string): Promise<Product[]> {
@@ -224,8 +286,11 @@ const PRODUCT_BY_SLUG_QUERY = `*[_type == "product" && slug.current == $slug][0]
   image,
   gallery,
   excerpt,
-  description,
+  body,
   featured,
+  seoKeywords,
+  seoTitle,
+  seoDescription
 }`;
 
 /** SSR 商品詳情頁：依 slug 查單筆（不依賴 getStaticPaths） */
@@ -239,7 +304,14 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     return null;
   }
   const { projectId, dataset } = readSanityEnv();
-  const doc = await client.fetch<SanityProductDoc | null>(PRODUCT_BY_SLUG_QUERY, { slug: s });
+  let doc: SanityProductDoc | null;
+  try {
+    doc = await client.fetch<SanityProductDoc | null>(PRODUCT_BY_SLUG_QUERY, { slug: s });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 單筆商品 API 無法連線。', msg);
+    return null;
+  }
   if (!doc?.slug) return null;
   const p = mapToProduct(doc, projectId, dataset);
   if (!p.enabled) return null;
@@ -265,4 +337,20 @@ export async function getProductsSortedForCatalog(): Promise<Product[]> {
 export function getCatalogPageCount(itemCount: number, pageSize = PRODUCTS_PAGE_SIZE): number {
   if (itemCount <= 0) return 1;
   return Math.ceil(itemCount / pageSize);
+}
+
+/** 建置時供 getStaticPaths 使用：所有已上架商品 slug */
+export async function getAllProductSlugs(): Promise<string[]> {
+  const client = getClient();
+  if (!client) return [];
+  try {
+    const slugs = await client.fetch<string[]>(
+      `*[_type == "product" && defined(slug.current) && enabled != false].slug.current`
+    );
+    return (slugs ?? []).map((s) => String(s).trim()).filter(Boolean);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 無法取得商品 slug 列表（靜態路徑）。', msg);
+    return [];
+  }
 }

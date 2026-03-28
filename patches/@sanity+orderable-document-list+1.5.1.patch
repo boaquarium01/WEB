@@ -1,0 +1,68 @@
+diff --git a/node_modules/@sanity/orderable-document-list/lib/index.cjs b/node_modules/@sanity/orderable-document-list/lib/index.cjs
+index 65092d1..3fb52ff 100644
+--- a/node_modules/@sanity/orderable-document-list/lib/index.cjs
++++ b/node_modules/@sanity/orderable-document-list/lib/index.cjs
+@@ -1,7 +1,7 @@
+ "use strict";
+ Object.defineProperty(exports, "__esModule", { value: !0 });
+ var sanity = require("sanity"), lexorank = require("lexorank"), icons = require("@sanity/icons"), jsxRuntime = require("react/jsx-runtime"), react = require("react"), ui = require("@sanity/ui"), sanityPluginUtils = require("sanity-plugin-utils"), dnd = require("@hello-pangea/dnd"), structure = require("sanity/structure");
+-const ORDER_FIELD_NAME = "orderRank", API_VERSION = "v2025-06-27";
++const ORDER_FIELD_NAME = "orderRank", API_VERSION = "2025-03-18";
+ function parseOrderRank(value, fallback) {
+   if (typeof value != "string")
+     return console.warn("[orderable-document-list] Invalid orderRank value (expected string):", value), fallback;
+@@ -494,7 +494,7 @@ async function resetOrder(params) {
+   return documents.map((doc) => doc._id).reduce((trx, documentId) => (aLexoRank = aLexoRank.genNext().genNext(), trx.patch(documentId, {
+     set: { [ORDER_FIELD_NAME]: aLexoRank.toString() }
+   })), client.transaction()).commit({
+-    visibility: "async",
++    visibility: "sync",
+     tag: "orderable-document-list.reset-order"
+   });
+ }
+diff --git a/node_modules/@sanity/orderable-document-list/lib/index.js b/node_modules/@sanity/orderable-document-list/lib/index.js
+index 8011045..40bcf88 100644
+--- a/node_modules/@sanity/orderable-document-list/lib/index.js
++++ b/node_modules/@sanity/orderable-document-list/lib/index.js
+@@ -7,7 +7,7 @@ import { Flex, Box, Text, Button, Tooltip, Card, AvatarCounter, useToast, Spinne
+ import { useListeningQuery, Feedback } from "sanity-plugin-utils";
+ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+ import { usePaneRouter } from "sanity/structure";
+-const ORDER_FIELD_NAME = "orderRank", API_VERSION = "v2025-06-27";
++const ORDER_FIELD_NAME = "orderRank", API_VERSION = "2025-03-18";
+ function parseOrderRank(value, fallback) {
+   if (typeof value != "string")
+     return console.warn("[orderable-document-list] Invalid orderRank value (expected string):", value), fallback;
+@@ -500,7 +500,7 @@ async function resetOrder(params) {
+   return documents.map((doc) => doc._id).reduce((trx, documentId) => (aLexoRank = aLexoRank.genNext().genNext(), trx.patch(documentId, {
+     set: { [ORDER_FIELD_NAME]: aLexoRank.toString() }
+   })), client.transaction()).commit({
+-    visibility: "async",
++    visibility: "sync",
+     tag: "orderable-document-list.reset-order"
+   });
+ }
+diff --git a/node_modules/@sanity/orderable-document-list/src/helpers/constants.ts b/node_modules/@sanity/orderable-document-list/src/helpers/constants.ts
+index 062e406..9dd165f 100644
+--- a/node_modules/@sanity/orderable-document-list/src/helpers/constants.ts
++++ b/node_modules/@sanity/orderable-document-list/src/helpers/constants.ts
+@@ -1,4 +1,5 @@
+ export const ORDER_FIELD_NAME = `orderRank` as const
+ 
+ // same version we are using in the vision plugin
+-export const API_VERSION = `v2025-06-27` as const
++// 與專案 sanity / fetch 一致；v2025-06-27 在部分環境 mutate 會失敗
++export const API_VERSION = `2025-03-18` as const
+diff --git a/node_modules/@sanity/orderable-document-list/src/helpers/resetOrder.ts b/node_modules/@sanity/orderable-document-list/src/helpers/resetOrder.ts
+index 54d8c35..2703655 100644
+--- a/node_modules/@sanity/orderable-document-list/src/helpers/resetOrder.ts
++++ b/node_modules/@sanity/orderable-document-list/src/helpers/resetOrder.ts
+@@ -42,7 +42,7 @@ export async function resetOrder(params: ResetOrderParams): Promise<MultipleMuta
+     }, client.transaction())
+ 
+   return transaction.commit({
+-    visibility: 'async',
++    visibility: 'sync',
+     tag: 'orderable-document-list.reset-order',
+   })
+ }
