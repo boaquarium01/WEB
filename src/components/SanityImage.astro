@@ -30,7 +30,7 @@ const src = source ? buildDefaultSrc(source, 800) : null;
 ---
 
 {
-  src && srcSet ? (
+  src ? (
     <div
       class:list={['relative overflow-hidden bg-slate-100', cls]}
       style={
@@ -46,8 +46,8 @@ const src = source ? buildDefaultSrc(source, 800) : null;
     >
       <img
         src={src}
-        srcset={srcSet}
-        sizes={sizes}
+        srcset={srcSet || undefined}
+        sizes={srcSet ? sizes : undefined}
         alt={alt}
         width={width}
         height={height}
