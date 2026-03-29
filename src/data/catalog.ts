@@ -34,6 +34,10 @@ export type Product = {
   featured?: boolean;
   /** 首頁熱銷專用排序；未設定時前台以 sortOrder 代替 */
   featuredSortOrder?: number;
+  /** 首頁主打區（最多 3） */
+  heroSpotlight?: boolean;
+  /** 主打開啟時間（ISO），最近者排最前 */
+  heroSpotlightActivatedAt?: string;
   seoKeywords?: string[];
   seoTitle?: string;
   seoDescription?: string;

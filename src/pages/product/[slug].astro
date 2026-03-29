@@ -4,6 +4,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import SanityImage from '../../components/SanityImage.astro';
 import { getAllProductSlugs, getProductBySlug } from '../../data/products';
 import { portableTextToHtml, portableBlocksToPlainText } from '../../lib/portableText';
+import { SITE_TITLE_SHORT } from '../../config/site';
 
 export const prerender = true;
 
@@ -40,8 +41,8 @@ const bodyPlain = portableBlocksToPlainText(product.body);
 
 // SEO：優先 Studio 的 seo 欄位，否則由短述或富文本純文字產生
 const pageTitle = product.seoTitle
-  ? `${product.seoTitle}｜水博館水族`
-  : `${product.name}｜水博館水族`;
+  ? `${product.seoTitle}｜${SITE_TITLE_SHORT}`
+  : `${product.name}｜${SITE_TITLE_SHORT}`;
 const seoDescription =
   product.seoDescription?.trim() ||
   truncateForMeta(product.excerpt || bodyPlain, 160);
@@ -119,7 +120,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 >
   <div class="page">
     <header
-      class="site-header sticky top-0 z-50 border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
+      class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
     >
       <div class="header-inner">
         <a href="/" class="back-link" aria-label="返回首頁">
@@ -136,7 +137,10 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         items={[
           { label: '首頁', href: '/' },
           { label: '全部商品', href: '/products/1' },
-          { label: categoryLabel, href: `/category/${product.category}` },
+          {
+            label: categoryLabel,
+            href: `/products/1?category=${encodeURIComponent(product.category)}`
+          },
           { label: product.name }
         ]}
       />
@@ -159,28 +163,42 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
                       const alt = i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`;
                       return (
                         <div class="carousel-slide" aria-hidden={i === 0 ? 'false' : 'true'}>
-                          {ref ? (
-                            <SanityImage
-                              source={ref}
-                              alt={alt}
-                              sizes="(max-width: 900px) 100vw, 50vw"
-                              priority={i === 0}
-                              width={1000}
-                              height={750}
-                              class="carousel-slide__img-wrap"
-                              imgClass="!object-contain !object-center"
-                            />
-                          ) : (
+                          <div class="carousel-slide__stack">
                             <img
-                              class="carousel-slide__img"
+                              class="carousel-slide__blur"
                               src={src}
-                              alt={alt}
+                              alt=""
+                              aria-hidden="true"
                               width="1000"
                               height="750"
                               loading={i === 0 ? 'eager' : 'lazy'}
                               decoding="async"
                             />
-                          )}
+                            {ref ? (
+                              <SanityImage
+                                source={ref}
+                                alt={alt}
+                                sizes="(max-width: 900px) 100vw, 50vw"
+                                priority={i === 0}
+                                width={1000}
+                                height={750}
+                                class="carousel-slide__contain !bg-transparent"
+                                imgClass="!object-contain !object-center !max-h-full !max-w-full !h-auto !w-auto"
+                              />
+                            ) : (
+                              <div class="carousel-slide__contain">
+                                <img
+                                  class="carousel-slide__img--front"
+                                  src={src}
+                                  alt={alt}
+                                  width="1000"
+                                  height="750"
+                                  loading={i === 0 ? 'eager' : 'lazy'}
+                                  decoding="async"
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -491,25 +509,79 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     background: #e8e8e8;
   }
 
-  /* 商品詳情：完整顯示圖片，不裁切（優先於任何 utility） */
-  .carousel-slide__img,
-  .carousel-slide > img,
-  .carousel-slide :global(.carousel-slide__img-wrap) img {
+  .carousel-slide__stack {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain !important;
-    object-position: center !important;
+    overflow: hidden;
   }
 
-  .carousel-slide :global(.carousel-slide__img-wrap) {
+  /**
+   * 底層：同圖放大裁切 + 模糊，填滿留白區
+   * 前景：完整顯示、不裁切（object-contain）
+   */
+  .carousel-slide__blur {
     position: absolute;
     inset: 0;
+    z-index: 0;
+    display: block;
     width: 100%;
     height: 100%;
+    max-width: none;
+    object-fit: cover;
+    object-position: center;
+    transform: scale(1.14);
+    filter: blur(26px);
+    opacity: 0.9;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .carousel-slide__blur {
+      filter: none;
+      transform: none;
+      opacity: 0.45;
+    }
+  }
+
+  /**
+   * 前景圖：flex 置中，避免 absolute 全滿 + 全域 img height:auto 造成視覺貼頂、留白只在下方
+   */
+  .carousel-slide__stack :global(.carousel-slide__contain) {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     min-height: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+  }
+
+  .carousel-slide__stack :global(.carousel-slide__contain) img {
+    position: relative !important;
+    inset: auto !important;
+    flex: 0 1 auto;
+    display: block;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+    object-position: center center !important;
+  }
+
+  .carousel-slide__stack .carousel-slide__contain > .carousel-slide__img--front {
+    position: relative;
+    flex: 0 1 auto;
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    object-position: center center;
   }
 
   .carousel-nav {
@@ -622,8 +694,8 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     outline-offset: 2px;
   }
 
-  .carousel-slide__img,
-  .carousel-slide :global(.carousel-slide__img-wrap) img {
+  .carousel-slide__stack :global(.carousel-slide__contain) img,
+  .carousel-slide__stack .carousel-slide__contain > .carousel-slide__img--front {
     cursor: zoom-in;
     -webkit-tap-highlight-color: transparent;
   }
@@ -736,6 +808,14 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         { passive: true }
       );
 
+      const reduceMotion =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      const AUTOPLAY_MS = 5500;
+      let autoplayTimer = 0;
+      let scrollProgrammatic = false;
+
       let index = 0;
       let ticking = false;
 
@@ -751,11 +831,38 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         });
       }
 
+      function clearAutoplay() {
+        if (autoplayTimer) {
+          window.clearInterval(autoplayTimer);
+          autoplayTimer = 0;
+        }
+      }
+
+      function scheduleAutoplay() {
+        if (reduceMotion || slides.length < 2) return;
+        clearAutoplay();
+        autoplayTimer = window.setInterval(() => {
+          goTo(index + 1);
+        }, AUTOPLAY_MS);
+      }
+
+      function onUserNavigation() {
+        clearAutoplay();
+        scheduleAutoplay();
+      }
+
       function goTo(i) {
         const n = slides.length;
         index = ((i % n) + n) % n;
-        viewport.scrollTo({ left: index * slideWidth(), behavior: 'smooth' });
+        scrollProgrammatic = true;
+        viewport.scrollTo({
+          left: index * slideWidth(),
+          behavior: reduceMotion ? 'auto' : 'smooth'
+        });
         syncDots(index);
+        window.setTimeout(() => {
+          scrollProgrammatic = false;
+        }, 1000);
       }
 
       const extendTouchNav = (el) => {
@@ -768,14 +875,31 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         );
       };
 
-      prevBtn?.addEventListener('click', () => goTo(index - 1));
-      nextBtn?.addEventListener('click', () => goTo(index + 1));
+      prevBtn?.addEventListener('click', () => {
+        goTo(index - 1);
+        onUserNavigation();
+      });
+      nextBtn?.addEventListener('click', () => {
+        goTo(index + 1);
+        onUserNavigation();
+      });
       extendTouchNav(prevBtn);
       extendTouchNav(nextBtn);
       dots.forEach((dot, i) => {
-        dot.addEventListener('click', () => goTo(i));
+        dot.addEventListener('click', () => {
+          goTo(i);
+          onUserNavigation();
+        });
         extendTouchNav(dot);
       });
+
+      viewport.addEventListener(
+        'pointerdown',
+        () => {
+          onUserNavigation();
+        },
+        { passive: true }
+      );
 
       viewport.addEventListener('scroll', () => {
         if (ticking) return;
@@ -791,13 +915,27 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         });
       }, { passive: true });
 
+      main.addEventListener('mouseenter', clearAutoplay);
+      main.addEventListener('mouseleave', scheduleAutoplay);
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clearAutoplay();
+        else scheduleAutoplay();
+      });
+
       let resizeTimer;
       window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = window.setTimeout(() => {
+          scrollProgrammatic = true;
           viewport.scrollTo({ left: index * slideWidth(), behavior: 'auto' });
+          window.setTimeout(() => {
+            scrollProgrammatic = false;
+          }, 100);
         }, 120);
       });
+
+      scheduleAutoplay();
     });
   }
 
@@ -840,7 +978,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       if (t.closest('.carousel-nav') || t.closest('.carousel-dot')) return;
 
       const slide = t.closest('.carousel-slide');
-      const img = slide?.querySelector('img');
+      const img = slide?.querySelector('.carousel-slide__contain img');
       if (!img || !(img instanceof HTMLImageElement)) return;
 
       openLightboxFromImg(img);

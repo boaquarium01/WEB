@@ -58,7 +58,7 @@ const { items, compact = false } = Astro.props as Props;
                 height={450}
                 loading="lazy"
                 decoding="async"
-                class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-contain object-center transition-[filter] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
+                class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-cover object-center transition-[filter] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
                 onerror="this.classList.add('hidden'); const m=this.closest('.product-stagger-card__media'); const fb=m&&m.querySelector('[data-product-img-fallback]'); if(fb){ fb.classList.remove('hidden'); fb.classList.add('flex'); }"
               />
             ) : null}
@@ -121,6 +121,20 @@ const { items, compact = false } = Astro.props as Props;
 </script>
 
 <style is:global>
+  /**
+   * Layout 全域 `img { max-width:100%; height:auto }` 會讓卡片主圖無法撐滿 4:3 區塊，
+   * 底部會露出 `.product-stagger-card__media` 的漸層（看起來像留白）。
+   */
+  .product-stagger-card__media > .product-stagger-card__img {
+    display: block;
+    max-width: none;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    object-fit: cover;
+    object-position: center;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     [data-product-stagger] [data-stagger-card] {
       opacity: 1 !important;

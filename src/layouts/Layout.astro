@@ -1,8 +1,6 @@
 ---
 import '../styles/global.css';
-
-const defaultTitle = '水博館水族｜官方網站';
-const defaultDescription = '淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售';
+import { SITE_TITLE as defaultTitle, SITE_DESCRIPTION as defaultDescription } from '../config/site';
 
 const {
   title = defaultTitle,
@@ -57,6 +55,12 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 </html>
 
 <style is:global>
+	.site-header {
+		position: sticky;
+		top: 0;
+		z-index: 100;
+	}
+
 	html,
 	body {
 		margin: 0;

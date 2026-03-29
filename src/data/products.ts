@@ -14,6 +14,7 @@ export {
   getAllProducts,
   getAllProductSlugs,
   getFeaturedProducts,
+  getHeroSpotlightProducts,
   getProductBySlug,
   getProductsByCategory,
   getProductsSortedForCatalog,

@@ -2,11 +2,31 @@
 import Layout from '../../layouts/Layout.astro';
 import ProductGridStagger from '../../components/ProductGridStagger.astro';
 import {
+  getAllCategories,
   getProductsSortedForCatalog,
   PRODUCTS_PAGE_SIZE,
   getCatalogPageCount,
+  type Category,
   type Product
 } from '../../data/products';
+import { SITE_TITLE_SHORT } from '../../config/site';
+
+function buildCatalogQs(categoryId: string, q: string): string {
+  const p = new URLSearchParams();
+  if (categoryId) p.set('category', categoryId);
+  if (q) p.set('q', q);
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
+function productMatchesQuery(product: Product, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const hay = [product.name, product.excerpt, product.categoryLabel ?? '']
+    .join(' ')
+    .toLowerCase();
+  return hay.includes(needle);
+}
 
 /** SSR（output: 'server'）下不會執行 getStaticPaths，須依 params 即時查資料（同 product/[slug].astro） */
 const pageSize = PRODUCTS_PAGE_SIZE;
@@ -17,20 +37,44 @@ if (!rawPage || !Number.isFinite(parsed) || parsed < 1) {
   return Astro.redirect('/products/1');
 }
 
-const sorted = await getProductsSortedForCatalog();
-const totalItems = sorted.length;
+const rawCategory = Astro.url.searchParams.get('category')?.trim() ?? '';
+const rawQ = Astro.url.searchParams.get('q')?.trim() ?? '';
+
+const [sorted, categories] = await Promise.all([
+  getProductsSortedForCatalog(),
+  getAllCategories()
+]);
+
+const categoryIds = new Set((categories as Category[]).map((c) => c.id));
+const activeCategory = rawCategory && categoryIds.has(rawCategory) ? rawCategory : '';
+const activeQ = rawQ;
+
+if (rawCategory && !activeCategory) {
+  return Astro.redirect(`/products/${parsed}${buildCatalogQs('', rawQ)}`);
+}
+
+let filtered = sorted as Product[];
+if (activeCategory) {
+  filtered = filtered.filter((p) => p.category === activeCategory);
+}
+if (activeQ) {
+  filtered = filtered.filter((p) => productMatchesQuery(p, activeQ));
+}
+
+const totalItems = filtered.length;
 const totalPages = getCatalogPageCount(totalItems, pageSize);
 const currentPage = parsed;
+const qs = buildCatalogQs(activeCategory, activeQ);
 
 if (currentPage > totalPages) {
-  return Astro.redirect(`/products/${totalPages}`);
+  return Astro.redirect(`/products/${totalPages}${qs}`);
 }
 
 if (String(currentPage) !== rawPage) {
-  return Astro.redirect(`/products/${currentPage}`);
+  return Astro.redirect(`/products/${currentPage}${qs}`);
 }
 
-const items = sorted.slice(
+const items = filtered.slice(
   (currentPage - 1) * pageSize,
   currentPage * pageSize
 ) as Product[];
@@ -42,18 +86,42 @@ const staggerItems = items.map((p) => ({
   categoryLabel: p.categoryLabel,
   imageUrl: p.image
 }));
-const pageTitle =
-  currentPage === 1
-    ? `全部商品｜水博館水族`
-    : `全部商品（第 ${currentPage} 頁）｜水博館水族`;
-const pageDesc = `水博館水族熱銷推薦列表，共 ${totalItems} 項，僅供參考，歡迎來店參觀。`;
+
+const activeCategoryLabel = activeCategory
+  ? (categories as Category[]).find((c) => c.id === activeCategory)?.label ?? ''
+  : '';
+
+const filterHint =
+  activeCategory || activeQ
+    ? `篩選後 ${totalItems} 項（全站共 ${sorted.length} 項）`
+    : `共 ${totalItems} 項展示`;
+
+let pageTitleMain: string;
+if (activeCategory && !activeQ && activeCategoryLabel) {
+  pageTitleMain =
+    currentPage === 1
+      ? `${activeCategoryLabel}｜全部商品`
+      : `${activeCategoryLabel}｜全部商品（第 ${currentPage} 頁）`;
+} else {
+  pageTitleMain =
+    currentPage === 1 ? '全部商品' : `全部商品（第 ${currentPage} 頁）`;
+  if (activeQ.trim()) {
+    pageTitleMain = `${pageTitleMain}（搜尋）`;
+  }
+}
+const pageTitle = `${pageTitleMain}｜${SITE_TITLE_SHORT}`;
+
+let pageDesc = `桃園中壢水博館水族商品列表，${filterHint}，每頁 ${PRODUCTS_PAGE_SIZE} 筆，僅供參考，歡迎來店參觀。`;
+if (activeCategory && !activeQ && activeCategoryLabel) {
+  pageDesc = `桃園中壢水博館水族「${activeCategoryLabel}」分類展示，${filterHint}，歡迎來店參觀。`;
+}
 Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
 ---
 
 <Layout title={pageTitle} description={pageDesc}>
   <div class="page">
     <header
-      class="site-header sticky top-0 z-50 border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
+      class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
     >
       <div class="header-inner">
         <a href="/" class="back-link" aria-label="返回首頁">
@@ -68,26 +136,116 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
       <nav class="breadcrumb" aria-label="麵包屑">
         <a href="/">首頁</a>
         <span class="sep">/</span>
-        <span class="current">全部商品</span>
-        {totalPages > 1 && (
+        <a href="/products/1" class="breadcrumb-products">全部商品</a>
+        {activeCategoryLabel ? (
+          <>
+            <span class="sep">/</span>
+            <span class="current">{activeCategoryLabel}</span>
+          </>
+        ) : null}
+        {activeQ ? (
+          <>
+            <span class="sep">/</span>
+            <span class="current">關鍵字「{activeQ}」</span>
+          </>
+        ) : null}
+        {totalPages > 1 ? (
           <>
             <span class="sep">/</span>
             <span class="current">第 {currentPage} 頁</span>
           </>
-        )}
+        ) : null}
       </nav>
 
-      <h1 class="page-title">全部商品</h1>
+      <h1 class="page-title">
+        {activeCategory && !activeQ && activeCategoryLabel ? activeCategoryLabel : '全部商品'}
+      </h1>
+      {activeCategory && !activeQ && activeCategoryLabel ? (
+        <p class="page-subtitle">
+          由「全部商品」依分類篩選 ·{' '}
+          <a href="/products/1">瀏覽全部品項</a>
+        </p>
+      ) : null}
       <p class="page-meta">
-        共 <strong>{totalItems}</strong> 項展示（每頁 {PRODUCTS_PAGE_SIZE} 筆，約 {totalPages} 頁）
+        {activeCategory || activeQ ? (
+          <>
+            篩選結果 <strong>{totalItems}</strong> 項；全站共 <strong>{sorted.length}</strong> 項（每頁{' '}
+            {PRODUCTS_PAGE_SIZE} 筆，約 {totalPages} 頁）
+          </>
+        ) : (
+          <>
+            共 <strong>{totalItems}</strong> 項展示（每頁 {PRODUCTS_PAGE_SIZE} 筆，約 {totalPages} 頁）
+          </>
+        )}
       </p>
 
-      <ProductGridStagger items={staggerItems} />
+      <div class="catalog-toolbar" role="search" aria-label="商品篩選與搜尋">
+        <form class="catalog-filter-form" method="get" action="/products/1">
+          <div class="catalog-field">
+            <label class="catalog-label" for="catalog-category">分類</label>
+            <div class="catalog-select-wrap">
+              <select
+                id="catalog-category"
+                class="catalog-select"
+                name="category"
+                onchange="this.form.requestSubmit()"
+              >
+                <option value="" selected={!activeCategory}>
+                  全部分類
+                </option>
+                {(categories as Category[]).map((c) => (
+                  <option value={c.id} selected={c.id === activeCategory}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+              <i class="fa-solid fa-chevron-down catalog-select-chevron" aria-hidden="true"></i>
+            </div>
+          </div>
+          <div class="catalog-field catalog-field--search">
+            <label class="catalog-label" for="catalog-q">關鍵字</label>
+            <div class="catalog-input-wrap">
+              <i class="fa-solid fa-magnifying-glass catalog-input-icon" aria-hidden="true"></i>
+              <input
+                id="catalog-q"
+                class="catalog-input catalog-input--search"
+                type="search"
+                name="q"
+                value={activeQ}
+                placeholder="名稱、簡述或分類…"
+                enterkeyhint="search"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+          <div class="catalog-actions">
+            <button type="submit" class="catalog-btn catalog-btn--primary">
+              <i class="fa-solid fa-magnifying-glass catalog-btn-icon" aria-hidden="true"></i>
+              搜尋
+            </button>
+            {activeCategory || activeQ ? (
+              <a class="catalog-btn catalog-btn--ghost" href="/products/1">
+                清除條件
+              </a>
+            ) : null}
+          </div>
+        </form>
+      </div>
+
+      {staggerItems.length === 0 ? (
+        <p class="catalog-empty">沒有符合條件的商品，請調整分類或搜尋關鍵字。</p>
+      ) : (
+        <ProductGridStagger items={staggerItems} />
+      )}
 
       {totalPages > 1 && (
         <nav class="pagination" aria-label="商品列表分頁">
           {currentPage > 1 ? (
-            <a class="page-btn" href={currentPage === 2 ? '/products/1' : `/products/${currentPage - 1}`} rel="prev">
+            <a
+              class="page-btn"
+              href={`${currentPage === 2 ? '/products/1' : `/products/${currentPage - 1}`}${qs}`}
+              rel="prev"
+            >
               上一頁
             </a>
           ) : (
@@ -98,7 +256,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
             {Array.from({ length: totalPages }, (_, i) => {
               const p = i + 1;
               const isActive = p === currentPage;
-              const href = p === 1 ? '/products/1' : `/products/${p}`;
+              const href = `${p === 1 ? '/products/1' : `/products/${p}`}${qs}`;
               return (
                 <li>
                   {isActive ? (
@@ -112,7 +270,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
           </ul>
 
           {currentPage < totalPages ? (
-            <a class="page-btn" href={`/products/${currentPage + 1}`} rel="next">
+            <a class="page-btn" href={`/products/${currentPage + 1}${qs}`} rel="next">
               下一頁
             </a>
           ) : (
@@ -187,8 +345,23 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     margin-bottom: 20px;
   }
 
-  .breadcrumb a {
+  .breadcrumb a,
+  a.breadcrumb-products {
     color: #111;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .page-subtitle {
+    margin: -4px 0 12px;
+    text-align: center;
+    font-size: 0.875rem;
+    color: #666;
+  }
+
+  .page-subtitle a {
+    color: #111;
+    font-weight: 600;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -210,6 +383,231 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     text-align: center;
     font-size: 0.875rem;
     color: #555;
+  }
+
+  .catalog-toolbar {
+    margin: 0 0 clamp(1.25rem, 4vw, 1.75rem);
+    padding: clamp(14px, 3vw, 20px);
+    border-radius: var(--aq-radius, 14px);
+    border: 1px solid var(--aq-line, rgba(26, 34, 33, 0.08));
+    background: linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--aq-sand, #faf8f4) 92%, white) 0%,
+      #fff 48%
+    );
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 28px rgba(26, 34, 33, 0.06);
+  }
+
+  .catalog-filter-form {
+    display: grid;
+    gap: 14px;
+    align-items: end;
+  }
+
+  @media (min-width: 768px) {
+    .catalog-filter-form {
+      grid-template-columns: minmax(168px, 220px) minmax(0, 1fr) auto;
+      gap: 16px;
+    }
+  }
+
+  .catalog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .catalog-field--search {
+    min-width: 0;
+  }
+
+  .catalog-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--aq-muted, #5c6563);
+  }
+
+  .catalog-select-wrap {
+    position: relative;
+    display: block;
+  }
+
+  .catalog-select {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 40px 10px 12px;
+    font-size: 0.9375rem;
+    line-height: 1.3;
+    border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 14%, transparent);
+    border-radius: var(--aq-radius-sm, 10px);
+    background: #fff;
+    color: var(--aq-ink, #1a2221);
+    appearance: none;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .catalog-select:hover {
+    border-color: color-mix(in srgb, var(--aq-primary, #156a66) 35%, transparent);
+  }
+
+  .catalog-select:focus {
+    outline: none;
+    border-color: var(--aq-primary, #156a66);
+    box-shadow: 0 0 0 3px var(--aq-primary-soft, rgba(21, 106, 102, 0.12));
+  }
+
+  .catalog-select-chevron {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    font-size: 0.65rem;
+    color: var(--aq-muted, #5c6563);
+    opacity: 0.75;
+  }
+
+  .catalog-input-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .catalog-input-icon {
+    position: absolute;
+    left: 14px;
+    font-size: 0.85rem;
+    color: var(--aq-muted, #5c6563);
+    opacity: 0.75;
+    pointer-events: none;
+  }
+
+  .catalog-input {
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 0.9375rem;
+    border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 14%, transparent);
+    border-radius: var(--aq-radius-sm, 10px);
+    background: #fff;
+    color: var(--aq-ink, #1a2221);
+    transition:
+      border-color 0.15s ease,
+      box-shadow 0.15s ease;
+  }
+
+  .catalog-input--search {
+    padding-left: 40px;
+  }
+
+  .catalog-input:hover {
+    border-color: color-mix(in srgb, var(--aq-primary, #156a66) 35%, transparent);
+  }
+
+  .catalog-input:focus {
+    outline: none;
+    border-color: var(--aq-primary, #156a66);
+    box-shadow: 0 0 0 3px var(--aq-primary-soft, rgba(21, 106, 102, 0.12));
+  }
+
+  .catalog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  @media (min-width: 768px) {
+    .catalog-actions {
+      flex-direction: row;
+      flex-wrap: nowrap;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
+  }
+
+  @media (max-width: 767.98px) {
+    .catalog-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+    }
+
+    .catalog-actions:not(:has(.catalog-btn--ghost)) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .catalog-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 10px 18px;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border-radius: var(--aq-radius-sm, 10px);
+    border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 18%, transparent);
+    background: #fff;
+    color: var(--aq-ink, #1a2221);
+    cursor: pointer;
+    text-decoration: none;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .catalog-btn-icon {
+    font-size: 0.85em;
+    opacity: 0.9;
+  }
+
+  .catalog-btn--primary {
+    background: var(--aq-primary, #156a66);
+    color: #fff;
+    border-color: var(--aq-primary-dark, #0f4d4a);
+    box-shadow: 0 1px 2px rgba(21, 106, 102, 0.2);
+  }
+
+  .catalog-btn--primary:hover {
+    background: var(--aq-primary-dark, #0f4d4a);
+    border-color: var(--aq-primary-dark, #0f4d4a);
+  }
+
+  .catalog-btn--primary:active {
+    transform: scale(0.98);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .catalog-btn--primary:active {
+      transform: none;
+    }
+  }
+
+  .catalog-btn--ghost {
+    border-color: color-mix(in srgb, var(--aq-ink, #1a2221) 12%, transparent);
+    background: #fff;
+  }
+
+  .catalog-btn--ghost:hover {
+    background: var(--aq-sand-2, #f0ebe2);
+    border-color: color-mix(in srgb, var(--aq-primary, #156a66) 25%, transparent);
+  }
+
+  .catalog-empty {
+    margin: 2rem 0;
+    text-align: center;
+    color: #666;
+    font-size: 0.9375rem;
   }
 
   .product-grid {

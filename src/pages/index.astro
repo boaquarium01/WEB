@@ -1,7 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import ProductGridStagger from '../components/ProductGridStagger.astro';
-import { getAllCategories, getFeaturedProducts } from '../data/products';
+import HomeHeroSpotlight from '../components/HomeHeroSpotlight.astro';
+import { getAllCategories, getFeaturedProducts, getHeroSpotlightProducts } from '../data/products';
+import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 
 const navItems = [
   { name: '首頁', href: '#home' },
@@ -10,10 +12,23 @@ const navItems = [
   { name: '熱銷推薦', href: '#products' }
 ];
 
-const [featuredProducts, categories] = await Promise.all([
-  getFeaturedProducts(10),
+const [heroSpotlightProducts, categories] = await Promise.all([
+  getHeroSpotlightProducts(),
   getAllCategories()
 ]);
+
+const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
+  slug: p.slug,
+  name: p.name,
+  excerpt: p.excerpt,
+  categoryLabel: p.categoryLabel,
+  imageUrl: p.image
+}));
+
+const heroSlugs = new Set(heroSpotlightProducts.map((p) => p.slug));
+const featuredProducts = (await getFeaturedProducts(10 + heroSlugs.size))
+  .filter((p) => !heroSlugs.has(p.slug))
+  .slice(0, 10);
 
 const featuredStaggerItems = featuredProducts.map((p) => ({
   slug: p.slug,
@@ -54,10 +69,7 @@ const services = [
 ];
 ---
 
-<Layout
-  title="水博館水族｜官方網站"
-  description="淡水魚、觀賞魚、水草、專業養殖、魚病治療、魚缸保養、水族器材銷售"
->
+<Layout title={SITE_TITLE} description={SITE_DESCRIPTION}>
   <div class="site" id="home">
     <header
       id="siteHeader"
@@ -82,12 +94,12 @@ const services = [
                 <summary class="nav-item nav-item--summary">本店商品</summary>
                 <ul class="nav-categories-menu">
                   <li>
-                    <a href="/products">全部商品</a>
+                    <a href="/products/1">全部商品</a>
                   </li>
                   {categories.length > 0 && <li class="nav-categories-menu-divider" aria-hidden="true"></li>}
                   {categories.map((c) => (
                     <li>
-                      <a href={`/category/${c.id}`}>{c.label}</a>
+                      <a href={`/products/1?category=${encodeURIComponent(c.id)}`}>{c.label}</a>
                     </li>
                   ))}
                 </ul>
@@ -121,11 +133,13 @@ const services = [
               <summary>本店商品</summary>
               <ul class="drawer-category-list">
                 <li>
-                  <a href="/products" class="mobile-menu-link drawer-link drawer-link--all">全部商品</a>
+                  <a href="/products/1" class="mobile-menu-link drawer-link drawer-link--all">全部商品</a>
                 </li>
                 {categories.map((c) => (
                   <li>
-                    <a href={`/category/${c.id}`} class="mobile-menu-link drawer-link">{c.label}</a>
+                    <a
+                      href={`/products/1?category=${encodeURIComponent(c.id)}`}
+                      class="mobile-menu-link drawer-link">{c.label}</a>
                   </li>
                 ))}
               </ul>
@@ -178,6 +192,11 @@ const services = [
       </section>
 
       <div class="home-below-hero">
+      {heroSpotlightItems.length > 0 ? (
+        <section id="hero-spotlight" class="section home-section wrap" aria-labelledby="hero-spotlight-heading">
+          <HomeHeroSpotlight items={heroSpotlightItems} />
+        </section>
+      ) : null}
       <!-- 服務項目 -->
       <section id="services" class="section home-section wrap">
         <h2 class="home-section-title reveal-on-scroll">服務項目</h2>
@@ -254,7 +273,7 @@ const services = [
           <a
             id="homeProductsAllLink"
             class="products-all-link"
-            href="/products"
+            href="/products/1"
             aria-label="前往全部商品列表"
           >
             全部商品
@@ -265,7 +284,7 @@ const services = [
           <div class="products-empty reveal-on-scroll">
             <p class="products-empty__guest">
               目前尚未展示精選商品。歡迎直接來店參觀選購，或前往
-              <a href="/products">全部商品</a>
+              <a href="/products/1">全部商品</a>
               瀏覽更多。
             </p>
             <p class="products-empty__admin-hint">
@@ -297,6 +316,10 @@ const services = [
       mobileMenu?.classList.add('is-open');
       mobileMenuBackdrop?.classList.add('is-open');
       document.body.style.overflow = 'hidden';
+      const drawerDetails = document.getElementById('drawerProductDetails');
+      if (drawerDetails instanceof HTMLDetailsElement) {
+        drawerDetails.open = true;
+      }
     };
 
     const closeMenu = () => {
@@ -309,38 +332,6 @@ const services = [
     closeMenuButton?.addEventListener('click', closeMenu);
     mobileMenuBackdrop?.addEventListener('click', closeMenu);
     mobileLinks.forEach((link) => link.addEventListener('click', closeMenu));
-
-    const drawerProductDetails = document.getElementById('drawerProductDetails');
-    const homeProductsAllLink = document.getElementById('homeProductsAllLink');
-    const mobileNavMq = window.matchMedia('(max-width: 1023.98px)');
-
-    function isMobileDrawerLayout() {
-      return mobileNavMq.matches;
-    }
-
-    function openDrawerWithProductsExpanded() {
-      openMenu();
-      if (drawerProductDetails instanceof HTMLDetailsElement) {
-        drawerProductDetails.open = true;
-        requestAnimationFrame(() => {
-          drawerProductDetails.querySelector('summary')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        });
-      }
-    }
-
-    function bindHomeProductsAllLink() {
-      const link = document.getElementById('homeProductsAllLink');
-      if (!link || link.dataset.drawerNavBound === '1') return;
-      link.dataset.drawerNavBound = '1';
-      link.addEventListener('click', (e) => {
-        if (!isMobileDrawerLayout()) return;
-        e.preventDefault();
-        openDrawerWithProductsExpanded();
-      });
-    }
-
-    bindHomeProductsAllLink();
-    document.addEventListener('astro:page-load', bindHomeProductsAllLink);
 
     const slides = Array.from(document.querySelectorAll('.hero-slide'));
     const dots = Array.from(document.querySelectorAll('.carousel-dot'));
@@ -411,6 +402,20 @@ const services = [
     padding-right: 16px;
   }
 
+  /**
+   * 主打／服務：同一內容盒（與 #about 等 .wrap 區塊對齊）
+   */
+  #hero-spotlight.wrap,
+  #services.wrap {
+    box-sizing: border-box;
+    max-width: 1200px;
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
   .site {
     min-height: 100vh;
     background: var(--aq-sand);
@@ -426,6 +431,7 @@ const services = [
     }
   }
 
+  #hero-spotlight,
   #services,
   #about,
   #products,
@@ -1177,8 +1183,8 @@ const services = [
     border-top: 1px solid color-mix(in srgb, var(--aq-ink) 6%, transparent);
   }
 
-  /* 服務項目／關於／熱銷：統一標題層級 */
-  .home-section-title {
+  /* 服務項目／關於／熱銷／主打：統一標題層級（:global 讓子元件內 h2 也能套用） */
+  :global(.home-section-title) {
     margin: 0 auto clamp(1.5rem, 3.8vw, 2rem);
     max-width: 40rem;
     font-size: clamp(1.375rem, 2.8vw, 1.75rem);
@@ -1189,7 +1195,7 @@ const services = [
     line-height: 1.25;
   }
 
-  .home-section-title::after {
+  :global(.home-section-title::after) {
     content: '';
     display: block;
     width: 2.25rem;
@@ -1200,8 +1206,8 @@ const services = [
     opacity: 0.85;
   }
 
-  /* 捲動進場（尊重 prefers-reduced-motion：腳本會直接加 is-revealed） */
-  .reveal-on-scroll {
+  /* 捲動進場（:global 含子元件內 .reveal-on-scroll） */
+  :global(.reveal-on-scroll) {
     --reveal-delay: 0ms;
     transition:
       opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay),
@@ -1209,26 +1215,26 @@ const services = [
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .reveal-on-scroll:not(.is-revealed) {
+    :global(.reveal-on-scroll:not(.is-revealed)) {
       opacity: 0;
       transform: translateY(12px);
     }
   }
 
-  .reveal-on-scroll.is-revealed {
+  :global(.reveal-on-scroll.is-revealed) {
     opacity: 1;
     transform: none;
   }
 
-  .reveal-on-scroll--delay-sm {
+  :global(.reveal-on-scroll--delay-sm) {
     --reveal-delay: 85ms;
   }
 
-  .reveal-on-scroll--delay-md {
+  :global(.reveal-on-scroll--delay-md) {
     --reveal-delay: 150ms;
   }
 
-  .reveal-on-scroll--delay-lg {
+  :global(.reveal-on-scroll--delay-lg) {
     --reveal-delay: 220ms;
   }
 
@@ -1272,10 +1278,41 @@ const services = [
     }
   }
 
+  /* 主打區：與服務網格相同的 opacity 進場（:global：.reveal-stagger 在子元件內） */
+  :global(.reveal-stagger .spotlight__hit) {
+    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.reveal-stagger:not(.is-revealed) .spotlight__hit) {
+      opacity: 0;
+      animation: none;
+    }
+
+    :global(.reveal-stagger.is-revealed .spotlight__solo .spotlight__hit:nth-child(1)),
+    :global(.reveal-stagger.is-revealed .spotlight__duo .spotlight__hit:nth-child(1)),
+    :global(.reveal-stagger.is-revealed .spotlight__trio > .spotlight__hit--lead) {
+      transition-delay: 0ms;
+    }
+
+    :global(.reveal-stagger.is-revealed .spotlight__duo .spotlight__hit:nth-child(2)) {
+      transition-delay: 55ms;
+    }
+
+    :global(.reveal-stagger.is-revealed .spotlight__rail .spotlight__hit:nth-child(1)) {
+      transition-delay: 55ms;
+    }
+
+    :global(.reveal-stagger.is-revealed .spotlight__rail .spotlight__hit:nth-child(2)) {
+      transition-delay: 110ms;
+    }
+  }
+
   /* 手機：服務／熱銷左右留白加寬，避免貼邊（含瀏海機安全區） */
   @media (max-width: 639px) {
     #services.wrap,
-    #products.home-section {
+    #products.home-section,
+    #hero-spotlight.wrap {
       padding-left: calc(24px + env(safe-area-inset-left, 0px));
       padding-right: calc(24px + env(safe-area-inset-right, 0px));
     }

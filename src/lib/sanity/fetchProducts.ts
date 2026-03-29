@@ -21,6 +21,8 @@ const PRODUCT_PROJECTION = `
   body,
   featured,
   featuredSortOrder,
+  heroSpotlight,
+  heroSpotlightActivatedAt,
   seoKeywords,
   seoTitle,
   seoDescription
@@ -34,6 +36,9 @@ const PRODUCT_QUERY = `*[_type == "product" && defined(slug.current)] {${PRODUCT
  * 再以 coalesce(featuredSortOrder, sortOrder) 作同段內次序，最後 name。
  */
 const FEATURED_PRODUCTS_QUERY = `*[_type == "product" && defined(slug.current) && featured == true && enabled != false] | order(defined(featuredSortOrder) desc, coalesce(featuredSortOrder, sortOrder) asc, name asc) {${PRODUCT_PROJECTION}}`;
+
+/** 首頁主打：最多 3 筆；最近開啟（heroSpotlightActivatedAt 新→舊）為第一順位 */
+const HERO_SPOTLIGHT_PRODUCTS_QUERY = `*[_type == "product" && defined(slug.current) && heroSpotlight == true && enabled != false] | order(coalesce(heroSpotlightActivatedAt, _updatedAt) desc) [0...3] {${PRODUCT_PROJECTION}}`;
 /** 分類順序：與 Studio「商品分類（拖曳排序）」一致；無 orderRank 時退回 sortOrder、名稱 */
 const CATEGORY_QUERY = `*[_type == "category"] | order(orderRank asc, sortOrder asc, name asc) {
   "id": slug.current,
@@ -107,6 +112,8 @@ type SanityProductDoc = {
   body?: unknown[] | null;
   featured?: boolean;
   featuredSortOrder?: number;
+  heroSpotlight?: boolean;
+  heroSpotlightActivatedAt?: string;
   seoKeywords?: string[];
   seoTitle?: string;
   seoDescription?: string;
@@ -203,6 +210,11 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
     body: Array.isArray(doc.body) && doc.body.length > 0 ? doc.body : null,
     featured: Boolean(doc.featured),
     featuredSortOrder: parseOptionalFiniteNumber(doc.featuredSortOrder),
+    heroSpotlight: Boolean(doc.heroSpotlight),
+    heroSpotlightActivatedAt:
+      doc.heroSpotlightActivatedAt != null && String(doc.heroSpotlightActivatedAt).trim() !== ''
+        ? String(doc.heroSpotlightActivatedAt)
+        : undefined,
     seoKeywords: Array.isArray(doc.seoKeywords) ? doc.seoKeywords : undefined,
     seoTitle: st || undefined,
     seoDescription: sd || undefined
@@ -212,6 +224,7 @@ function mapToProduct(doc: SanityProductDoc, projectId: string, dataset: string)
 let cache: { at: number; data: Product[] } | null = null;
 let categoryCache: { at: number; data: Category[] } | null = null;
 let featuredCache: { at: number; limit: number; data: Product[] } | null = null;
+let heroSpotlightCache: { at: number; data: Product[] } | null = null;
 
 export async function getAllCategories(): Promise<Category[]> {
   const ttlMs = import.meta.env.DEV ? 0 : 60_000;
@@ -279,6 +292,35 @@ export async function getAllProducts(): Promise<Product[]> {
  * 首頁熱銷：專用 GROQ 查詢並 order，避免依賴全列表順序或錯誤的數字映射。
  * 先「有填首頁熱銷排序」再「未填」（以分類內 sortOrder）；同段內最後依名稱。
  */
+/** 首頁主打通區：0～3 筆，依開啟時間新→舊 */
+export async function getHeroSpotlightProducts(): Promise<Product[]> {
+  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  if (heroSpotlightCache && ttlMs > 0 && Date.now() - heroSpotlightCache.at < ttlMs) {
+    return heroSpotlightCache.data;
+  }
+  heroSpotlightCache = null;
+
+  const client = getClient();
+  if (!client) {
+    warnMissingSanityConfig();
+    return [];
+  }
+  const { projectId, dataset } = readSanityEnv();
+  let docs: SanityProductDoc[];
+  try {
+    docs = await client.fetch<SanityProductDoc[]>(HERO_SPOTLIGHT_PRODUCTS_QUERY);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[Sanity] 主打商品查詢失敗。', msg);
+    return [];
+  }
+  const mapped = (docs ?? [])
+    .map((d) => mapToProduct(d, projectId, dataset))
+    .filter((p) => p.slug.length > 0 && p.enabled);
+  heroSpotlightCache = { at: Date.now(), data: mapped };
+  return mapped;
+}
+
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
   const ttlMs = import.meta.env.DEV ? 0 : 60_000;
   const cap = Math.max(0, Math.floor(Number(limit)) || 0);

@@ -1,4 +1,5 @@
 import { defineArrayMember, defineField, defineType } from 'sanity';
+import { HeroSpotlightToggle } from '../components/HeroSpotlightToggle';
 
 const SLUG_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const SLUG_LEN = 4;
@@ -113,6 +114,27 @@ export const productType = defineType({
       group: 'display'
     }),
     defineField({
+      name: 'heroSpotlight',
+      title: '主打商品',
+      description:
+        '顯示於首頁主視覺下方；與「首頁精選」分開。前台僅顯示最近開啟的 3 筆主打；若超過 3 筆同時開啟，請自行關閉較舊的，以免混淆。',
+      type: 'boolean',
+      initialValue: false,
+      group: 'display',
+      components: {
+        input: HeroSpotlightToggle
+      }
+    }),
+    defineField({
+      name: 'heroSpotlightActivatedAt',
+      title: '主打啟用時間（自動）',
+      description: '開啟主打時自動寫入；用於首頁排序（最近開啟者優先）。',
+      type: 'datetime',
+      group: 'display',
+      readOnly: true,
+      hidden: true
+    }),
+    defineField({
       name: 'featuredSortOrder',
       title: '首頁熱銷排序（數字越小越前面）',
       description:
@@ -203,6 +225,7 @@ export const productType = defineType({
       enabled: 'enabled',
       sortOrder: 'sortOrder',
       featured: 'featured',
+      heroSpotlight: 'heroSpotlight'
     },
     prepare({
       title,
@@ -210,7 +233,8 @@ export const productType = defineType({
       cat,
       enabled,
       sortOrder,
-      featured
+      featured,
+      heroSpotlight
     }: {
       title?: string;
       media?: any;
@@ -218,10 +242,12 @@ export const productType = defineType({
       enabled?: boolean;
       sortOrder?: number;
       featured?: boolean;
+      heroSpotlight?: boolean;
     }) {
+      const badges = [featured ? '熱銷' : '', heroSpotlight ? '主打' : ''].filter(Boolean).join(' · ');
       return {
         title,
-        subtitle: `${cat ?? ''} · ${enabled ? '上架' : '下架'} · 排序:${sortOrder ?? SORT_ORDER_DEFAULT_LAST}${featured ? ' · 熱銷' : ''}`,
+        subtitle: `${cat ?? ''} · ${enabled ? '上架' : '下架'} · 排序:${sortOrder ?? SORT_ORDER_DEFAULT_LAST}${badges ? ` · ${badges}` : ''}`,
         media: media as any
       };
     }

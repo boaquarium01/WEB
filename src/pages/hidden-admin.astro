@@ -1,8 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import { SITE_TITLE_SHORT } from '../config/site';
 ---
 
-<Layout title="管理後台入口｜水博館水族" description="管理 Sanity Studio（嵌入版）">
+<Layout title={`管理後台入口｜${SITE_TITLE_SHORT}`} description="管理 Sanity Studio（嵌入版）">
   <div
     style="min-height: 70vh; display: flex; align-items: center; justify-content: center; padding: 24px;"
   >
