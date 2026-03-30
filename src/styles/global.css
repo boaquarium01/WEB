@@ -75,6 +75,13 @@ body {
  * 易與垂直捲動互搶合成層，造成全站頁面滑到底時上下顫動——改為靜態顯示（與 reduced-motion 同等效果）。
  */
 @media (max-width: 900px) {
+  /**
+   * 減少 iOS 在內容／圖片載入或 sticky 互動時的捲動錨點微調（體感「震動」）
+   */
+  html {
+    overflow-anchor: none;
+  }
+
   .reveal-on-scroll,
   .reveal-on-scroll:not(.is-revealed) {
     opacity: 1 !important;
@@ -82,10 +89,16 @@ body {
     transition: none !important;
   }
 
+  /* 頂欄 transition 在 sticky 邊界與捲動疊加時易造成合成抖動（商品／列表頁僅 .site-header） */
+  #siteHeader.site-header {
+    transition: none !important;
+  }
+
   .site-header {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     background: color-mix(in srgb, var(--aq-sand, #faf8f4) 92%, white) !important;
+    transition: none !important;
   }
 
   /* 首頁捲過 Hero 後的毛玻璃（index 內為 #siteHeader…， specificity 較高） */

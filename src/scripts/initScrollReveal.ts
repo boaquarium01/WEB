@@ -11,7 +11,13 @@ export function initScrollReveal(): void {
 		typeof window.matchMedia === 'function' &&
 		window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-	if (reduced) {
+	/** 窄螢幕已用 CSS 靜態顯示，若仍掛 IO，捲動時大量 callback 會讓 iOS 主執行緒顫動 */
+	const skipIo =
+		typeof window.matchMedia === 'function' &&
+		(window.matchMedia('(max-width: 900px)').matches ||
+			window.matchMedia('(pointer: coarse)').matches);
+
+	if (reduced || skipIo) {
 		document.querySelectorAll('.reveal-on-scroll, .reveal-stagger').forEach((el) => {
 			el.classList.add('is-revealed');
 		});

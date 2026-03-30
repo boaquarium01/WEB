@@ -374,13 +374,26 @@ const services = [
 
     const siteHeader = document.getElementById('siteHeader');
     const heroEl = document.querySelector('.hero');
+    let lastPastHero: boolean | null = null;
+    let headerScrollQueued = false;
     const syncHeaderScroll = () => {
       if (!siteHeader || !heroEl) return;
-      const pastHero = window.scrollY > Math.max(0, heroEl.offsetHeight - 48);
-      siteHeader.classList.toggle('site-header--past-hero', pastHero);
+      if (headerScrollQueued) return;
+      headerScrollQueued = true;
+      requestAnimationFrame(() => {
+        headerScrollQueued = false;
+        const pastHero = window.scrollY > Math.max(0, heroEl.offsetHeight - 48);
+        if (pastHero === lastPastHero) return;
+        lastPastHero = pastHero;
+        siteHeader.classList.toggle('site-header--past-hero', pastHero);
+      });
     };
     syncHeaderScroll();
     window.addEventListener('scroll', syncHeaderScroll, { passive: true });
+    window.addEventListener('resize', () => {
+      lastPastHero = null;
+      syncHeaderScroll();
+    });
   </script>
 </Layout>
 
@@ -901,6 +914,13 @@ const services = [
     background: var(--aq-primary-dark);
   }
 
+  @media (max-width: 900px) {
+    .hero {
+      min-height: 56svh;
+      height: min(75svh, 640px);
+    }
+  }
+
   .hero-shimmer {
     position: absolute;
     inset: 0;
@@ -916,6 +936,13 @@ const services = [
   @media (prefers-reduced-motion: no-preference) {
     .hero-shimmer {
       animation: hero-shimmer-drift 36s ease-in-out infinite alternate;
+    }
+  }
+
+  /* 手機：全幅 Hero 無限動畫與捲動同時進行易加重合成負擔，造成體感顫動 */
+  @media (max-width: 900px) {
+    .hero-shimmer {
+      animation: none !important;
     }
   }
 
