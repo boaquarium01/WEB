@@ -249,7 +249,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
               set:html={bodyHtml}
             />
           ) : (
-            <p class="product-body-empty">尚未填寫商品介紹，請至 Sanity 編輯「內文（富文本）」。</p>
+            <p class="product-body-empty">尚未填寫商品介紹。</p>
           )}
           <p class="note">網站僅供參考請以現場為準，歡迎來店參觀選購。</p>
           <a href="/products/1" class="btn-secondary">返回全部商品</a>
@@ -285,9 +285,10 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 </Layout>
 
 <style>
+  /* 使用 svh 避免 100dvh 隨網址列收合改變高度，導致整頁重排與捲動位置跳動（手機明顯） */
   .page {
     min-height: 100vh;
-    min-height: 100dvh;
+    min-height: 100svh;
     background: #fff;
     color: #111;
   }
@@ -494,10 +495,12 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     overflow-x: auto;
     overflow-y: hidden;
     scroll-snap-type: x mandatory;
-    scroll-behavior: smooth;
+    /* 勿用 CSS smooth：iOS 上易與手勢／snap 衝突；改由 JS 在按鈕換頁時再決定 behavior */
+    scroll-behavior: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
+    touch-action: pan-x pinch-zoom;
   }
 
   .carousel-viewport::-webkit-scrollbar {
@@ -924,7 +927,11 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       });
 
       let resizeTimer;
+      let lastInnerWidth = window.innerWidth;
       window.addEventListener('resize', () => {
+        const w = window.innerWidth;
+        if (w === lastInnerWidth) return;
+        lastInnerWidth = w;
         clearTimeout(resizeTimer);
         resizeTimer = window.setTimeout(() => {
           scrollProgrammatic = true;
@@ -969,7 +976,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       lightbox.hidden = false;
       lightbox.setAttribute('aria-hidden', 'false');
       applyBodyScrollLock();
-      backdrop.focus();
+      backdrop.focus({ preventScroll: true });
     }
 
     function onCarouselClick(e) {

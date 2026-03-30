@@ -27,8 +27,9 @@ html {
   overflow-x: clip;
 }
 
+/* 避免 iOS Safari 在部分頁面「捲到底」時與 contain 疊加產生跳動；必要時由元件自行限制 overscroll */
 body {
-  overscroll-behavior-y: contain;
+  overscroll-behavior-y: auto;
 }
 
 /* 捲動進場：全站共用（子元件內含 .reveal-on-scroll 亦可套用） */
