@@ -58,7 +58,7 @@ const { items, compact = false } = Astro.props as Props;
                 height={450}
                 loading="lazy"
                 decoding="async"
-                class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-cover object-center transition-[filter] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
+                class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-cover object-center transition-[opacity,filter,transform] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
                 onerror="this.classList.add('hidden'); const m=this.closest('.product-stagger-card__media'); const fb=m&&m.querySelector('[data-product-img-fallback]'); if(fb){ fb.classList.remove('hidden'); fb.classList.add('flex'); }"
               />
             ) : null}
@@ -118,6 +118,28 @@ const { items, compact = false } = Astro.props as Props;
 
   initProductStagger();
   document.addEventListener('astro:page-load', initProductStagger);
+
+  function initProductCardImageBlur() {
+    const reduced =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelectorAll('.product-stagger-card__img').forEach((img) => {
+      if (!(img instanceof HTMLImageElement)) return;
+      if (reduced) {
+        img.classList.add('is-loaded');
+        return;
+      }
+      const mark = () => img.classList.add('is-loaded');
+      if (img.complete && img.naturalWidth > 0) mark();
+      else {
+        img.addEventListener('load', mark, { once: true });
+        img.addEventListener('error', mark, { once: true });
+      }
+    });
+  }
+
+  initProductCardImageBlur();
+  document.addEventListener('astro:page-load', initProductCardImageBlur);
 </script>
 
 <style is:global>
@@ -133,6 +155,27 @@ const { items, compact = false } = Astro.props as Props;
     min-height: 100%;
     object-fit: cover;
     object-position: center;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .product-stagger-card__link:hover {
+      transform: translateY(-3px);
+    }
+  }
+
+  /* 類 blur placeholder：載入前微模糊＋略放大，減少 CLS 感知的「硬跳出」 */
+  @media (prefers-reduced-motion: no-preference) {
+    .product-stagger-card__media > .product-stagger-card__img:not(.is-loaded) {
+      opacity: 0.9;
+      filter: blur(12px) saturate(0.92);
+      transform: scale(1.06);
+    }
+
+    .product-stagger-card__media > .product-stagger-card__img.is-loaded {
+      opacity: 1;
+      filter: none;
+      transform: none;
+    }
   }
 
   @media (prefers-reduced-motion: reduce) {

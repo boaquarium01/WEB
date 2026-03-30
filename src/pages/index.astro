@@ -236,8 +236,23 @@ const services = [
                 <div class="contact-card contact-card--integrated reveal-on-scroll reveal-on-scroll--delay-lg">
                   <div class="contact-info">
                     <h3 id="contact-title" class="about-contact-heading">聯絡資訊</h3>
-                    <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
-                    <p><strong>營業時間：</strong>10:00-21:00</p>
+                    <p class="contact-line">
+                      <strong>LINE：</strong>
+                      <a
+                        class="line-official-link"
+                        href="https://lin.ee/nG8kcR2"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="透過 LINE 私訊聯絡（另開新視窗）"
+                      >
+                        <img
+                          src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png"
+                          alt="加入好友"
+                          height="36"
+                          border="0"
+                        />
+                      </a>
+                    </p>
                     <p><strong>電話：</strong><a href="tel:034028721">03-402-8721</a></p>
                     <p>
                       <strong>Facebook：</strong>
@@ -252,6 +267,8 @@ const services = [
                         桃園中壢水博館水族
                       </a>
                     </p>
+                    <p><strong>地址：</strong>320桃園市中壢區環西路二段69號</p>
+                    <p><strong>營業時間：</strong>10:00-21:00</p>
                   </div>
                   <iframe
                     class="contact-map"
@@ -306,6 +323,8 @@ const services = [
   </div>
 
   <script>
+    import { applyBodyScrollLock, releaseBodyScrollLock } from '../scripts/scrollLock';
+
     const menuButton = document.getElementById('menuButton');
     const closeMenuButton = document.getElementById('closeMenuButton');
     const mobileMenu = document.getElementById('mobileMenu');
@@ -315,7 +334,7 @@ const services = [
     const openMenu = () => {
       mobileMenu?.classList.add('is-open');
       mobileMenuBackdrop?.classList.add('is-open');
-      document.body.style.overflow = 'hidden';
+      applyBodyScrollLock('siteHeader');
       const drawerDetails = document.getElementById('drawerProductDetails');
       if (drawerDetails instanceof HTMLDetailsElement) {
         drawerDetails.open = true;
@@ -325,7 +344,7 @@ const services = [
     const closeMenu = () => {
       mobileMenu?.classList.remove('is-open');
       mobileMenuBackdrop?.classList.remove('is-open');
-      document.body.style.overflow = '';
+      releaseBodyScrollLock('siteHeader');
     };
 
     menuButton?.addEventListener('click', openMenu);
@@ -362,33 +381,6 @@ const services = [
     };
     syncHeaderScroll();
     window.addEventListener('scroll', syncHeaderScroll, { passive: true });
-
-    const revealReduced =
-      typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    const revealOpts = { rootMargin: '0px 0px -7% 0px', threshold: 0.14 };
-    if (revealReduced) {
-      document.querySelectorAll('.reveal-on-scroll').forEach((el) => el.classList.add('is-revealed'));
-      document.querySelectorAll('.reveal-stagger').forEach((el) => el.classList.add('is-revealed'));
-    } else {
-      const revealIo = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add('is-revealed');
-          revealIo.unobserve(entry.target);
-        });
-      }, revealOpts);
-      document.querySelectorAll('.reveal-on-scroll').forEach((el) => revealIo.observe(el));
-
-      const staggerIo = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add('is-revealed');
-          staggerIo.unobserve(entry.target);
-        });
-      }, revealOpts);
-      document.querySelectorAll('.reveal-stagger').forEach((el) => staggerIo.observe(el));
-    }
   </script>
 </Layout>
 
@@ -418,6 +410,7 @@ const services = [
 
   .site {
     min-height: 100vh;
+    min-height: 100dvh;
     background: var(--aq-sand);
     color: var(--aq-ink);
   }
@@ -870,15 +863,32 @@ const services = [
     }
   }
 
+  /**
+   * 捲過 Hero 後：像「進入展缸區」— 背景略實、毛玻璃略強、邊線與陰影更清楚（情境轉場，非循環裝飾）
+   */
   #siteHeader.site-header {
     transition:
-      box-shadow 0.38s ease,
-      border-color 0.38s ease;
+      background-color 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+      backdrop-filter 0.42s cubic-bezier(0.22, 1, 0.36, 1),
+      -webkit-backdrop-filter 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #siteHeader.site-header {
+      transition-duration: 0.01ms;
+    }
   }
 
   #siteHeader.site-header--past-hero {
-    box-shadow: 0 12px 40px rgba(26, 34, 33, 0.09);
-    border-bottom-color: color-mix(in srgb, var(--aq-primary) 14%, var(--aq-line));
+    background-color: color-mix(in srgb, var(--aq-sand) 66%, white) !important;
+    backdrop-filter: blur(22px) saturate(1.68) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.68) !important;
+    box-shadow:
+      0 14px 44px rgba(26, 34, 33, 0.11),
+      inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    border-bottom-color: color-mix(in srgb, var(--aq-primary) 20%, var(--aq-line));
   }
 
   /* Hero：僅此區偏深底，其餘頁面維持淺色可讀 */
@@ -1168,6 +1178,35 @@ const services = [
     }
   }
 
+  /* 水族意象：極淡同心圓波紋（全區覆蓋、不干擾點擊） */
+  .home-below-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.055;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23156a66' stroke-width='0.45' opacity='0.5'%3E%3Ccircle cx='100' cy='100' r='22'/%3E%3Ccircle cx='100' cy='100' r='48'/%3E%3Ccircle cx='100' cy='100' r='74'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    background-repeat: repeat;
+    mix-blend-mode: multiply;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .home-below-hero::after {
+      animation: home-ripple-drift 90s linear infinite;
+    }
+  }
+
+  @keyframes home-ripple-drift {
+    from {
+      background-position: 0 0;
+    }
+    to {
+      background-position: 200px 80px;
+    }
+  }
+
   .home-below-hero .home-section {
     position: relative;
     z-index: 1;
@@ -1204,38 +1243,6 @@ const services = [
     border-radius: 999px;
     background: linear-gradient(90deg, transparent, var(--aq-primary), transparent);
     opacity: 0.85;
-  }
-
-  /* 捲動進場（:global 含子元件內 .reveal-on-scroll） */
-  :global(.reveal-on-scroll) {
-    --reveal-delay: 0ms;
-    transition:
-      opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay),
-      transform 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay);
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    :global(.reveal-on-scroll:not(.is-revealed)) {
-      opacity: 0;
-      transform: translateY(12px);
-    }
-  }
-
-  :global(.reveal-on-scroll.is-revealed) {
-    opacity: 1;
-    transform: none;
-  }
-
-  :global(.reveal-on-scroll--delay-sm) {
-    --reveal-delay: 85ms;
-  }
-
-  :global(.reveal-on-scroll--delay-md) {
-    --reveal-delay: 150ms;
-  }
-
-  :global(.reveal-on-scroll--delay-lg) {
-    --reveal-delay: 220ms;
   }
 
   /* 服務卡網格：僅用 opacity 進場，避免與漂浮動畫的 transform 衝突 */
@@ -1629,6 +1636,22 @@ const services = [
     color: var(--aq-muted);
   }
 
+  .contact-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .contact-card .line-official-link {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    border: 0;
+    color: inherit;
+  }
+
   .contact-card p:last-child {
     margin-bottom: 0;
   }
@@ -1720,6 +1743,7 @@ const services = [
     border: 1px solid color-mix(in srgb, var(--aq-primary) 25%, transparent);
     background: color-mix(in srgb, var(--aq-primary) 8%, white);
     transition:
+      transform 0.22s ease,
       color 0.22s ease,
       background 0.22s ease,
       border-color 0.22s ease,
@@ -1730,6 +1754,12 @@ const services = [
     font-size: 0.72em;
     opacity: 0.55;
     transition: transform 0.15s ease, opacity 0.15s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .products-all-link:hover {
+      transform: translateY(-2px);
+    }
   }
 
   .products-all-link:hover {

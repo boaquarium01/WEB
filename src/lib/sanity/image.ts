@@ -38,7 +38,7 @@ export function urlForImage(source: SanityImageSource | undefined | null): Image
 }
 
 /** 響應式寬度列表（與 srcset 搭配） */
-export const SANITY_IMAGE_WIDTHS = [400, 600, 800, 1200] as const;
+export const SANITY_IMAGE_WIDTHS = [400, 600, 800, 1200, 1600] as const;
 
 export function buildSrcSet(source: SanityImageSource, widths: readonly number[] = SANITY_IMAGE_WIDTHS): string {
   const parts: string[] = [];

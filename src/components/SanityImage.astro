@@ -11,6 +11,10 @@ type Props = {
   priority?: boolean;
   width?: number;
   height?: number;
+  /**
+   * 輪播等已有「底層模糊圖」時設為 true，關閉 LQIP 背景，避免雙重模糊、主體看起來過小。
+   */
+  omitLqipBackground?: boolean;
 };
 
 const {
@@ -21,20 +25,25 @@ const {
   imgClass,
   priority = false,
   width = 800,
-  height = 600
+  height = 600,
+  omitLqipBackground = false
 } = Astro.props as Props;
 
 const srcSet = source ? buildSrcSet(source, SANITY_IMAGE_WIDTHS) : '';
 const lqip = source ? buildLqipUrl(source) : null;
-const src = source ? buildDefaultSrc(source, 800) : null;
+const src = source ? buildDefaultSrc(source, width) : null;
 ---
 
 {
   src ? (
     <div
-      class:list={['relative overflow-hidden bg-slate-100', cls]}
+      class:list={[
+        'relative min-h-0 min-w-0',
+        omitLqipBackground ? 'bg-transparent h-full w-full overflow-visible' : 'overflow-hidden bg-slate-100',
+        cls
+      ]}
       style={
-        lqip
+        lqip && !omitLqipBackground
           ? {
               backgroundImage: `url(${lqip})`,
               backgroundSize: 'contain',
@@ -54,8 +63,13 @@ const src = source ? buildDefaultSrc(source, 800) : null;
         loading={priority ? 'eager' : 'lazy'}
         fetchpriority={priority ? 'high' : undefined}
         decoding="async"
-        class:list={['h-full w-full object-contain object-center transition-opacity duration-500 opacity-0', imgClass]}
-        onload="this.classList.remove('opacity-0')"
+        class:list={[
+          omitLqipBackground
+            ? 'opacity-100 carousel-slide__img--fill'
+            : 'h-full w-full object-contain object-center transition-opacity duration-500 opacity-0',
+          imgClass
+        ]}
+        onload={omitLqipBackground ? undefined : "this.classList.remove('opacity-0')"}
       />
     </div>
   ) : null

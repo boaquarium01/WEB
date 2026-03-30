@@ -21,7 +21,10 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
+		<link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
+		<link rel="shortcut icon" href="/favicon.ico" />
+		<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+		<link rel="manifest" href="/site.webmanifest" />
 		<meta name="generator" content={Astro.generator} />
 		<meta name="description" content={description} />
 		{keywordsContent ? <meta name="keywords" content={keywordsContent} /> : null}
@@ -51,6 +54,23 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	</head>
 	<body>
 		<slot />
+		<a
+			class="line-float"
+			href="https://lin.ee/nG8kcR2"
+			target="_blank"
+			rel="noopener noreferrer"
+			aria-label="使用 LINE 私訊聯絡（另開新視窗）"
+		>
+			<img class="line-float__icon" src="/line.png" alt="LINE" width="56" height="56" loading="lazy" />
+		</a>
+
+		<script>
+			import { initScrollReveal } from '../scripts/initScrollReveal';
+
+			const runReveal = () => initScrollReveal();
+			runReveal();
+			document.addEventListener('astro:page-load', runReveal);
+		</script>
 	</body>
 </html>
 
@@ -87,5 +107,53 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		max-width: 100%;
 		height: auto;
 		display: block;
+	}
+
+	.line-float {
+		position: fixed;
+		right: 18px;
+		bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+		z-index: 9999;
+		width: 56px;
+		height: 56px;
+		border-radius: 999px;
+		background: #06c755;
+		color: inherit;
+		display: block;
+		text-decoration: none;
+		overflow: hidden;
+		border: 1px solid rgba(255, 255, 255, 0.22);
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+		transition: transform 0.2s ease, box-shadow 0.2s ease;
+	}
+
+	.line-float:hover {
+		transform: translateY(-2px);
+		box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
+	}
+
+	/* 來源圖周圍為淺灰留白：放大裁切後只保留中央綠方塊＋對話框；外圈仍為 LINE 綠 */
+	.line-float__icon {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		object-fit: cover;
+		object-position: center;
+		border-radius: 999px;
+		display: block;
+		transform: scale(1.8);
+		transform-origin: center center;
+	}
+
+	@media (max-width: 639px) {
+		.line-float {
+			right: 14px;
+			bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+			/* 與桌機同尺寸，避免與 scale 疊加後視覺比例不一致 */
+			width: 56px;
+			height: 56px;
+		}
 	}
 </style>

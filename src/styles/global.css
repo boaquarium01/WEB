@@ -20,3 +20,68 @@
 @theme {
   --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
 }
+
+/* 減少捲軸出現／消失造成的寬度跳動；限制橫向捲動外溢 */
+html {
+  scrollbar-gutter: stable;
+  overflow-x: clip;
+}
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* 捲動進場：全站共用（子元件內含 .reveal-on-scroll 亦可套用） */
+.reveal-on-scroll {
+  --reveal-delay: 0ms;
+  transition:
+    opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reveal-on-scroll:not(.is-revealed) {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.reveal-on-scroll.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-on-scroll--delay-sm {
+  --reveal-delay: 85ms;
+}
+
+.reveal-on-scroll--delay-md {
+  --reveal-delay: 150ms;
+}
+
+.reveal-on-scroll--delay-lg {
+  --reveal-delay: 220ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/**
+ * 主要指標按鈕微抬升（僅滑鼠精準裝置，避免觸控殘留 hover）
+ */
+@media (hover: hover) and (pointer: fine) {
+  .aq-hover-lift {
+    transition:
+      transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 0.22s ease;
+  }
+
+  .aq-hover-lift:hover {
+    transform: translateY(-2px);
+  }
+}

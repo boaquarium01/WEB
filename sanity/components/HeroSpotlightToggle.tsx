@@ -47,7 +47,7 @@ export function HeroSpotlightToggle(props: BooleanInputProps) {
         <span>設為首頁主打商品</span>
       </label>
       <p style={{ margin: 0, fontSize: '0.75rem', color: '#6e7683', lineHeight: 1.45 }}>
-        最近開啟的主打會排在最前；首頁只顯示最近 3 筆。若已開滿 3
+        最近開啟排在最前；首頁只顯示最近 3 筆。若已開滿 3
         筆，請關閉較舊的再開新主打。
       </p>
     </div>

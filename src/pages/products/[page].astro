@@ -79,6 +79,16 @@ const items = filtered.slice(
   currentPage * pageSize
 ) as Product[];
 
+/** 本頁在清單中的序號範圍（供頁首統計顯示） */
+const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+const rangeEnd = totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems);
+const rangeLabel =
+  totalItems === 0
+    ? null
+    : rangeStart === rangeEnd
+      ? `第 ${rangeStart} 項`
+      : `第 ${rangeStart}–${rangeEnd} 項`;
+
 const staggerItems = items.map((p) => ({
   slug: p.slug,
   name: p.name,
@@ -111,7 +121,7 @@ if (activeCategory && !activeQ && activeCategoryLabel) {
 }
 const pageTitle = `${pageTitleMain}｜${SITE_TITLE_SHORT}`;
 
-let pageDesc = `桃園中壢水博館水族商品列表，${filterHint}，每頁 ${PRODUCTS_PAGE_SIZE} 筆，僅供參考，歡迎來店參觀。`;
+let pageDesc = `桃園中壢水博館水族商品列表，${filterHint}，每頁 ${PRODUCTS_PAGE_SIZE} 筆，分 ${totalPages} 頁，僅供參考，歡迎來店參觀。`;
 if (activeCategory && !activeQ && activeCategoryLabel) {
   pageDesc = `桃園中壢水博館水族「${activeCategoryLabel}」分類展示，${filterHint}，歡迎來店參觀。`;
 }
@@ -133,7 +143,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     </header>
 
     <main class="wrap">
-      <nav class="breadcrumb" aria-label="麵包屑">
+      <nav class="breadcrumb reveal-on-scroll" aria-label="麵包屑">
         <a href="/">首頁</a>
         <span class="sep">/</span>
         <a href="/products/1" class="breadcrumb-products">全部商品</a>
@@ -157,7 +167,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
         ) : null}
       </nav>
 
-      <h1 class="page-title">
+      <h1 class="page-title reveal-on-scroll reveal-on-scroll--delay-sm">
         {activeCategory && !activeQ && activeCategoryLabel ? activeCategoryLabel : '全部商品'}
       </h1>
       {activeCategory && !activeQ && activeCategoryLabel ? (
@@ -166,20 +176,40 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
           <a href="/products/1">瀏覽全部品項</a>
         </p>
       ) : null}
-      <p class="page-meta">
+      <p class="catalog-stats reveal-on-scroll reveal-on-scroll--delay-sm" role="status" aria-live="polite">
         {activeCategory || activeQ ? (
           <>
-            篩選結果 <strong>{totalItems}</strong> 項；全站共 <strong>{sorted.length}</strong> 項（每頁{' '}
-            {PRODUCTS_PAGE_SIZE} 筆，約 {totalPages} 頁）
+            篩選 <span class="catalog-stats__num">{totalItems}</span> 項
+            <span class="catalog-stats__sep" aria-hidden="true">
+              ·
+            </span>
+            全站 <span class="catalog-stats__num">{sorted.length}</span> 項
+            <span class="catalog-stats__sep" aria-hidden="true">
+              ·
+            </span>
           </>
         ) : (
           <>
-            共 <strong>{totalItems}</strong> 項展示（每頁 {PRODUCTS_PAGE_SIZE} 筆，約 {totalPages} 頁）
+            共 <span class="catalog-stats__num">{totalItems}</span> 項
+            <span class="catalog-stats__sep" aria-hidden="true">
+              ·
+            </span>
           </>
         )}
+        {totalItems > 0 && rangeLabel ? (
+          <>
+            本頁 {rangeLabel}
+            {totalPages > 1 ? (
+              <span class="catalog-stats__sep" aria-hidden="true">
+                ·
+              </span>
+            ) : null}
+          </>
+        ) : null}
+        {totalPages > 1 ? <>第 {currentPage}/{totalPages} 頁</> : null}
       </p>
 
-      <div class="catalog-toolbar" role="search" aria-label="商品篩選與搜尋">
+      <div class="catalog-toolbar reveal-on-scroll reveal-on-scroll--delay-md" role="search" aria-label="商品篩選與搜尋">
         <form class="catalog-filter-form" method="get" action="/products/1">
           <div class="catalog-field">
             <label class="catalog-label" for="catalog-category">分類</label>
@@ -239,7 +269,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
       )}
 
       {totalPages > 1 && (
-        <nav class="pagination" aria-label="商品列表分頁">
+        <nav class="pagination reveal-on-scroll reveal-on-scroll--delay-md" aria-label="商品列表分頁">
           {currentPage > 1 ? (
             <a
               class="page-btn"
@@ -291,6 +321,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
 <style>
   .page {
     min-height: 100vh;
+    min-height: 100dvh;
     background: #fff;
     color: #111;
   }
@@ -314,6 +345,14 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     height: 40px;
     border-radius: 8px;
     color: #111;
+    transition: transform 0.2s ease, background 0.15s ease, box-shadow 0.2s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .back-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(26, 34, 33, 0.06);
+    }
   }
 
   .back-link:hover {
@@ -378,11 +417,26 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     text-align: center;
   }
 
-  .page-meta {
-    margin: 0 0 28px;
+  .catalog-stats {
+    margin: 0 0 1rem;
+    padding: 0 4px;
     text-align: center;
-    font-size: 0.875rem;
-    color: #555;
+    font-size: 0.75rem;
+    line-height: 1.45;
+    letter-spacing: 0.06em;
+    color: color-mix(in srgb, var(--aq-muted, #5c6563) 92%, var(--aq-ink, #1a2221));
+  }
+
+  .catalog-stats__num {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--aq-ink, #1a2221);
+  }
+
+  .catalog-stats__sep {
+    margin: 0 0.35em;
+    opacity: 0.45;
+    user-select: none;
   }
 
   .catalog-toolbar {
@@ -560,10 +614,23 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     cursor: pointer;
     text-decoration: none;
     transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
       background 0.15s ease,
       border-color 0.15s ease,
       color 0.15s ease;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .catalog-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(26, 34, 33, 0.08);
+    }
+
+    .catalog-btn--primary:hover {
+      box-shadow: 0 8px 22px rgba(21, 106, 102, 0.22);
+    }
   }
 
   .catalog-btn-icon {
@@ -726,6 +793,18 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-re
     border: 1px solid #ccc;
     border-radius: 8px;
     background: #fff;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.2s ease,
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .page-btn:hover:not(.is-disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(26, 34, 33, 0.08);
+    }
   }
 
   .page-btn:hover:not(.is-disabled) {

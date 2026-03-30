@@ -108,16 +108,22 @@ export const productType = defineType({
     }),
     defineField({
       name: 'featured',
-      title: '首頁精選',
+      title: '首頁熱銷',
       type: 'boolean',
       initialValue: false,
+      group: 'display'
+    }),
+    defineField({
+      name: 'featuredSortOrder',
+      title: '首頁熱銷排序（數字越小越前面）',
+      type: 'number',
       group: 'display'
     }),
     defineField({
       name: 'heroSpotlight',
       title: '主打商品',
       description:
-        '顯示於首頁主視覺下方；與「首頁精選」分開。前台僅顯示最近開啟的 3 筆主打；若超過 3 筆同時開啟，請自行關閉較舊的，以免混淆。',
+        '首頁只顯示最近 3 筆。若已開滿 3筆，請關閉較舊的再開新主打',
       type: 'boolean',
       initialValue: false,
       group: 'display',
@@ -133,14 +139,6 @@ export const productType = defineType({
       group: 'display',
       readOnly: true,
       hidden: true
-    }),
-    defineField({
-      name: 'featuredSortOrder',
-      title: '首頁熱銷排序（數字越小越前面）',
-      description:
-        '有勾「首頁精選」時：有填此欄的商品會排在熱銷區前段（數字越小越前）；未填者排在後段，依「分類內排序」。',
-      type: 'number',
-      group: 'display'
     }),
     // —— 圖片 ——
     defineField({
@@ -202,7 +200,7 @@ export const productType = defineType({
     }),
     defineField({
       name: 'seoKeywords',
-      title: 'SEO 關鍵字（以逗號分隔或多筆）',
+      title: 'SEO 關鍵字（逗號、頓號分隔或多筆）',
       type: 'array',
       group: 'seo',
       of: [{ type: 'string' }],

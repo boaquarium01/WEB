@@ -91,7 +91,7 @@ function extractAutoKeywords(text: string, limit = 12): string[] {
 // 2) 自動關鍵字：由名稱+內文抓取
 // 排序要求：手動在前，接著才是自動抓到的（去重後補上）
 const manualKeywords = (product.seoKeywords ?? [])
-  .flatMap((k) => String(k).split(/[,，]/g))
+  .flatMap((k) => String(k).split(/[,，、]/g))
   .map(normalizeKeyword)
   .filter(Boolean);
 
@@ -133,7 +133,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 
     <main class="wrap">
       <Breadcrumbs
-        class="mb-6"
+        class="mb-6 reveal-on-scroll"
         items={[
           { label: '首頁', href: '/' },
           { label: '全部商品', href: '/products/1' },
@@ -145,7 +145,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         ]}
       />
 
-      <article class="detail">
+      <article class="detail reveal-on-scroll reveal-on-scroll--delay-sm">
         <div class="detail-media">
           {product.images.length > 0 ? (
             <div
@@ -180,15 +180,15 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
                                 alt={alt}
                                 sizes="(max-width: 900px) 100vw, 50vw"
                                 priority={i === 0}
-                                width={1000}
-                                height={750}
+                                width={1200}
+                                height={900}
+                                omitLqipBackground={true}
                                 class="carousel-slide__contain !bg-transparent"
-                                imgClass="!object-contain !object-center !max-h-full !max-w-full !h-auto !w-auto"
                               />
                             ) : (
                               <div class="carousel-slide__contain">
                                 <img
-                                  class="carousel-slide__img--front"
+                                  class="carousel-slide__img--front carousel-slide__img--fill"
                                   src={src}
                                   alt={alt}
                                   width="1000"
@@ -287,6 +287,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 <style>
   .page {
     min-height: 100vh;
+    min-height: 100dvh;
     background: #fff;
     color: #111;
   }
@@ -310,6 +311,14 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     height: 40px;
     border-radius: 8px;
     color: #111;
+    transition: transform 0.2s ease, background 0.15s ease, box-shadow 0.2s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .back-link:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(26, 34, 33, 0.06);
+    }
   }
 
   .back-link:hover {
@@ -545,43 +554,33 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
   }
 
   /**
-   * 前景圖：flex 置中，避免 absolute 全滿 + 全域 img height:auto 造成視覺貼頂、留白只在下方
+   * 前景圖：填滿輪播格 + object-contain 盡量大（完整顯示、不裁切）
+   * 使用 .carousel-slide__img--fill + 強制覆寫全站 img{max-width;height:auto}，避免 flex+max% 變成中間小圖
    */
-  .carousel-slide__stack :global(.carousel-slide__contain) {
+  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain) {
     position: absolute;
     inset: 0;
     z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     min-height: 0;
     width: 100%;
     height: 100%;
     box-sizing: border-box;
+    background: transparent;
   }
 
-  .carousel-slide__stack :global(.carousel-slide__contain) img {
-    position: relative !important;
-    inset: auto !important;
-    flex: 0 1 auto;
-    display: block;
-    max-width: 100% !important;
-    max-height: 100% !important;
-    width: auto !important;
-    height: auto !important;
+  /* SanityImage 的 img 在子元件內，須 :global 才會套上 */
+  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain > img.carousel-slide__img--fill) {
+    position: absolute !important;
+    inset: 0 !important;
+    display: block !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
     object-fit: contain !important;
     object-position: center center !important;
-  }
-
-  .carousel-slide__stack .carousel-slide__contain > .carousel-slide__img--front {
-    position: relative;
-    flex: 0 1 auto;
-    max-width: 100%;
-    max-height: 100%;
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    object-position: center center;
   }
 
   .carousel-nav {
@@ -694,8 +693,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     outline-offset: 2px;
   }
 
-  .carousel-slide__stack :global(.carousel-slide__contain) img,
-  .carousel-slide__stack .carousel-slide__contain > .carousel-slide__img--front {
+  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain img) {
     cursor: zoom-in;
     -webkit-tap-highlight-color: transparent;
   }
@@ -769,6 +767,8 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 </style>
 
 <script>
+  import { applyBodyScrollLock, releaseBodyScrollLock } from '../../scripts/scrollLock';
+
   function setupProductCarousels() {
     document.querySelectorAll('[data-product-carousel]').forEach((root) => {
       if (!(root instanceof HTMLElement)) return;
@@ -954,7 +954,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       open = false;
       lightbox.hidden = true;
       lightbox.setAttribute('aria-hidden', 'true');
-      document.body.style.overflow = '';
+      releaseBodyScrollLock();
       lbImg.removeAttribute('src');
       lbImg.alt = '';
     }
@@ -968,7 +968,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       open = true;
       lightbox.hidden = false;
       lightbox.setAttribute('aria-hidden', 'false');
-      document.body.style.overflow = 'hidden';
+      applyBodyScrollLock();
       backdrop.focus();
     }
 
