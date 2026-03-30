@@ -818,6 +818,8 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       const AUTOPLAY_MS = 5500;
       let autoplayTimer = 0;
       let scrollProgrammatic = false;
+      /** 輪播是否在視窗內；離開視窗時必須停 autoplay，否則背景水平捲動與垂直捲動在 iOS 上會互搶造成顫動 */
+      let carouselInView = true;
 
       let index = 0;
       let ticking = false;
@@ -842,10 +844,10 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       }
 
       function scheduleAutoplay() {
-        if (reduceMotion || slides.length < 2) return;
+        if (reduceMotion || slides.length < 2 || !carouselInView) return;
         clearAutoplay();
         autoplayTimer = window.setInterval(() => {
-          goTo(index + 1);
+          goTo(index + 1, { behavior: 'auto' });
         }, AUTOPLAY_MS);
       }
 
@@ -854,18 +856,20 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         scheduleAutoplay();
       }
 
-      function goTo(i) {
+      function goTo(i, opts?: { behavior?: ScrollBehavior }) {
         const n = slides.length;
         index = ((i % n) + n) % n;
         scrollProgrammatic = true;
+        const behavior: ScrollBehavior =
+          opts?.behavior ?? (reduceMotion ? 'auto' : 'smooth');
         viewport.scrollTo({
           left: index * slideWidth(),
-          behavior: reduceMotion ? 'auto' : 'smooth'
+          behavior
         });
         syncDots(index);
         window.setTimeout(() => {
           scrollProgrammatic = false;
-        }, 1000);
+        }, behavior === 'smooth' ? 1000 : 80);
       }
 
       const extendTouchNav = (el) => {
@@ -923,8 +927,22 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
 
       document.addEventListener('visibilitychange', () => {
         if (document.hidden) clearAutoplay();
-        else scheduleAutoplay();
+        else if (carouselInView) scheduleAutoplay();
       });
+
+      if (typeof IntersectionObserver !== 'undefined') {
+        const vio = new IntersectionObserver(
+          (entries) => {
+            for (const e of entries) {
+              carouselInView = e.isIntersecting;
+              if (carouselInView) scheduleAutoplay();
+              else clearAutoplay();
+            }
+          },
+          { root: null, threshold: 0.08 }
+        );
+        vio.observe(root);
+      }
 
       let resizeTimer;
       let lastInnerWidth = window.innerWidth;

@@ -21,10 +21,16 @@
   --font-sans: system-ui, -apple-system, 'Segoe UI', 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
 }
 
-/* 減少捲軸出現／消失造成的寬度跳動；限制橫向捲動外溢 */
+/* 手機預設不預留捲軸槽（避免細微重排與 iOS 捲動顫動）；寬螢幕再 stable */
 html {
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
   overflow-x: clip;
+}
+
+@media (min-width: 901px) {
+  html {
+    scrollbar-gutter: stable;
+  }
 }
 
 /* 避免 iOS Safari 在部分頁面「捲到底」時與 contain 疊加產生跳動；必要時由元件自行限制 overscroll */
@@ -62,6 +68,32 @@ body {
 
 .reveal-on-scroll--delay-lg {
   --reveal-delay: 220ms;
+}
+
+/**
+ * 窄螢幕／觸控：捲動進場（opacity + transform 過渡）與 sticky+backdrop-blur 在 iOS WebKit 上
+ * 易與垂直捲動互搶合成層，造成全站頁面滑到底時上下顫動——改為靜態顯示（與 reduced-motion 同等效果）。
+ */
+@media (max-width: 900px) {
+  .reveal-on-scroll,
+  .reveal-on-scroll:not(.is-revealed) {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .site-header {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: color-mix(in srgb, var(--aq-sand, #faf8f4) 92%, white) !important;
+  }
+
+  /* 首頁捲過 Hero 後的毛玻璃（index 內為 #siteHeader…， specificity 較高） */
+  #siteHeader.site-header--past-hero {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: color-mix(in srgb, var(--aq-sand, #faf8f4) 88%, white) !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
