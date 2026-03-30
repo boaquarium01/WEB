@@ -75,13 +75,6 @@ body {
  * 易與垂直捲動互搶合成層，造成全站頁面滑到底時上下顫動——改為靜態顯示（與 reduced-motion 同等效果）。
  */
 @media (max-width: 900px) {
-  /**
-   * 減少 iOS 在內容／圖片載入或 sticky 互動時的捲動錨點微調（體感「震動」）
-   */
-  html {
-    overflow-anchor: none;
-  }
-
   .reveal-on-scroll,
   .reveal-on-scroll:not(.is-revealed) {
     opacity: 1 !important;

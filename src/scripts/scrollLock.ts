@@ -33,7 +33,13 @@ export function applyBodyScrollLock(headerId?: string): void {
 export function releaseBodyScrollLock(headerId?: string): void {
 	if (typeof document === 'undefined') return;
 
-	lockDepth = Math.max(0, lockDepth - 1);
+	/**
+	 * 必須先判斷：若從未 apply（lockDepth 已是 0），卻誤呼叫 release，
+	 * 舊版會執行 scrollTo(0, 0) 造成整頁跳回頂部（iOS／多事件綁定時較易觸發）。
+	 */
+	if (lockDepth <= 0) return;
+
+	lockDepth -= 1;
 	if (lockDepth > 0) return;
 
 	const y = savedScrollY;
@@ -51,6 +57,6 @@ export function releaseBodyScrollLock(headerId?: string): void {
 	}
 
 	requestAnimationFrame(() => {
-		window.scrollTo(0, y);
+		window.scrollTo({ top: y, left: 0, behavior: 'auto' });
 	});
 }
