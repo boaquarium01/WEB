@@ -37,6 +37,7 @@ export default defineConfig({
   adapter: useLocalNodeAdapter ? node({ mode: 'standalone' }) : vercel(),
   integrations,
   vite: {
-    plugins: [tailwindcss()]
+    // 避免某些 ESM/CJS 互操作或依賴缺失導致 vite plugins 產生 undefined 而在 transform 階段爆掉
+    plugins: [typeof tailwindcss === 'function' ? tailwindcss() : undefined].filter(Boolean)
   }
 });

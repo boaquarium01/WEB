@@ -1,0 +1,234 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import SanityImage from '../../components/SanityImage.astro';
+import { getPromotionBySlug } from '../../data/promotions';
+import { buildDefaultSrc } from '../../lib/sanity/image';
+
+export const prerender = true;
+
+const BRAND_SUFFIX = '水博館水族館';
+const PROMO_TABS = [
+  { slug: 'weekly-new', label: '每週新進魚隻' },
+  { slug: 'special-offers', label: '預定優惠' },
+  { slug: 'equipment-sale', label: '器材促銷' }
+] as const;
+
+export async function getStaticPaths() {
+  return [
+    { params: { slug: 'weekly-new' } },
+    { params: { slug: 'special-offers' } },
+    { params: { slug: 'equipment-sale' } }
+  ];
+}
+
+const slug = String(Astro.params.slug ?? '').trim();
+const promo = await getPromotionBySlug(slug);
+if (!promo) return Astro.redirect('/');
+
+const contentText = String(promo.content ?? '').trim();
+const pageTitle = `${promo.title}｜${BRAND_SUFFIX}`;
+const description = contentText ? contentText.slice(0, 160) : `${promo.title} 最新資訊與圖片。`;
+const tabs = PROMO_TABS.filter((tab) => tab.slug !== slug);
+const promoImages = promo.promoImages.slice(0, 25).map((img) => ({
+  source: img,
+  fullSrc: buildDefaultSrc(img, 1600) || buildDefaultSrc(img, 1200) || ''
+}));
+const heroImageSrc = promoImages[0]?.fullSrc || '';
+const heroImageAbs = heroImageSrc ? new URL(heroImageSrc, Astro.url.origin).toString() : '';
+const collectionJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: promo.title,
+  description,
+  url: Astro.url.href,
+  inLanguage: 'zh-Hant',
+  ...(heroImageAbs ? { image: [heroImageAbs] } : {})
+};
+---
+
+<Layout title={pageTitle} description={description}>
+  <Fragment slot="head">
+    {heroImageSrc ? <link rel="preload" as="image" href={heroImageSrc} /> : null}
+    <script type="application/ld+json" set:html={JSON.stringify(collectionJsonLd)}></script>
+  </Fragment>
+  <div class="min-h-screen bg-white text-slate-900">
+    <header class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150 reveal-on-scroll">
+      <div class="mx-auto grid min-h-[56px] w-full max-w-[1200px] grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
+        <a href="/" class="aq-btn-soft aq-hover-lift inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-900 transition" aria-label="首頁"><i class="fa-solid fa-house"></i></a>
+        <a href="/" class="justify-self-center text-[1.0625rem] font-extrabold tracking-[0.04em] text-slate-900">水博館水族</a>
+        <a href="https://lin.ee/nG8kcR2" target="_blank" rel="noopener noreferrer" class="group inline-flex min-h-[36px] items-center gap-1.5 rounded-full bg-white px-3.5 py-2 text-xs font-extrabold !text-[#06c755] shadow-[0_8px_20px_rgba(6,199,85,0.22),0_2px_0_rgba(6,199,85,0.2)] ring-1 ring-[#06c755]/35 transition duration-200 hover:-translate-y-0.5 hover:bg-[#06c755] hover:!text-white hover:shadow-[0_12px_26px_rgba(6,199,85,0.34)] active:translate-y-0 active:shadow-[0_4px_12px_rgba(6,199,85,0.28)]">
+          <i class="fa-brands fa-line text-sm !text-[#06c755] opacity-95 transition group-hover:!text-white" aria-hidden="true"></i>
+          LINE 諮詢預訂
+        </a>
+      </div>
+      <div class="mx-auto w-full max-w-5xl px-4 pb-3 sm:px-6">
+        <nav class="grid grid-cols-2 gap-2" aria-label="促銷分頁切換">
+          {tabs.map((tab) => (
+            <a href={`/promo/${tab.slug}`} class="aq-btn-soft aq-hover-lift rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition">{tab.label}</a>
+          ))}
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+      <h1 class="reveal-on-scroll reveal-on-scroll--delay-sm text-center text-balance text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">{promo.title}</h1>
+
+      {contentText ? (
+        <section class="reveal-on-scroll reveal-on-scroll--delay-md prose prose-slate mt-6 max-w-none">
+          <p class="whitespace-pre-line leading-relaxed text-slate-700">{contentText}</p>
+        </section>
+      ) : null}
+
+      {promoImages.length > 0 ? (
+        <section class="reveal-on-scroll reveal-on-scroll--delay-md mt-8">
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {promoImages.map(({ source, fullSrc }, i) => (
+              <button type="button" class="group block text-left reveal-on-scroll reveal-on-scroll--delay-lg" data-promo-lightbox-trigger data-index={String(i)} data-src={fullSrc} aria-label={`放大檢視第 ${i + 1} 張圖片`}>
+                <div class="aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+                  <SanityImage source={source} alt={`${promo.title}（第 ${i + 1} 張）`} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" width={900} height={900} priority={i === 0} imgClass="object-cover" class="h-full w-full" />
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : (
+        <section class="reveal-on-scroll reveal-on-scroll--delay-md mt-8">
+          <div class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center shadow-sm">
+            <p class="text-sm font-semibold text-slate-700">此分頁暫無促銷圖片</p>
+            <p class="mt-1 text-xs text-slate-500">可先透過 LINE 詢問最新上架與優惠資訊</p>
+          </div>
+        </section>
+      )}
+
+      <div class="reveal-on-scroll reveal-on-scroll--delay-lg mt-10 flex flex-wrap items-center gap-3">
+        <a href="/" class="aq-btn-soft aq-hover-lift inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800">返回首頁</a>
+        <a href="https://lin.ee/nG8kcR2" target="_blank" rel="noopener noreferrer" class="aq-btn-line aq-hover-lift inline-flex items-center justify-center rounded-xl bg-[#06c755] px-4 py-2 text-sm font-semibold text-white">LINE 諮詢預訂</a>
+      </div>
+    </main>
+
+    <footer class="reveal-on-scroll reveal-on-scroll--delay-lg border-t border-[var(--aq-line)] bg-inherit px-4 py-8 sm:px-6">
+      <div class="mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-2 text-center">
+        <a href="/#about" class="text-sm font-semibold text-[var(--aq-primary-dark)] underline decoration-[1.5px] underline-offset-4 transition hover:text-[var(--aq-primary)]">聯絡資訊</a>
+        <p class="m-0 text-xs tracking-[0.02em] text-[var(--aq-muted)]">© 2026 水博館水族</p>
+      </div>
+    </footer>
+
+    <button
+      id="promoScrollTopBtn"
+      type="button"
+      class="promo-scroll-top-btn"
+      aria-label="回到頁面頂部"
+      title="回到頂部"
+    >
+      <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+    </button>
+  </div>
+</Layout>
+
+<script type="module">
+  const scrollTopBtn = document.getElementById('promoScrollTopBtn');
+
+  if (scrollTopBtn instanceof HTMLButtonElement) {
+    const toggleBtn = () => {
+      if (window.scrollY > 240) scrollTopBtn.classList.add('is-visible');
+      else scrollTopBtn.classList.remove('is-visible');
+    };
+
+    toggleBtn();
+    window.addEventListener('scroll', toggleBtn, { passive: true });
+    window.addEventListener('astro:page-load', toggleBtn);
+
+    scrollTopBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+</script>
+
+<style>
+  .promo-scroll-top-btn {
+    position: fixed;
+    right: 18px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 9998;
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #156a66;
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.18),
+      0 2px 0 rgba(21, 106, 102, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .promo-scroll-top-btn.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .promo-scroll-top-btn:hover {
+    box-shadow:
+      0 14px 28px rgba(0, 0, 0, 0.24),
+      0 2px 0 rgba(21, 106, 102, 0.22);
+  }
+
+  .promo-scroll-top-btn:active {
+    transform: translateY(1px);
+  }
+
+  .aq-btn-soft {
+    box-shadow:
+      0 6px 16px rgba(15, 23, 42, 0.08),
+      0 1px 0 rgba(15, 23, 42, 0.08);
+  }
+
+  .aq-btn-soft:hover {
+    border-color: rgba(148, 163, 184, 0.55);
+    background: #f8fafc;
+    box-shadow:
+      0 10px 20px rgba(15, 23, 42, 0.12),
+      0 1px 0 rgba(15, 23, 42, 0.12);
+  }
+
+  .aq-btn-soft:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 4px 10px rgba(15, 23, 42, 0.12),
+      0 1px 0 rgba(15, 23, 42, 0.1);
+  }
+
+  .aq-btn-line {
+    box-shadow:
+      0 10px 22px rgba(6, 199, 85, 0.28),
+      0 2px 0 rgba(6, 199, 85, 0.24);
+  }
+
+  .aq-btn-line:hover {
+    filter: brightness(0.97);
+    box-shadow:
+      0 14px 26px rgba(6, 199, 85, 0.35),
+      0 2px 0 rgba(6, 199, 85, 0.26);
+  }
+
+  .aq-btn-line:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 6px 14px rgba(6, 199, 85, 0.3),
+      0 1px 0 rgba(6, 199, 85, 0.24);
+  }
+
+  @media (max-width: 639px) {
+    .promo-scroll-top-btn {
+      right: 14px;
+      bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+</style>

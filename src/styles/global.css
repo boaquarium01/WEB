@@ -70,16 +70,17 @@ body {
   --reveal-delay: 220ms;
 }
 
-/**
- * 窄螢幕／觸控：捲動進場（opacity + transform 過渡）與 sticky+backdrop-blur 在 iOS WebKit 上
- * 易與垂直捲動互搶合成層，造成全站頁面滑到底時上下顫動——改為靜態顯示（與 reduced-motion 同等效果）。
- */
+/* 窄螢幕：保留淡入，不做位移，降低滾動抖動風險 */
 @media (max-width: 900px) {
-  .reveal-on-scroll,
   .reveal-on-scroll:not(.is-revealed) {
-    opacity: 1 !important;
+    opacity: 0 !important;
     transform: none !important;
-    transition: none !important;
+  }
+
+  .reveal-on-scroll {
+    transition:
+      opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay) !important,
+      transform 0s linear 0s !important;
   }
 
   /* 頂欄 transition 在 sticky 邊界與捲動疊加時易造成合成抖動（商品／列表頁僅 .site-header） */

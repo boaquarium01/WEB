@@ -16,6 +16,20 @@ const FishIcon = () =>
 
 const structure = (S: any, context: any) => {
   const allProducts: any = S.documentTypeList('product').title('全部商品');
+  const promoWeeklyNew: any = S.listItem()
+    .id('promo-weekly-new')
+    .title('每週新進魚隻')
+    .child(S.document().schemaType('promotion').documentId('promotion-weekly-new').title('每週新進魚隻'));
+
+  const promoSpecialOffers: any = S.listItem()
+    .id('promo-special-offers')
+    .title('預定優惠')
+    .child(S.document().schemaType('promotion').documentId('promotion-special-offers').title('預定優惠'));
+
+  const promoEquipmentSale: any = S.listItem()
+    .id('promo-equipment-sale')
+    .title('器材促銷')
+    .child(S.document().schemaType('promotion').documentId('promotion-equipment-sale').title('器材促銷'));
   // 使用 preview.media 顯示縮圖；preview.media 來源是你 schema 內的 `preview.media: 'image'`
   //（你的 product.image 欄位就是「列表主圖／輪播第一張」）
 
@@ -44,6 +58,9 @@ const structure = (S: any, context: any) => {
     .title('水博館官網管理系統')
     .defaultLayout('detail')
     .items([
+      promoWeeklyNew,
+      promoSpecialOffers,
+      promoEquipmentSale,
       S.listItem().id('products-all').title('全部商品').child(allProducts),
       productsByCategorySort,
       orderableDocumentListDeskItem({
