@@ -1,6 +1,6 @@
 {
-  "name": "MyWebSite",
-  "short_name": "MySite",
+  "name": "桃園中壢水博館水族",
+  "short_name": "水博館水族",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
