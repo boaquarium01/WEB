@@ -7,7 +7,7 @@ const DEFAULT_PROJECT_ID = 'iz7fvprm';
 const DEFAULT_DATASET = 'production';
 
 const PROMO_TITLE_BY_SLUG: Record<string, string> = {
-  'weekly-new': '每週新進魚隻',
+  'weekly-new': '每週新進魚隻🐠',
   'special-offers': '預定優惠',
   'equipment-sale': '器材促銷'
 };
@@ -76,7 +76,8 @@ const PROMOTION_BY_SLUG_QUERY = `*[_type == "promotion" && slug.current == $slug
 
 function mapToPromotion(doc: SanityPromotionDoc): Promotion | null {
   const slug = String(doc.slug ?? '').trim();
-  const title = String(doc.title ?? '').trim() || PROMO_TITLE_BY_SLUG[slug] || '';
+  let title = String(doc.title ?? '').trim() || PROMO_TITLE_BY_SLUG[slug] || '';
+  if (slug === 'weekly-new') title = PROMO_TITLE_BY_SLUG['weekly-new'];
   if (!slug || !title) return null;
 
   const imgs: SanityImageSource[] = [];

@@ -7,7 +7,7 @@ import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 
 const navItems = [
   { name: '首頁', href: '#home' },
-  { name: '每週新進魚隻', href: '/promo/weekly-new' },
+  { name: '每週新進魚隻🐠', href: '/promo/weekly-new' },
   { name: '預定優惠', href: '/promo/special-offers' },
   { name: '器材促銷', href: '/promo/equipment-sale' },
   { name: '服務項目', href: '#services' },
@@ -161,18 +161,7 @@ const services = [
     <main>
       <!-- Hero 輪播：滿版大圖 -->
       <section class="hero" aria-label="主視覺輪播">
-        <div class="hero-shimmer" aria-hidden="true"></div>
-        <svg class="hero-accent-line" viewBox="0 0 100 100" aria-hidden="true">
-          <path
-            class="hero-accent-line__path"
-            d="M 88 12 Q 52 38 14 86"
-            fill="none"
-            stroke="rgba(250,248,244,0.22)"
-            stroke-width="1.25"
-            stroke-linecap="round"
-            pathLength="1"></path>
-        </svg>
-        <div class="hero-track">
+        <div class="hero-track" data-hero-swipe>
           {heroSlides.map((slide, idx) => (
             <article class:list={['hero-slide', idx === 0 && 'is-active']}>
               <div class="hero-slide-bg" style={`--bg: url('${slide.image}')`}></div>
@@ -202,19 +191,19 @@ const services = [
 
       <div class="home-below-hero">
       <section id="home-promo-links" class="wrap section -mt-8 pb-8" aria-label="促銷分頁導覽">
-        <div class="mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3">
+        <div class="home-promo-links-grid mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3">
           <a
             href="/promo/weekly-new"
-            class="group col-span-2 rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)] sm:col-span-1"
+            class="home-promo-link group col-span-2 rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)] sm:col-span-1"
           >
             <div class="relative flex items-center justify-center">
-              <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">每週新進魚隻</h2>
+              <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">每週新進魚隻🐠</h2>
               <i class="fa-solid fa-chevron-right absolute right-0 text-sm text-[var(--aq-muted)] transition group-hover:translate-x-1" aria-hidden="true"></i>
             </div>
           </a>
           <a
             href="/promo/special-offers"
-            class="group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
+            class="home-promo-link group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
           >
             <div class="relative flex items-center justify-center">
               <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">預定優惠</h2>
@@ -223,7 +212,7 @@ const services = [
           </a>
           <a
             href="/promo/equipment-sale"
-            class="group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
+            class="home-promo-link group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
           >
             <div class="relative flex items-center justify-center">
               <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">器材促銷</h2>
@@ -355,6 +344,16 @@ const services = [
         <p class="m-0 text-xs tracking-[0.02em] text-[var(--aq-muted)]">© 2026 水博館水族</p>
       </div>
     </footer>
+
+    <button
+      id="homeScrollTopBtn"
+      type="button"
+      class="promo-scroll-top-btn"
+      aria-label="回到頁面頂部"
+      title="回到頂部"
+    >
+      <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
+    </button>
   </div>
 
   <script>
@@ -390,12 +389,36 @@ const services = [
     const slides = Array.from(document.querySelectorAll('.hero-slide'));
     const dots = Array.from(document.querySelectorAll('.carousel-dot'));
     let currentSlide = 0;
+    let heroExitTimer: ReturnType<typeof setTimeout> | null = null;
+    const HERO_CROSSFADE_MS = 780;
 
     const setSlide = (index) => {
       const next = ((index % slides.length) + slides.length) % slides.length;
+      if (next === currentSlide) return;
+
+      const prev = currentSlide;
+      const prevEl = slides[prev];
+
+      if (heroExitTimer !== null) {
+        window.clearTimeout(heroExitTimer);
+        heroExitTimer = null;
+      }
+      slides.forEach((slide) => slide.classList.remove('hero-slide--exiting'));
+      if (prevEl) {
+        prevEl.classList.add('hero-slide--exiting');
+        prevEl.classList.remove('is-active');
+      }
+
       slides.forEach((slide, i) => slide.classList.toggle('is-active', i === next));
       dots.forEach((dot, i) => dot.classList.toggle('is-active', i === next));
       currentSlide = next;
+
+      if (prevEl) {
+        heroExitTimer = window.setTimeout(() => {
+          prevEl.classList.remove('hero-slide--exiting');
+          heroExitTimer = null;
+        }, HERO_CROSSFADE_MS);
+      }
     };
 
     dots.forEach((dot) => {
@@ -405,6 +428,46 @@ const services = [
         restartAutoplay();
       });
     });
+
+    const heroTrack = document.querySelector('[data-hero-swipe]');
+    if (heroTrack instanceof HTMLElement && slides.length > 1) {
+      const SWIPE_MIN_PX = 48;
+      const SWIPE_DOMINANCE = 1.15;
+      let swipePointerId: number | null = null;
+      let swipeStartX = 0;
+      let swipeStartY = 0;
+
+      const onSwipePointerUp = (e: PointerEvent) => {
+        if (swipePointerId !== e.pointerId) return;
+        swipePointerId = null;
+        try {
+          heroTrack.releasePointerCapture(e.pointerId);
+        } catch {
+          /* ignore */
+        }
+        const dx = e.clientX - swipeStartX;
+        const dy = e.clientY - swipeStartY;
+        if (Math.abs(dx) < SWIPE_MIN_PX) return;
+        if (Math.abs(dx) < Math.abs(dy) * SWIPE_DOMINANCE) return;
+        if (dx < 0) setSlide(currentSlide + 1);
+        else setSlide(currentSlide - 1);
+        restartAutoplay();
+      };
+
+      heroTrack.addEventListener(
+        'pointerdown',
+        (e: PointerEvent) => {
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
+          swipePointerId = e.pointerId;
+          swipeStartX = e.clientX;
+          swipeStartY = e.clientY;
+          heroTrack.setPointerCapture(e.pointerId);
+        },
+        { passive: true }
+      );
+      heroTrack.addEventListener('pointerup', onSwipePointerUp, { passive: true });
+      heroTrack.addEventListener('pointercancel', onSwipePointerUp, { passive: true });
+    }
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const canAutoPlay = slides.length > 1 && !prefersReducedMotion;
     const AUTOPLAY_MS = 5000;
@@ -452,6 +515,20 @@ const services = [
       lastPastHero = null;
       syncHeaderScroll();
     });
+
+    const scrollTopBtn = document.getElementById('homeScrollTopBtn');
+    if (scrollTopBtn instanceof HTMLButtonElement) {
+      const toggleScrollTop = () => {
+        if (window.scrollY > 240) scrollTopBtn.classList.add('is-visible');
+        else scrollTopBtn.classList.remove('is-visible');
+      };
+      toggleScrollTop();
+      window.addEventListener('scroll', toggleScrollTop, { passive: true });
+      document.addEventListener('astro:page-load', toggleScrollTop);
+      scrollTopBtn.addEventListener('click', () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    }
   </script>
 </Layout>
 
@@ -962,14 +1039,15 @@ const services = [
     border-bottom-color: color-mix(in srgb, var(--aq-primary) 20%, var(--aq-line));
   }
 
-  /* Hero：僅此區偏深底，其餘頁面維持淺色可讀 */
+  /* Hero：底色與遮罩最底部一致，換圖時較不會透出「另一塊」青綠帶 */
   .hero {
     position: relative;
     width: 100%;
     min-height: 56vh;
     height: min(75vh, 640px);
     overflow: hidden;
-    background: var(--aq-primary-dark);
+    background-color: #0a2624;
+    background-image: linear-gradient(180deg, #0f3a38 0%, #0a2624 100%);
   }
 
   @media (max-width: 900px) {
@@ -979,122 +1057,56 @@ const services = [
     }
   }
 
-  .hero-shimmer {
-    position: absolute;
-    inset: 0;
-    z-index: 2;
-    pointer-events: none;
-    opacity: 0.55;
-    background:
-      radial-gradient(ellipse 58% 42% at 82% 14%, rgba(255, 255, 255, 0.22) 0%, transparent 62%),
-      radial-gradient(ellipse 40% 32% at 18% 88%, rgba(255, 255, 255, 0.06) 0%, transparent 55%);
-    mix-blend-mode: soft-light;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-shimmer {
-      animation: hero-shimmer-drift 36s ease-in-out infinite alternate;
-    }
-  }
-
-  /* 手機：全幅 Hero 無限動畫與捲動同時進行易加重合成負擔，造成體感顫動 */
-  @media (max-width: 900px) {
-    .hero-shimmer {
-      animation: none !important;
-    }
-  }
-
-  @keyframes hero-shimmer-drift {
-    0%,
-    100% {
-      opacity: 0.48;
-      filter: saturate(1);
-    }
-    50% {
-      opacity: 0.62;
-      filter: saturate(1.08);
-    }
-  }
-
-  .hero-accent-line {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 3;
-    width: min(38vw, 200px);
-    height: min(38vw, 200px);
-    pointer-events: none;
-    opacity: 0.85;
-  }
-
-  .hero-accent-line__path {
-    stroke-dasharray: 1;
-    stroke-dashoffset: 1;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-accent-line__path {
-      animation: hero-accent-draw 42s ease-in-out infinite;
-    }
-  }
-
-  @keyframes hero-accent-draw {
-    0%,
-    12% {
-      stroke-dashoffset: 1;
-    }
-    22%,
-    38% {
-      stroke-dashoffset: 0;
-    }
-    48%,
-    100% {
-      stroke-dashoffset: 1;
-    }
-  }
-
   .hero-track {
     position: relative;
     width: 100%;
     height: 100%;
+    isolation: isolate;
+    touch-action: pan-y;
+    cursor: grab;
+  }
+
+  .hero-track:active {
+    cursor: grabbing;
   }
 
   .hero-slide {
     position: absolute;
     inset: 0;
+    z-index: 0;
     overflow: hidden;
     opacity: 0;
-    transition: opacity 0.75s ease;
+    visibility: hidden;
+    transition:
+      opacity 0.75s ease,
+      visibility 0s linear 0.75s;
+    pointer-events: none;
+  }
+
+  /* 離場張在淡出期間置頂，底下新圖淡入，避免與其他底層張疊色、底部透出 hero 底色 */
+  .hero-slide.hero-slide--exiting {
+    z-index: 2;
   }
 
   .hero-slide.is-active {
     opacity: 1;
     z-index: 1;
+    visibility: visible;
+    transition:
+      opacity 0.75s ease,
+      visibility 0s linear 0s;
+    pointer-events: auto;
   }
 
   .hero-slide-bg {
     position: absolute;
-    inset: 0;
+    inset: -1px;
+    background-color: #0a2624;
     background-image: var(--bg);
     background-size: cover;
     background-position: center;
-    transform: scale(1);
-    will-change: transform;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-slide.is-active .hero-slide-bg {
-      animation: hero-ken-burns 26s ease-out forwards;
-    }
-  }
-
-  @keyframes hero-ken-burns {
-    from {
-      transform: scale(1);
-    }
-    to {
-      transform: scale(1.045);
-    }
+    transform: scale(1.02);
+    transform-origin: center center;
   }
 
   .hero-overlay {
@@ -1119,28 +1131,12 @@ const services = [
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    padding-bottom: 56px;
+    padding-bottom: clamp(58px, 11vw, 68px);
     padding-top: 24px;
   }
 
   .hero-content-inner {
     max-width: 100%;
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .hero-slide.is-active .hero-drift-layer {
-      animation: hero-content-drift 14s ease-in-out infinite;
-    }
-  }
-
-  @keyframes hero-content-drift {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-4px);
-    }
   }
 
   .hero-slide .hero-content-inner {
@@ -1182,14 +1178,16 @@ const services = [
     text-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
   }
 
+  /* 貼在圖片可視下緣：促銷區 -mt-8 會疊上 hero 底部，圓點需在其上方才不會被擋 */
   .hero-dots {
     position: absolute;
-    bottom: 20px;
+    bottom: calc(2rem + max(8px, env(safe-area-inset-bottom, 0px) + 4px));
     left: 50%;
     transform: translateX(-50%);
     z-index: 4;
     display: flex;
     gap: 8px;
+    pointer-events: auto;
   }
 
   .carousel-dot {
@@ -1248,47 +1246,38 @@ const services = [
     mix-blend-mode: multiply;
   }
 
-  @media (prefers-reduced-motion: no-preference) {
-    .home-below-hero::before {
-      animation: home-grain-breathe 72s ease-in-out infinite alternate;
-    }
-  }
-
-  @keyframes home-grain-breathe {
+  @keyframes home-promo-enter {
     from {
-      opacity: 0.036;
+      opacity: 0;
+      transform: translateY(14px);
     }
     to {
-      opacity: 0.054;
+      opacity: 1;
+      transform: translateY(0);
     }
-  }
-
-  /* 水族意象：極淡同心圓波紋（全區覆蓋、不干擾點擊） */
-  .home-below-hero::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.055;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='none' stroke='%23156a66' stroke-width='0.45' opacity='0.5'%3E%3Ccircle cx='100' cy='100' r='22'/%3E%3Ccircle cx='100' cy='100' r='48'/%3E%3Ccircle cx='100' cy='100' r='74'/%3E%3C/g%3E%3C/svg%3E");
-    background-size: 200px 200px;
-    background-repeat: repeat;
-    mix-blend-mode: multiply;
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .home-below-hero::after {
-      animation: home-ripple-drift 90s linear infinite;
+    .home-promo-links-grid .home-promo-link {
+      animation: home-promo-enter 0.68s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .home-promo-links-grid .home-promo-link:nth-child(1) {
+      animation-delay: 0.06s;
+    }
+
+    .home-promo-links-grid .home-promo-link:nth-child(2) {
+      animation-delay: 0.18s;
+    }
+
+    .home-promo-links-grid .home-promo-link:nth-child(3) {
+      animation-delay: 0.3s;
     }
   }
 
-  @keyframes home-ripple-drift {
-    from {
-      background-position: 0 0;
-    }
-    to {
-      background-position: 200px 80px;
+  @media (prefers-reduced-motion: reduce) {
+    .home-promo-links-grid .home-promo-link {
+      animation: none;
     }
   }
 
@@ -1730,12 +1719,40 @@ const services = [
     margin-bottom: 16px;
   }
 
+  .contact-line strong {
+    flex-shrink: 0;
+  }
+
   .contact-card .line-official-link {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
     text-decoration: none;
     border: 0;
     color: inherit;
+  }
+
+  /* 避免全域 img{max-width:100%} 把官方按鈕拉成整列寬 */
+  .contact-card .line-official-link img {
+    display: block;
+    width: auto;
+    max-width: 154px;
+    height: auto;
+    max-height: 40px;
+    object-fit: contain;
+  }
+
+  @media (max-width: 639px) {
+    .contact-line {
+      flex-wrap: nowrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .contact-card .line-official-link img {
+      max-width: 118px;
+      max-height: 30px;
+    }
   }
 
   .contact-card p:last-child {
@@ -1989,6 +2006,53 @@ const services = [
   @media (min-width: 640px) {
     .product-excerpt {
       font-size: 0.8125rem;
+    }
+  }
+
+  /* 與促銷分頁同款：浮動回到頂部（略抬高避免與 LINE 浮標重疊） */
+  .promo-scroll-top-btn {
+    position: fixed;
+    right: 18px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    z-index: 9998;
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 999px;
+    background: #ffffff;
+    color: #156a66;
+    box-shadow:
+      0 10px 24px rgba(0, 0, 0, 0.18),
+      0 2px 0 rgba(21, 106, 102, 0.18);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.22s ease, transform 0.22s ease, box-shadow 0.22s ease;
+  }
+
+  .promo-scroll-top-btn.is-visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .promo-scroll-top-btn:hover {
+    box-shadow:
+      0 14px 28px rgba(0, 0, 0, 0.24),
+      0 2px 0 rgba(21, 106, 102, 0.22);
+  }
+
+  .promo-scroll-top-btn:active {
+    transform: translateY(1px);
+  }
+
+  @media (max-width: 639px) {
+    .promo-scroll-top-btn {
+      right: 14px;
+      bottom: calc(80px + env(safe-area-inset-bottom, 0px));
     }
   }
 

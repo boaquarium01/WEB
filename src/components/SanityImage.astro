@@ -15,6 +15,10 @@ type Props = {
    * 輪播等已有「底層模糊圖」時設為 true，關閉 LQIP 背景，避免雙重模糊、主體看起來過小。
    */
   omitLqipBackground?: boolean;
+  /**
+   * LQIP 以 cover 填滿容器（預設 contain 在方形容器內會像中央一條／一塊，主圖載入後改 cover 會像由中往左右撐開）。
+   */
+  lqipCover?: boolean;
 };
 
 const {
@@ -26,7 +30,8 @@ const {
   priority = false,
   width = 800,
   height = 600,
-  omitLqipBackground = false
+  omitLqipBackground = false,
+  lqipCover = false
 } = Astro.props as Props;
 
 const srcSet = source ? buildSrcSet(source, SANITY_IMAGE_WIDTHS) : '';
@@ -46,7 +51,7 @@ const src = source ? buildDefaultSrc(source, width) : null;
         lqip && !omitLqipBackground
           ? {
               backgroundImage: `url(${lqip})`,
-              backgroundSize: 'contain',
+              backgroundSize: lqipCover ? 'cover' : 'contain',
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat'
             }

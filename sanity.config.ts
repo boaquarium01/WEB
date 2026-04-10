@@ -18,8 +18,8 @@ const structure = (S: any, context: any) => {
   const allProducts: any = S.documentTypeList('product').title('全部商品');
   const promoWeeklyNew: any = S.listItem()
     .id('promo-weekly-new')
-    .title('每週新進魚隻')
-    .child(S.document().schemaType('promotion').documentId('promotion-weekly-new').title('每週新進魚隻'));
+    .title('每週新進魚隻🐠')
+    .child(S.document().schemaType('promotion').documentId('promotion-weekly-new').title('每週新進魚隻🐠'));
 
   const promoSpecialOffers: any = S.listItem()
     .id('promo-special-offers')

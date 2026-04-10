@@ -8,7 +8,7 @@ export const prerender = true;
 
 const BRAND_SUFFIX = '水博館水族館';
 const PROMO_TABS = [
-  { slug: 'weekly-new', label: '每週新進魚隻' },
+  { slug: 'weekly-new', label: '每週新進魚隻🐠' },
   { slug: 'special-offers', label: '預定優惠' },
   { slug: 'equipment-sale', label: '器材促銷' }
 ] as const;
@@ -31,7 +31,12 @@ const description = contentText ? contentText.slice(0, 160) : `${promo.title} �
 const tabs = PROMO_TABS.filter((tab) => tab.slug !== slug);
 const promoImages = promo.promoImages.slice(0, 25).map((img) => ({
   source: img,
-  fullSrc: buildDefaultSrc(img, 1600) || buildDefaultSrc(img, 1200) || ''
+  fullSrc:
+    buildDefaultSrc(img, 1600) ||
+    buildDefaultSrc(img, 1200) ||
+    buildDefaultSrc(img, 800) ||
+    buildDefaultSrc(img, 600) ||
+    ''
 }));
 const heroImageSrc = promoImages[0]?.fullSrc || '';
 const heroImageAbs = heroImageSrc ? new URL(heroImageSrc, Astro.url.origin).toString() : '';
@@ -51,7 +56,7 @@ const collectionJsonLd = {
     {heroImageSrc ? <link rel="preload" as="image" href={heroImageSrc} /> : null}
     <script type="application/ld+json" set:html={JSON.stringify(collectionJsonLd)}></script>
   </Fragment>
-  <div class="min-h-screen bg-white text-slate-900">
+  <div id="promoPageRoot" class="min-h-screen bg-white text-slate-900">
     <header class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150 reveal-on-scroll">
       <div class="mx-auto grid min-h-[56px] w-full max-w-[1200px] grid-cols-[auto_1fr_auto] items-center gap-3 px-4 py-3">
         <a href="/" class="aq-btn-soft aq-hover-lift inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-900 transition" aria-label="首頁"><i class="fa-solid fa-house"></i></a>
@@ -83,9 +88,17 @@ const collectionJsonLd = {
         <section class="reveal-on-scroll reveal-on-scroll--delay-md mt-8">
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {promoImages.map(({ source, fullSrc }, i) => (
-              <button type="button" class="group block text-left reveal-on-scroll reveal-on-scroll--delay-lg" data-promo-lightbox-trigger data-index={String(i)} data-src={fullSrc} aria-label={`放大檢視第 ${i + 1} 張圖片`}>
+              <button
+                type="button"
+                class="group block w-full text-left"
+                data-promo-lightbox-trigger
+                data-index={String(i)}
+                data-src={fullSrc}
+                data-alt={`${promo.title}（第 ${i + 1} 張）`}
+                aria-label={`放大檢視第 ${i + 1} 張圖片`}
+              >
                 <div class="aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
-                  <SanityImage source={source} alt={`${promo.title}（第 ${i + 1} 張）`} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" width={900} height={900} priority={i === 0} imgClass="object-cover" class="h-full w-full" />
+                  <SanityImage source={source} alt={`${promo.title}（第 ${i + 1} 張）`} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" width={900} height={900} priority={i === 0} lqipCover imgClass="object-cover" class="h-full w-full" />
                 </div>
               </button>
             ))}
@@ -99,11 +112,6 @@ const collectionJsonLd = {
           </div>
         </section>
       )}
-
-      <div class="reveal-on-scroll reveal-on-scroll--delay-lg mt-10 flex flex-wrap items-center gap-3">
-        <a href="/" class="aq-btn-soft aq-hover-lift inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800">返回首頁</a>
-        <a href="https://lin.ee/nG8kcR2" target="_blank" rel="noopener noreferrer" class="aq-btn-line aq-hover-lift inline-flex items-center justify-center rounded-xl bg-[#06c755] px-4 py-2 text-sm font-semibold text-white">LINE 諮詢預訂</a>
-      </div>
     </main>
 
     <footer class="reveal-on-scroll reveal-on-scroll--delay-lg border-t border-[var(--aq-line)] bg-inherit px-4 py-8 sm:px-6">
@@ -112,6 +120,42 @@ const collectionJsonLd = {
         <p class="m-0 text-xs tracking-[0.02em] text-[var(--aq-muted)]">© 2026 水博館水族</p>
       </div>
     </footer>
+
+    <div
+      id="promoLightbox"
+      class="promo-lightbox"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-label="放大檢視促銷圖片"
+    >
+      <button type="button" id="promoLbBackdrop" class="promo-lightbox__backdrop" aria-label="關閉放大圖"></button>
+      <button type="button" id="promoLbClose" class="promo-lightbox__close" aria-label="關閉">
+        <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        id="promoLbPrev"
+        class="promo-lightbox__nav promo-lightbox__nav--prev"
+        aria-label="上一張"
+        hidden
+      >
+        <i class="fa-solid fa-chevron-left text-xl" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        id="promoLbNext"
+        class="promo-lightbox__nav promo-lightbox__nav--next"
+        aria-label="下一張"
+        hidden
+      >
+        <i class="fa-solid fa-chevron-right text-xl" aria-hidden="true"></i>
+      </button>
+      <div id="promoLbShell" class="promo-lightbox__shell">
+        <img id="promoLbImg" class="promo-lightbox__img" alt="" decoding="async" />
+      </div>
+      <p id="promoLbCounter" class="promo-lightbox__counter" aria-live="polite" hidden></p>
+    </div>
 
     <button
       id="promoScrollTopBtn"
@@ -122,27 +166,13 @@ const collectionJsonLd = {
     >
       <i class="fa-solid fa-chevron-up" aria-hidden="true"></i>
     </button>
+
+    <script>
+      import { mountPromoPage } from '../../scripts/promoPage';
+      mountPromoPage();
+    </script>
   </div>
 </Layout>
-
-<script type="module">
-  const scrollTopBtn = document.getElementById('promoScrollTopBtn');
-
-  if (scrollTopBtn instanceof HTMLButtonElement) {
-    const toggleBtn = () => {
-      if (window.scrollY > 240) scrollTopBtn.classList.add('is-visible');
-      else scrollTopBtn.classList.remove('is-visible');
-    };
-
-    toggleBtn();
-    window.addEventListener('scroll', toggleBtn, { passive: true });
-    window.addEventListener('astro:page-load', toggleBtn);
-
-    scrollTopBtn.addEventListener('click', () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-  }
-</script>
 
 <style>
   .promo-scroll-top-btn {
@@ -205,30 +235,205 @@ const collectionJsonLd = {
       0 1px 0 rgba(15, 23, 42, 0.1);
   }
 
-  .aq-btn-line {
-    box-shadow:
-      0 10px 22px rgba(6, 199, 85, 0.28),
-      0 2px 0 rgba(6, 199, 85, 0.24);
-  }
-
-  .aq-btn-line:hover {
-    filter: brightness(0.97);
-    box-shadow:
-      0 14px 26px rgba(6, 199, 85, 0.35),
-      0 2px 0 rgba(6, 199, 85, 0.26);
-  }
-
-  .aq-btn-line:active {
-    transform: translateY(1px);
-    box-shadow:
-      0 6px 14px rgba(6, 199, 85, 0.3),
-      0 1px 0 rgba(6, 199, 85, 0.24);
-  }
-
   @media (max-width: 639px) {
     .promo-scroll-top-btn {
       right: 14px;
       bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+
+  .promo-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 10050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+    box-sizing: border-box;
+  }
+
+  .promo-lightbox[hidden] {
+    display: none !important;
+  }
+
+  .promo-lightbox:not([hidden]) {
+    animation: promo-lb-fade-in 0.22s ease-out;
+  }
+
+  @keyframes promo-lb-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  .promo-lightbox__backdrop {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: rgba(0, 0, 0, 0.82);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .promo-lightbox__close {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    z-index: 2;
+    display: inline-flex;
+    width: 46px;
+    height: 46px;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #0f172a;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .promo-lightbox__close:hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+
+  .promo-lightbox__close:active {
+    transform: scale(0.96);
+  }
+
+  .promo-lightbox__nav {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    display: none;
+    width: min(20vw, 160px);
+    height: min(72vh, 560px);
+    max-height: calc(100% - 120px);
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.92);
+    cursor: pointer;
+    transform: translateY(-50%);
+    transition: background 0.18s ease, color 0.18s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (pointer: fine) {
+    .promo-lightbox__nav:not([hidden]) {
+      display: inline-flex;
+    }
+  }
+
+  .promo-lightbox__nav:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #fff;
+  }
+
+  .promo-lightbox__nav:active {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .promo-lightbox__nav:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 3px;
+  }
+
+  .promo-lightbox__nav--prev {
+    left: max(10px, env(safe-area-inset-left, 0px));
+  }
+
+  .promo-lightbox__nav--next {
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  .promo-lightbox__shell {
+    position: relative;
+    z-index: 1;
+    max-width: min(96vw, 1200px);
+    max-height: min(88vh, 900px);
+    margin: 0;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .promo-lightbox__shell:active,
+  .promo-lightbox__shell.is-dragging {
+    cursor: grabbing;
+  }
+
+  @media (pointer: fine) {
+    .promo-lightbox__shell {
+      cursor: default;
+      touch-action: auto;
+    }
+
+    .promo-lightbox__shell:active,
+    .promo-lightbox__shell.is-dragging {
+      cursor: default;
+    }
+  }
+
+  .promo-lightbox__shell.is-dragging .promo-lightbox__img {
+    will-change: transform, opacity;
+  }
+
+  .promo-lightbox__counter {
+    position: absolute;
+    left: 50%;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    margin: 0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transform: translateX(-50%);
+    pointer-events: none;
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .promo-lightbox__counter[hidden] {
+    display: none !important;
+  }
+
+  .promo-lightbox__img {
+    display: block;
+    max-width: 100%;
+    max-height: min(88vh, 900px);
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    pointer-events: auto;
+    border-radius: 6px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+    user-select: none;
+    transform-origin: center center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .promo-lightbox:not([hidden]) {
+      animation: none;
     }
   }
 </style>

@@ -13,7 +13,7 @@ export const promotionType = defineType({
       readOnly: true,
       initialValue: ({ document }) => {
         const id = String((document as { _id?: string } | undefined)?._id ?? '');
-        if (id === 'promotion-weekly-new') return '每週新進魚隻';
+        if (id === 'promotion-weekly-new') return '每週新進魚隻🐠';
         if (id === 'promotion-special-offers') return '預定優惠';
         if (id === 'promotion-equipment-sale') return '器材促銷';
         return '';
