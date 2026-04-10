@@ -74,7 +74,8 @@ export const promotionType = defineType({
     defineField({
       name: 'promoImages',
       title: '促銷圖片（最多 25 張）',
-      description: '只要選取上傳即可（支援多選、拖曳排序）。不啟用裁切熱點。',
+      description:
+        '一次加多張：請從檔案總管一次選多個檔案，拖曳到本區（點「上傳」開檔案視窗時，多數瀏覽器一次只能選一張）。可拖曳排序。不啟用裁切熱點。',
       type: 'array',
       of: [
         defineArrayMember({

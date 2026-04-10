@@ -4,7 +4,8 @@ import SanityImage from '../../components/SanityImage.astro';
 import { getPromotionBySlug } from '../../data/promotions';
 import { buildDefaultSrc } from '../../lib/sanity/image';
 
-export const prerender = true;
+// 促銷頁圖片排序需即時反映 Sanity 拖曳順序，避免被建置時快取住
+export const prerender = false;
 
 const BRAND_SUFFIX = '水博館水族館';
 const PROMO_TABS = [
@@ -12,14 +13,6 @@ const PROMO_TABS = [
   { slug: 'special-offers', label: '預定優惠' },
   { slug: 'equipment-sale', label: '器材促銷' }
 ] as const;
-
-export async function getStaticPaths() {
-  return [
-    { params: { slug: 'weekly-new' } },
-    { params: { slug: 'special-offers' } },
-    { params: { slug: 'equipment-sale' } }
-  ];
-}
 
 const slug = String(Astro.params.slug ?? '').trim();
 const promo = await getPromotionBySlug(slug);

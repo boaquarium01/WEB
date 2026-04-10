@@ -72,12 +72,23 @@ npx sanity deploy
 
 之後可在 `sanity/schemaTypes/` 新增更多文件類型。
 
-## 6. 網站與商品連動（已接上）
+### 促銷圖 `promoImages`：電腦一次加多張
+
+在 Studio 裡若用「點上傳」開檔案視窗，**很多瀏覽器一次只能選一張**，這是常見限制。若要一次加很多張：
+
+1. 在檔案總管（Windows）或 Finder（Mac）**選取多個圖檔**（Ctrl／Shift 多選）
+2. **整批拖曳**到「促銷圖片」陣列區塊上放開
+
+若仍只能單張，可改為重複「新增項目」逐張加入，或安裝 `sanity-plugin-media` 用媒體庫挑圖。
+
+## 6. 網站與內容連動（已接上）
 
 首頁精選、全部分頁列表、分類頁、各 `/product/[slug]` 已改為 **建置時** 從 Sanity 讀取 `_type == "product"` 文件（見 `src/lib/sanity/fetchProducts.ts`）。
+促銷頁 `/promo/[slug]` 目前為 **SSR 即時讀取**，可即時反映 Studio 內 `promoImages` 的拖曳排序（見 `src/lib/sanity/fetchPromotions.ts`）。
 
 - 請在 Studio 建立商品並填 **slug**（英文網址）、分類、圖片等；首頁區塊會優先顯示勾選 **首頁精選** 的項目。
-- **靜態部署**：內容更新後需 **重新執行 `npm run build` 並部署**，訪客才會看到新資料。
+- **商品等靜態頁**：內容更新後需 **重新執行 `npm run build` 並部署**，訪客才會看到新資料。
+- **促銷頁 `/promo/[slug]`**：不需重建即可讀到最新排序與內容（前提：Studio 變更已儲存／發佈）。
 - 亦可改用 `sanity:client` 在單頁撰寫 GROQ；目前實作使用 `@sanity/client` 以利型別與快取。
 
 ## 7. 相關檔案
