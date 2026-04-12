@@ -1,14 +1,20 @@
 /**
  * Strapi 後台基礎網址（無尾隨斜線），例如 http://localhost:1337
  *
- * 優先讀 `process.env`（Vercel 等託管常在「執行期」注入），再退回 `import.meta.env`（建置時內嵌）。
- * 避免僅在儀表板設變數、建置階段未帶到而對外站永遠連不到 Strapi。
+ * 優先讀執行期 `process.env`（Vercel serverless 注入）。使用 `process.env['KEY']` 避免 Vite
+ * 建置時把 `process.env.PUBLIC_*` 靜態替換成 undefined。再退回 `import.meta.env`（建置內嵌）。
  */
+function readProcessEnv(key: 'PUBLIC_STRAPI_URL' | 'PUBLIC_CMS'): string {
+  try {
+    const v = typeof process !== 'undefined' && process.env ? process.env[key] : undefined;
+    return typeof v === 'string' ? v.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export function readStrapiBaseUrl(): string {
-  const fromProcess =
-    typeof process !== 'undefined' && typeof process.env.PUBLIC_STRAPI_URL === 'string'
-      ? process.env.PUBLIC_STRAPI_URL.trim()
-      : '';
+  const fromProcess = readProcessEnv('PUBLIC_STRAPI_URL');
   const fromMeta = String(import.meta.env.PUBLIC_STRAPI_URL ?? '').trim();
   const u = fromProcess || fromMeta;
   return u.replace(/\/+$/, '');
@@ -16,10 +22,7 @@ export function readStrapiBaseUrl(): string {
 
 /** 設為 `strapi` 時，商品／促銷資料改走 Strapi REST；其餘維持 Sanity */
 export function useStrapiCms(): boolean {
-  const fromProcess =
-    typeof process !== 'undefined' && typeof process.env.PUBLIC_CMS === 'string'
-      ? process.env.PUBLIC_CMS.trim()
-      : '';
+  const fromProcess = readProcessEnv('PUBLIC_CMS');
   const fromMeta = String(import.meta.env.PUBLIC_CMS ?? '').trim();
   const v = (fromProcess || fromMeta).toLowerCase();
   return v === 'strapi';

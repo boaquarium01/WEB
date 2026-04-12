@@ -2,17 +2,16 @@
 import Layout from '../../layouts/Layout.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import SanityImage from '../../components/SanityImage.astro';
-import { getAllProductSlugs, getProductBySlug } from '../../data/products';
+import { getProductBySlug } from '../../data/products';
 import { portableTextToHtml, portableBlocksToPlainText } from '../../lib/portableText';
 import { isPortableTextBlocks, strapiBlocksToHtml, strapiBlocksToPlainText } from '../../lib/strapi/blocks';
 import { SITE_TITLE_SHORT } from '../../config/site';
 
-export const prerender = true;
-
-export async function getStaticPaths() {
-  const slugs = await getAllProductSlugs();
-  return slugs.map((slug) => ({ params: { slug } }));
-}
+/**
+ * 必須 SSR：Vercel 上 `PUBLIC_CMS`／`PUBLIC_STRAPI_URL` 在「執行期」才可靠。
+ * 若 `prerender = true` + getStaticPaths，會只在建置時抓資料，易與託管環境變數不同步而永遠撈不到 Strapi。
+ */
+export const prerender = false;
 
 const slug = String(Astro.params.slug ?? '').trim();
 const product = await getProductBySlug(slug);
