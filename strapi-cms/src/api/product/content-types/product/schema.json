@@ -1,0 +1,173 @@
+{
+  "kind": "collectionType",
+  "collectionName": "products",
+  "info": {
+    "singularName": "product",
+    "pluralName": "products",
+    "displayName": "商品／展示項目",
+    "description": "對應 Sanity `product`：含分類關聯、排序、熱銷、主打、圖片、SEO、富文本 body（Blocks）"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "config": {
+    "metadatas": {
+      "name": {
+        "edit": { "label": "名稱" },
+        "list": { "label": "名稱" }
+      },
+      "slug": {
+        "edit": {
+          "label": "網址 slug",
+          "description": "路徑代號，須唯一；建議小寫英數與連字號（對應 Sanity 商品 slug 用途）。"
+        },
+        "list": { "label": "Slug" }
+      },
+      "category": {
+        "edit": { "label": "分類" },
+        "list": { "label": "分類" }
+      },
+      "excerpt": {
+        "edit": { "label": "短述（列表用）" },
+        "list": { "label": "短述" }
+      },
+      "body": {
+        "edit": {
+          "label": "內文（富文本）",
+          "description": "商品介紹頁主要內容；未填短述時前台可能由此摘錄列表預覽。"
+        },
+        "list": { "label": "內文" }
+      },
+      "sortOrder": {
+        "edit": {
+          "label": "分類內排序（數字越小越前面）",
+          "description": "建議依分類對照列表調整，與 Sanity 排序邏輯一致。"
+        },
+        "list": { "label": "排序" }
+      },
+      "enabled": {
+        "edit": { "label": "上架／下架" },
+        "list": { "label": "狀態" }
+      },
+      "featured": {
+        "edit": { "label": "首頁熱銷" },
+        "list": { "label": "熱銷" }
+      },
+      "featuredSortOrder": {
+        "edit": {
+          "label": "首頁熱銷排序（數字越小越前面）"
+        },
+        "list": { "label": "熱銷排序" }
+      },
+      "heroSpotlight": {
+        "edit": {
+          "label": "主打商品",
+          "description": "首頁只顯示最近 3 筆；若已滿請先關閉較舊的再開新主打。"
+        },
+        "list": { "label": "主打" }
+      },
+      "heroSpotlightActivatedAt": {
+        "edit": {
+          "label": "主打啟用時間（自動）",
+          "description": "開啟主打時由系統寫入；用於首頁排序（最近開啟者優先）。"
+        },
+        "list": { "label": "主打時間" }
+      },
+      "image": {
+        "edit": {
+          "label": "圖片（列表主圖／輪播第一張）"
+        },
+        "list": { "label": "主圖" }
+      },
+      "gallery": {
+        "edit": {
+          "label": "更多圖片（詳情頁輪播）",
+          "description": "選填。"
+        },
+        "list": { "label": "圖庫" }
+      },
+      "seoTitle": {
+        "edit": { "label": "SEO 標題" },
+        "list": { "label": "SEO 標題" }
+      },
+      "seoKeywords": {
+        "edit": {
+          "label": "SEO 關鍵字",
+          "description": "JSON 格式儲存；前台會正規化為關鍵字陣列（對應 Sanity 標籤式關鍵字）。"
+        },
+        "list": { "label": "關鍵字" }
+      },
+      "seoDescription": {
+        "edit": { "label": "SEO 描述" },
+        "list": { "label": "SEO 描述" }
+      }
+    }
+  },
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "maxLength": 64
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "products",
+      "required": true
+    },
+    "excerpt": {
+      "type": "text"
+    },
+    "body": {
+      "type": "blocks"
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 1679615
+    },
+    "enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false
+    },
+    "featuredSortOrder": {
+      "type": "integer"
+    },
+    "heroSpotlight": {
+      "type": "boolean",
+      "default": false
+    },
+    "heroSpotlightActivatedAt": {
+      "type": "datetime"
+    },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "gallery": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": ["images"]
+    },
+    "seoTitle": {
+      "type": "string"
+    },
+    "seoKeywords": {
+      "type": "json"
+    },
+    "seoDescription": {
+      "type": "text"
+    }
+  }
+}

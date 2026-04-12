@@ -2,7 +2,32 @@
 import Layout from '../../layouts/Layout.astro';
 import SanityImage from '../../components/SanityImage.astro';
 import { getPromotionBySlug } from '../../data/promotions';
+import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
 import { buildDefaultSrc } from '../../lib/sanity/image';
+
+function isStrapiPromoImg(img: unknown): boolean {
+  return Boolean(
+    img &&
+      typeof img === 'object' &&
+      'url' in img &&
+      typeof (img as { url?: unknown }).url === 'string' &&
+      String((img as { url: string }).url).trim() !== ''
+  );
+}
+
+function promoImageFullSrc(img: unknown, width: number): string {
+  if (img && typeof img === 'object' && 'url' in img) {
+    const u = (img as { url?: unknown }).url;
+    if (typeof u === 'string' && u.trim()) return u.trim();
+  }
+  return (
+    buildDefaultSrc(img as SanityImageSource, width) ||
+    buildDefaultSrc(img as SanityImageSource, Math.min(width, 1200)) ||
+    buildDefaultSrc(img as SanityImageSource, 800) ||
+    buildDefaultSrc(img as SanityImageSource, 600) ||
+    ''
+  );
+}
 
 // 促銷頁圖片排序需即時反映 Sanity 拖曳順序，避免被建置時快取住
 export const prerender = false;
@@ -25,10 +50,10 @@ const tabs = PROMO_TABS.filter((tab) => tab.slug !== slug);
 const promoImages = promo.promoImages.slice(0, 25).map((img) => ({
   source: img,
   fullSrc:
-    buildDefaultSrc(img, 1600) ||
-    buildDefaultSrc(img, 1200) ||
-    buildDefaultSrc(img, 800) ||
-    buildDefaultSrc(img, 600) ||
+    promoImageFullSrc(img, 1600) ||
+    promoImageFullSrc(img, 1200) ||
+    promoImageFullSrc(img, 800) ||
+    promoImageFullSrc(img, 600) ||
     ''
 }));
 const heroImageSrc = promoImages[0]?.fullSrc || '';
@@ -91,7 +116,29 @@ const collectionJsonLd = {
                 aria-label={`放大檢視第 ${i + 1} 張圖片`}
               >
                 <div class="aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
-                  <SanityImage source={source} alt={`${promo.title}（第 ${i + 1} 張）`} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" width={900} height={900} priority={i === 0} lqipCover imgClass="object-cover" class="h-full w-full" />
+                  {isStrapiPromoImg(source) ? (
+                    <img
+                      src={fullSrc}
+                      alt={`${promo.title}（第 ${i + 1} 張）`}
+                      width={900}
+                      height={900}
+                      loading={i === 0 ? 'eager' : 'lazy'}
+                      decoding="async"
+                      class="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <SanityImage
+                      source={source as SanityImageSource}
+                      alt={`${promo.title}（第 ${i + 1} 張）`}
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      width={900}
+                      height={900}
+                      priority={i === 0}
+                      lqipCover
+                      imgClass="object-cover"
+                      class="h-full w-full"
+                    />
+                  )}
                 </div>
               </button>
             ))}

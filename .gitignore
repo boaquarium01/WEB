@@ -1,3 +1,6 @@
+# 本機暫存目錄（勿提交）
+.tmp/
+
 # build output
 dist/
 
@@ -28,3 +31,16 @@ pnpm-debug.log*
 
 # vercel local build output
 .vercel/
+
+# Strapi（子專案 strapi-cms）
+strapi-cms/node_modules/
+strapi-cms/.tmp/*
+!strapi-cms/.tmp/.gitkeep
+strapi-cms/dist/
+strapi-cms/.strapi/
+strapi-cms/.cache/
+strapi-cms/build/
+strapi-cms/.env
+# Strapi 本機上傳媒體（勿提交；雲端用資料庫／儲存服務）
+strapi-cms/public/uploads/*
+!strapi-cms/public/uploads/.gitkeep

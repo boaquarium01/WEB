@@ -15,6 +15,8 @@
     "astro": "astro",
     "studio": "sanity dev --host",
     "studio:deploy": "sanity deploy",
+    "strapi:dev": "npm run develop --prefix strapi-cms",
+    "strapi:build": "npm run build --prefix strapi-cms",
     "migrate:product-slugs": "node scripts/migrate-product-slugs.mjs",
     "migrate:product-slugs:dry": "node scripts/migrate-product-slugs.mjs --dry-run",
     "check:product-slugs": "node scripts/check-product-slugs.mjs"

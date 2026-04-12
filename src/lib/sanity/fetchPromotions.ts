@@ -1,5 +1,6 @@
 import { createClient, type SanityClient } from '@sanity/client';
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import type { Promotion } from '../../data/promotion';
 
 const API_VERSION = '2025-03-18';
 
@@ -46,14 +47,6 @@ function getClient(): SanityClient | null {
     maxRetries: 1
   });
 }
-
-export type Promotion = {
-  _id?: string;
-  title: string;
-  slug: string;
-  content: string;
-  promoImages: SanityImageSource[];
-};
 
 type SanityPromotionDoc = {
   _id?: string;

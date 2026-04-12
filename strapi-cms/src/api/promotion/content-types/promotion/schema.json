@@ -1,0 +1,79 @@
+{
+  "kind": "collectionType",
+  "collectionName": "promotions",
+  "info": {
+    "singularName": "promotion",
+    "pluralName": "promotions",
+    "displayName": "促銷分頁",
+    "description": "對應 Sanity `promotion`：title、slug、content、promoImages（後台請勿超過 25 張，與 Sanity 驗證一致）"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "config": {
+    "metadatas": {
+      "title": {
+        "edit": {
+          "label": "標題",
+          "description": "三筆固定促銷入口的標題；與 Sanity 預設文案一致。"
+        },
+        "list": {
+          "label": "標題"
+        }
+      },
+      "slug": {
+        "edit": {
+          "label": "網址 slug",
+          "description": "建立後請勿隨意修改，避免前台連結失效（與 Sanity 行為一致）。"
+        },
+        "list": {
+          "label": "Slug"
+        }
+      },
+      "content": {
+        "edit": {
+          "label": "內容（文字）",
+          "description": "促銷頁主要文字內容。"
+        },
+        "list": {
+          "label": "內容"
+        }
+      },
+      "promoImages": {
+        "edit": {
+          "label": "促銷圖片（最多 25 張）",
+          "description": "請勿超過 25 張，與 Sanity 驗證一致。"
+        },
+        "list": {
+          "label": "圖片"
+        }
+      }
+    }
+  },
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "maxLength": 96,
+      "pluginOptions": {
+        "content-manager": {
+          "visible": false
+        }
+      }
+    },
+    "content": {
+      "type": "text",
+      "default": "\n"
+    },
+    "promoImages": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": ["images"]
+    }
+  }
+}

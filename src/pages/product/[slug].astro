@@ -4,6 +4,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 import SanityImage from '../../components/SanityImage.astro';
 import { getAllProductSlugs, getProductBySlug } from '../../data/products';
 import { portableTextToHtml, portableBlocksToPlainText } from '../../lib/portableText';
+import { isPortableTextBlocks, strapiBlocksToHtml, strapiBlocksToPlainText } from '../../lib/strapi/blocks';
 import { SITE_TITLE_SHORT } from '../../config/site';
 
 export const prerender = true;
@@ -35,9 +36,15 @@ function absUrl(href: string) {
   return new URL(s, Astro.url.origin).href;
 }
 
-const bodyHtml = portableTextToHtml(product.body);
-const usePortableBody = Boolean(bodyHtml);
-const bodyPlain = portableBlocksToPlainText(product.body);
+const bodyPlain = isPortableTextBlocks(product.body)
+  ? portableBlocksToPlainText(product.body)
+  : strapiBlocksToPlainText(product.body as unknown[] | null);
+
+const bodyHtml = isPortableTextBlocks(product.body)
+  ? portableTextToHtml(product.body)
+  : strapiBlocksToHtml(product.body as unknown[] | null);
+
+const usePortableBody = Boolean(String(bodyHtml ?? '').trim());
 
 // SEO：優先 Studio 的 seo 欄位，否則由短述或富文本純文字產生
 const pageTitle = product.seoTitle

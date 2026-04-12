@@ -1,5 +1,5 @@
 /**
- * 商品／分類常數與型別（資料內容來自 Sanity，見 src/lib/sanity/fetchProducts.ts）
+ * 商品／分類常數與型別（預設 Sanity；`PUBLIC_CMS=strapi` 時見 src/lib/strapi/fetchProducts.ts）
  */
 
 /** 列表每頁筆數 */

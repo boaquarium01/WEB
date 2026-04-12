@@ -1,0 +1,29 @@
+{
+  "content-manager.content-types.api::promotion.promotion.title": "標題",
+  "content-manager.content-types.api::promotion.promotion.slug": "網址 slug",
+  "content-manager.content-types.api::promotion.promotion.content": "內容（文字）",
+  "content-manager.content-types.api::promotion.promotion.promoImages": "促銷圖片（最多 25 張）",
+
+  "content-manager.content-types.api::category.category.name": "分類名稱",
+  "content-manager.content-types.api::category.category.slug": "分類代號（網址）",
+  "content-manager.content-types.api::category.category.orderRank": "拖曳排序（orderRank）",
+  "content-manager.content-types.api::category.category.legacySortOrder": "排序（備援，舊資料）",
+  "content-manager.content-types.api::category.category.products": "此分類下的商品",
+
+  "content-manager.content-types.api::product.product.name": "名稱",
+  "content-manager.content-types.api::product.product.slug": "網址 slug",
+  "content-manager.content-types.api::product.product.category": "分類",
+  "content-manager.content-types.api::product.product.excerpt": "短述（列表用）",
+  "content-manager.content-types.api::product.product.body": "內文（富文本）",
+  "content-manager.content-types.api::product.product.sortOrder": "分類內排序（數字越小越前面）",
+  "content-manager.content-types.api::product.product.enabled": "上架／下架",
+  "content-manager.content-types.api::product.product.featured": "首頁熱銷",
+  "content-manager.content-types.api::product.product.featuredSortOrder": "首頁熱銷排序（數字越小越前面）",
+  "content-manager.content-types.api::product.product.heroSpotlight": "主打商品",
+  "content-manager.content-types.api::product.product.heroSpotlightActivatedAt": "主打啟用時間（自動）",
+  "content-manager.content-types.api::product.product.image": "圖片（列表主圖／輪播第一張）",
+  "content-manager.content-types.api::product.product.gallery": "更多圖片（詳情頁輪播）",
+  "content-manager.content-types.api::product.product.seoTitle": "SEO 標題",
+  "content-manager.content-types.api::product.product.seoKeywords": "SEO 關鍵字",
+  "content-manager.content-types.api::product.product.seoDescription": "SEO 描述"
+}
