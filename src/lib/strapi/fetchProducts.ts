@@ -204,10 +204,7 @@ export async function getAllProducts(): Promise<Product[]> {
 
   let rows: Record<string, unknown>[] = [];
   try {
-    rows = await fetchAllPages(base, 'products', {
-      'filters[enabled][$eq]': 'true',
-      populate: '*'
-    });
+    rows = await fetchAllPages(base, 'products', { populate: '*' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn('[Strapi] 商品列表 API 無法連線，先顯示空清單。', msg);
@@ -239,7 +236,6 @@ export async function getHeroSpotlightProducts(): Promise<Product[]> {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await fetchAllPages(base, 'products', {
-      'filters[enabled][$eq]': 'true',
       'filters[heroSpotlight][$eq]': 'true',
       populate: '*'
     });
@@ -287,7 +283,6 @@ export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
   let rows: Record<string, unknown>[] = [];
   try {
     rows = await fetchAllPages(base, 'products', {
-      'filters[enabled][$eq]': 'true',
       'filters[featured][$eq]': 'true',
       populate: '*'
     });
@@ -346,7 +341,6 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
 
   const sp = new URLSearchParams({
     'filters[slug][$eq]': s,
-    'filters[enabled][$eq]': 'true',
     populate: '*'
   });
 
@@ -391,7 +385,6 @@ export async function getAllProductSlugs(): Promise<string[]> {
   if (!base) return [];
 
   const sp = new URLSearchParams({
-    'filters[enabled][$eq]': 'true',
     'fields[0]': 'slug',
     'pagination[pageSize]': '500'
   });

@@ -2,7 +2,7 @@
 import Layout from '../layouts/Layout.astro';
 import ProductGridStagger from '../components/ProductGridStagger.astro';
 import HomeHeroSpotlight from '../components/HomeHeroSpotlight.astro';
-import { getAllCategories, getFeaturedProducts, getHeroSpotlightProducts } from '../data/products';
+import { getAllCategories, getAllProducts, getFeaturedProducts, getHeroSpotlightProducts } from '../data/products';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 
 const navItems = [
@@ -28,9 +28,16 @@ const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
 }));
 
 const heroSlugs = new Set(heroSpotlightProducts.map((p) => p.slug));
-const featuredProducts = (await getFeaturedProducts(10 + heroSlugs.size))
+let featuredProducts = (await getFeaturedProducts(10 + heroSlugs.size))
   .filter((p) => !heroSlugs.has(p.slug))
   .slice(0, 10);
+
+if (featuredProducts.length === 0) {
+  // 後台尚未勾選 featured 時，首頁仍顯示一般商品，避免誤判為「沒有抓到商品」。
+  featuredProducts = (await getAllProducts())
+    .filter((p) => !heroSlugs.has(p.slug))
+    .slice(0, 10);
+}
 
 const featuredStaggerItems = featuredProducts.map((p) => ({
   slug: p.slug,

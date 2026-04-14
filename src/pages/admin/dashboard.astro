@@ -1,0 +1,1867 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { SITE_TITLE_SHORT } from '../../config/site';
+import { readFileSync } from 'node:fs';
+import { readStrapiAdminBaseUrl } from '../../lib/strapi/env';
+
+if (Astro.url.pathname.replace(/\/+$/, '') === '/admin/dashboard') {
+  return Astro.redirect('/');
+}
+
+type Schema = {
+  config?: { metadatas?: Record<string, { edit?: { label?: string } }> };
+  attributes: Record<string, { type: string; required?: boolean; multiple?: boolean; default?: unknown }>;
+};
+
+function readSchema(path: string) {
+  return JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf-8')) as Schema;
+}
+
+const schemas = {
+  promotion: readSchema('../../../strapi-cms/src/api/promotion/content-types/promotion/schema.json'),
+  product: readSchema('../../../strapi-cms/src/api/product/content-types/product/schema.json'),
+  category: readSchema('../../../strapi-cms/src/api/category/content-types/category/schema.json')
+};
+
+const defs = {
+  promotion: { label: '促銷分頁', api: '/api/promotions', title: 'title' },
+  product: { label: '商品列表', api: '/api/products', title: 'name' },
+  category: { label: '商品分類', api: '/api/categories', title: 'name' }
+};
+
+const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
+---
+
+<Layout title={`後台管理｜${SITE_TITLE_SHORT}`} description="員工後台">
+  <main class="adminx" data-schemas={JSON.stringify(schemas)} data-defs={JSON.stringify(defs)} data-base={base}>
+    <div class="mobile-sanity-bar">
+      <button type="button" id="mobileSanityMenuBtn" class="mobile-sanity-bar__iconbtn" aria-label="回首頁選單">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </button>
+      <span class="mobile-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
+      <div class="mobile-sanity-bar__mid">
+        <div class="mobile-sanity-bar__textcol">
+          <span class="mobile-sanity-bar__title">水博館官網後台</span>
+          <span id="sectionLabelMobile" class="mobile-sanity-bar__section" aria-live="polite">促銷分頁</span>
+        </div>
+        <span id="titleStatus" class="title-status title-status--in-mid">準備中</span>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="center-nav">
+        <div class="center-nav__meta">
+          <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
+          <span id="sectionLabelDesktop" class="section-label section-label--desktop" aria-live="polite">促銷分頁</span>
+        </div>
+        <div id="modelTabs" class="tabs"></div>
+      </div>
+      <div class="actions">
+        <button id="simpleModeToggle" class="mode-btn is-on action-btn" type="button" aria-pressed="true">
+          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span class="action-btn__label">簡易</span>
+        </button>
+        <button id="refreshBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          <span class="action-btn__label">刷新</span>
+        </button>
+        <button id="newBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          <span class="action-btn__label">新增</span>
+        </button>
+        <button id="saveBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+          <span class="action-btn__label">儲存</span>
+        </button>
+      </div>
+    </header>
+
+    <section id="mobileHub" class="mobile-hub" aria-label="管理選單首頁">
+      <nav class="mobile-hub__list">
+        <button type="button" class="mobile-hub__row" data-hub="promo-weekly">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+          <span class="mobile-hub__label">每週新進魚隻 🐠</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="promo-special">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+          <span class="mobile-hub__label">預定優惠</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="promo-equipment">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+          <span class="mobile-hub__label">器材促銷</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="products-all">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+          <span class="mobile-hub__label">全部商品</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="products-by-category">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder"></i></span>
+          <span class="mobile-hub__label">依分類調整順序</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="categories-sort">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-arrows-up-down"></i></span>
+          <span class="mobile-hub__label">商品分類（拖曳排序）</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+      </nav>
+    </section>
+
+    <section class="workspace">
+      <aside class="listpane">
+        <div class="listpane__filters">
+          <select id="categoryFilter" class="search search--category" style="display:none;">
+            <option value="">全部分類</option>
+          </select>
+          <div class="search-wrap">
+            <span class="search-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input id="searchInput" class="search search--with-icon" placeholder="搜尋目前清單..." />
+          </div>
+        </div>
+        <div id="listCount" class="count">載入中...</div>
+        <div id="entryList" class="entry-list"></div>
+      </aside>
+
+      <section class="formpane">
+        <div class="formpane__section-head">
+          <span id="sectionLabelForm" class="formpane__section-title" aria-live="polite"></span>
+        </div>
+        <p id="statusText" class="status" style="display:none;">準備中...</p>
+        <form id="formRoot" class="form-grid"></form>
+      </section>
+    </section>
+    <div id="imgPreviewModal" class="img-modal" hidden>
+      <button id="imgPreviewBackdrop" class="img-modal__backdrop" type="button" aria-label="關閉預覽"></button>
+      <button id="imgPreviewClose" class="img-modal__close" type="button" aria-label="關閉">✕</button>
+      <img id="imgPreviewEl" class="img-modal__img" alt="圖片預覽" />
+    </div>
+  </main>
+
+  <script>
+    const root = document.querySelector('.adminx');
+    if (!(root instanceof HTMLElement)) throw new Error('missing root');
+    const schemas = JSON.parse(root.dataset.schemas ?? '{}');
+    const defs = JSON.parse(root.dataset.defs ?? '{}');
+    const base = (root.dataset.base ?? 'http://localhost:1337').replace(/\/+$/, '');
+
+    const modelTabs = document.getElementById('modelTabs');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const newBtn = document.getElementById('newBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const simpleModeToggle = document.getElementById('simpleModeToggle');
+    const searchInput = document.getElementById('searchInput');
+    const entryList = document.getElementById('entryList');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const listCount = document.getElementById('listCount');
+    const formRoot = document.getElementById('formRoot');
+    const statusText = document.getElementById('statusText');
+    const titleStatus = document.getElementById('titleStatus');
+    const titleStatusDesktop = document.getElementById('titleStatusDesktop');
+    const sectionLabelMobile = document.getElementById('sectionLabelMobile');
+    const sectionLabelForm = document.getElementById('sectionLabelForm');
+    const sectionLabelDesktop = document.getElementById('sectionLabelDesktop');
+    const imgPreviewModal = document.getElementById('imgPreviewModal');
+    const imgPreviewBackdrop = document.getElementById('imgPreviewBackdrop');
+    const imgPreviewClose = document.getElementById('imgPreviewClose');
+    const imgPreviewEl = document.getElementById('imgPreviewEl');
+    const mobileSanityMenuBtn = document.getElementById('mobileSanityMenuBtn');
+    const mobileHub = document.getElementById('mobileHub');
+    if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !listCount || !formRoot || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl || !mobileSanityMenuBtn || !mobileHub) {
+      throw new Error('missing ui');
+    }
+
+    const state = { model: 'promotion', entries: [], selectedId: '', selected: {}, categoryOptions: [], simpleMode: true, pendingUploads: {}, dirty: false, saving: false };
+
+    const labelOf = (model, field) => schemas[model]?.config?.metadatas?.[field]?.edit?.label ?? field;
+    const kOf = (row) => String(row.documentId ?? row.id ?? '');
+    const norm = (json) => Array.isArray(json?.data) ? json.data.map((x) => ({ ...(x.attributes ?? {}), ...x, id: x.id, documentId: x.documentId })) : [];
+    const advancedField = (field) =>
+      /slug|seo|sort|rank|order|legacy|activatedAt/i.test(field);
+    const essentialField = (field) =>
+      /title|name|excerpt|content|body|image|images|promoImages|gallery|enabled|featured|heroSpotlight/i.test(field);
+    const slug5 = () => Array.from({ length: 5 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+    const isMobileNarrow = () => window.matchMedia('(max-width: 860px)').matches;
+    function entryDisplayTitle() {
+      const def = defs[state.model];
+      const key = String(def?.title ?? '').trim();
+      if (!key) return '';
+      const card = formRoot.querySelector(`.card[data-field="${key}"]`);
+      if (card) {
+        const i = card.querySelector('input,textarea');
+        if (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) {
+          const fromDom = String(i.value ?? '').trim();
+          if (fromDom) return fromDom;
+        }
+      }
+      return String(state.selected?.[key] ?? '').trim();
+    }
+    function updateSectionLabels() {
+      const lab = defs[state.model]?.label ?? '';
+      const narrow = isMobileNarrow();
+      const panel = root.dataset.mobilePanel ?? '';
+      sectionLabelDesktop.textContent = lab;
+      let barLine = '';
+      let formLine = '';
+      if (narrow && panel === 'home') {
+        barLine = '管理選單';
+      } else if (narrow) {
+        formLine = entryDisplayTitle() || lab;
+      }
+      sectionLabelMobile.textContent = barLine;
+      sectionLabelForm.textContent = formLine;
+    }
+    function setMobilePanel(panel) {
+      root.dataset.mobilePanel = panel;
+      const bar = root.querySelector('.mobile-sanity-bar');
+      if (bar instanceof HTMLElement) bar.setAttribute('aria-hidden', isMobileNarrow() ? 'false' : 'true');
+      mobileHub.setAttribute('aria-hidden', isMobileNarrow() && panel === 'home' ? 'false' : 'true');
+      updateSectionLabels();
+    }
+    function confirmDiscardIfDirty() {
+      if (!state.dirty) return true;
+      return window.confirm('有更動尚未儲存，確定要離開嗎？');
+    }
+    function setStatus(text) {
+      titleStatus.textContent = text;
+      titleStatusDesktop.textContent = text;
+      statusText.textContent = text;
+      saveBtn.classList.toggle('is-dirty', state.dirty);
+    }
+    function markDirty() {
+      if (state.dirty) return;
+      state.dirty = true;
+      setStatus('有更動待儲存');
+    }
+    function openPreview(src) {
+      if (!(imgPreviewModal instanceof HTMLElement) || !(imgPreviewEl instanceof HTMLImageElement)) return;
+      imgPreviewEl.src = src;
+      imgPreviewModal.hidden = false;
+    }
+    function closePreview() {
+      if (!(imgPreviewModal instanceof HTMLElement) || !(imgPreviewEl instanceof HTMLImageElement)) return;
+      imgPreviewModal.hidden = true;
+      imgPreviewEl.src = '';
+    }
+
+    async function api(path, init = {}) {
+      const proxy = `/api/admin/strapi-proxy?path=${encodeURIComponent(path)}`;
+      const res = await fetch(proxy, init);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg = errJson?.error?.message ? `：${errJson.error.message}` : '';
+        throw new Error(`HTTP ${res.status} ${path}${msg}`);
+      }
+      return res.json();
+    }
+
+    const UPLOAD_MAX_MB = 20;
+    const ALLOWED_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const MIME_TO_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+    function uploadErrText(payload, status) {
+      const base = payload?.error?.message ?? payload?.message ?? '';
+      const details = payload?.error?.details ?? payload?.details;
+      if (!details) return String(base || `HTTP ${status}`);
+      const detailText = typeof details === 'string' ? details : JSON.stringify(details);
+      return String(base ? `${base} (${detailText})` : detailText || `HTTP ${status}`);
+    }
+
+    function fileExt(name = '') {
+      const idx = name.lastIndexOf('.');
+      if (idx < 0) return '';
+      return name.slice(idx + 1).toLowerCase();
+    }
+
+    function normalizeRelationValue(raw) {
+      const v = String(raw ?? '').trim();
+      if (!v) return null;
+      // 相容 Strapi v4/v5：純數字用數字 id，其餘視為 documentId。
+      if (/^\d+$/.test(v)) return Number(v);
+      return v;
+    }
+
+    function safeUploadName(file) {
+      const mime = String(file.type || '').toLowerCase();
+      const ext = fileExt(file.name) || MIME_TO_EXT[mime] || 'jpg';
+      const rawBase = String(file.name || 'upload').replace(/\.[^.]+$/, '');
+      const safeBase = rawBase
+        .normalize('NFKD')
+        .replace(/[^\w.-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60) || `upload_${Date.now()}`;
+      return `${safeBase}.${ext}`;
+    }
+
+    function validateUploadFiles(files) {
+      const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+      const failed = [];
+      const passed = [];
+      files.forEach((f) => {
+        const ext = fileExt(f.name);
+        const mime = String(f.type || '').toLowerCase();
+        if (!ALLOWED_IMAGE_EXT.includes(ext) && !ALLOWED_IMAGE_MIME.includes(mime)) {
+          failed.push(`${f.name}（不支援格式，僅限 ${ALLOWED_IMAGE_EXT.join('/')}）`);
+          return;
+        }
+        if (f.size > maxBytes) {
+          failed.push(`${f.name}（超過 ${UPLOAD_MAX_MB}MB）`);
+          return;
+        }
+        passed.push(f);
+      });
+      return { passed, failed };
+    }
+
+    async function uploadBatch(files) {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f, safeUploadName(f)));
+      const res = await fetch('/api/admin/strapi-proxy?path=%2Fapi%2Fupload', { method: 'POST', body: fd });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(uploadErrText(payload, res.status));
+      return Array.isArray(payload) ? payload.map((x) => Number(x.id)).filter(Number.isFinite) : [];
+    }
+
+    async function uploadOne(file) {
+      const fd = new FormData();
+      fd.append('files', file, safeUploadName(file));
+      const res = await fetch('/api/admin/strapi-proxy?path=%2Fapi%2Fupload', { method: 'POST', body: fd });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(uploadErrText(payload, res.status));
+      const id = Number(payload?.[0]?.id);
+      if (!Number.isFinite(id)) throw new Error('回傳缺少媒體 ID');
+      return id;
+    }
+
+    async function upload(files) {
+      if (!Array.isArray(files) || files.length === 0) return [];
+      const { passed, failed: invalidFiles } = validateUploadFiles(files);
+      if (invalidFiles.length) {
+        setStatus(`已略過不可上傳檔案：${invalidFiles.join('、')}`);
+      }
+      if (!passed.length) {
+        throw new Error(`上傳失敗：${invalidFiles.join('、')}`);
+      }
+      try {
+        return await uploadBatch(passed);
+      } catch (batchError) {
+        const okIds = [];
+        const failed = [];
+        for (const file of passed) {
+          try {
+            const id = await uploadOne(file);
+            okIds.push(id);
+          } catch (singleError) {
+            const reason = singleError instanceof Error ? singleError.message : String(singleError);
+            failed.push(`${file.name}（${reason}）`);
+          }
+        }
+        if (!okIds.length) {
+          throw new Error(`上傳失敗：${failed.join('、') || (batchError instanceof Error ? batchError.message : String(batchError))}`);
+        }
+        if (failed.length || invalidFiles.length) {
+          const allFailed = [...invalidFiles, ...failed];
+          setStatus(`部分圖片上傳失敗：${allFailed.join('、')}`);
+        }
+        return okIds;
+      }
+    }
+
+    const tabIcons = {
+      promotion: 'fa-tags',
+      product: 'fa-box-open',
+      category: 'fa-folder-tree'
+    };
+
+    function drawTabs() {
+      modelTabs.innerHTML = '';
+      Object.keys(defs).forEach((k) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `tab ${state.model === k ? 'is-active' : ''}`;
+        const ic = document.createElement('i');
+        ic.className = `fa-solid ${tabIcons[k] ?? 'fa-layer-group'}`;
+        ic.setAttribute('aria-hidden', 'true');
+        const lab = document.createElement('span');
+        lab.textContent = defs[k].label;
+        b.append(ic, lab);
+        b.onclick = () => switchModel(k);
+        modelTabs.appendChild(b);
+      });
+    }
+
+    function drawList() {
+      const q = String(searchInput.value ?? '').trim().toLowerCase();
+      const titleKey = defs[state.model].title;
+      let items = [...state.entries];
+      let categoryName = () => '';
+      let categoryId = () => '';
+      const getProductThumbSrc = (row) => {
+        let media = row?.image ?? row?.images ?? null;
+        if (Array.isArray(media)) media = media[0] ?? null;
+        const raw =
+          media?.url ??
+          media?.attributes?.url ??
+          media?.data?.attributes?.url ??
+          media?.data?.url ??
+          '';
+        const s = String(raw ?? '');
+        if (!s) return '';
+        return s.startsWith('http') ? s : `${base}${s}`;
+      };
+      if (state.model === 'product') {
+        const selectedCategory = String(categoryFilter.value ?? '').trim();
+        categoryName = (row) =>
+          String(row?.category?.name ?? row?.category?.data?.attributes?.name ?? row?.category?.data?.name ?? '').trim();
+        categoryId = (row) => String(row?.category?.id ?? row?.category?.data?.id ?? '').trim();
+
+        if (selectedCategory) items = items.filter((x) => categoryId(x) === selectedCategory);
+        items.sort((a, b) => {
+          const ca = categoryName(a);
+          const cb = categoryName(b);
+          if (ca !== cb) return ca.localeCompare(cb, 'zh-Hant');
+          const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+          const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+          if (sa !== sb) return sa - sb;
+          return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
+        });
+      }
+      items = items.filter((x) => String(x[titleKey] ?? '').toLowerCase().includes(q));
+      listCount.textContent = '';
+      entryList.innerHTML = '';
+      items.forEach((row) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const isActive = kOf(row) === state.selectedId;
+        if (state.model === 'product') {
+          const enabled = Boolean(row.enabled);
+          const featured = Boolean(row.featured);
+          const thumbSrc = getProductThumbSrc(row);
+          const cat = categoryName(row) || '未分類';
+          const title = String(row[titleKey] ?? '').trim() || `項目 #${row.id}`;
+
+          b.className = `item item--product ${isActive ? 'is-active' : ''} ${enabled ? 'item--enabled' : 'item--disabled'}`;
+
+          const thumbWrap = document.createElement('span');
+          thumbWrap.className = 'item__thumbWrap';
+          if (thumbSrc) {
+            const img = document.createElement('img');
+            img.className = 'item__thumb';
+            img.src = thumbSrc;
+            img.alt = '首圖';
+            img.loading = 'lazy';
+            thumbWrap.appendChild(img);
+          } else {
+            const ph = document.createElement('span');
+            ph.className = 'item__thumb item__thumb--empty';
+            ph.setAttribute('aria-hidden', 'true');
+            thumbWrap.appendChild(ph);
+          }
+
+          const main = document.createElement('span');
+          main.className = 'item__main';
+
+          const row1 = document.createElement('span');
+          row1.className = 'item__row1';
+
+          const titleEl = document.createElement('span');
+          titleEl.className = 'item__title';
+          titleEl.textContent = title;
+          row1.appendChild(titleEl);
+
+          if (featured) {
+            const badge = document.createElement('span');
+            badge.className = 'badge badge--featured';
+            badge.textContent = '主打';
+            row1.appendChild(badge);
+          }
+
+          const meta = document.createElement('span');
+          meta.className = 'item__meta';
+          meta.textContent = cat;
+
+          main.append(row1, meta);
+          b.append(thumbWrap, main);
+        } else {
+          b.className = `item ${isActive ? 'is-active' : ''}`;
+          b.textContent = String(row[titleKey] ?? `項目 #${row.id}`);
+        }
+        b.onclick = () => select(row);
+        entryList.appendChild(b);
+      });
+    }
+    function select(row) {
+      fill(row);
+      state.dirty = false;
+      setStatus(`已載入 ${defs[state.model].label}`);
+      if (isMobileNarrow()) setMobilePanel('editor');
+    }
+
+    function fieldEl(field, cfg) {
+      const wrap = document.createElement('section');
+      wrap.className = 'card';
+      wrap.dataset.field = field;
+      wrap.dataset.type = cfg.type;
+      wrap.dataset.multiple = String(Boolean(cfg.multiple));
+      if (cfg.type === 'media' || field === 'content' || field === 'body') wrap.classList.add('span2');
+      wrap.innerHTML = `<label>${labelOf(state.model, field)}</label>`;
+
+      if (cfg.type === 'boolean') {
+        wrap.classList.add('card--bool');
+        wrap.insertAdjacentHTML('beforeend', `<label class="switch"><input type="checkbox"><span></span></label>`);
+      } else if (cfg.type === 'text' || cfg.type === 'blocks') {
+        const rows = cfg.type === 'blocks' ? 7 : field === 'excerpt' ? 2 : 4;
+        wrap.insertAdjacentHTML('beforeend', `<textarea rows="${rows}"></textarea>`);
+      } else if (cfg.type === 'relation') {
+        wrap.insertAdjacentHTML('beforeend', `<select></select>`);
+      } else if (cfg.type === 'media') {
+        wrap.insertAdjacentHTML(
+          'beforeend',
+          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><input class="file-input" type="file" accept="image/*" ${cfg.multiple ? 'multiple' : ''}><span class="pick-info">未選擇檔案</span></div><div class="pick-files" aria-live="polite"></div></div>`
+        );
+        if (state.model === 'product' && field === 'image') {
+          wrap.insertAdjacentHTML('beforeend', `<p class="media-role media-role--main">圖片統一區塊：第 1 張會自動當主圖，其餘會自動歸到更多圖片。</p>`);
+        }
+      } else {
+        wrap.insertAdjacentHTML('beforeend', `<input type="${cfg.type === 'datetime' ? 'datetime-local' : 'text'}">`);
+      }
+      wrap.insertAdjacentHTML('beforeend', `<p class="err"></p>`);
+      return wrap;
+    }
+
+    async function drawForm() {
+      formRoot.innerHTML = '';
+      const attrs = schemas[state.model]?.attributes ?? {};
+      const advancedKeys = [];
+      Object.keys(attrs).forEach((f) => {
+        if (state.model === 'product' && f === 'slug') return;
+        if (state.model === 'product' && f === 'gallery') return;
+        if (state.model === 'promotion' && f === 'title' && state.simpleMode) {
+          advancedKeys.push(f);
+          return;
+        }
+        const cfg = attrs[f];
+        if (state.simpleMode && advancedField(f)) {
+          advancedKeys.push(f);
+          return;
+        }
+        if (state.simpleMode && !essentialField(f) && !cfg.required && cfg.type !== 'media' && cfg.type !== 'boolean') {
+          advancedKeys.push(f);
+          return;
+        }
+        formRoot.appendChild(fieldEl(f, cfg));
+      });
+
+      if (advancedKeys.length > 0) {
+        const details = document.createElement('details');
+        details.className = 'advanced';
+        details.innerHTML = `<summary>進階設定（slug / SEO / 排序）</summary><div class="advanced-grid"></div>`;
+        const grid = details.querySelector('.advanced-grid');
+        if (grid) {
+          advancedKeys.forEach((f) => grid.appendChild(fieldEl(f, attrs[f])));
+        }
+        formRoot.appendChild(details);
+      }
+
+      if (state.model === 'product') {
+        const slugCard = document.createElement('section');
+        slugCard.className = 'card span2 slug-card';
+        slugCard.innerHTML =
+          '<label>商品 slug（自動產生，唯讀）</label><input id="productSlugReadonly" type="text" readonly /><p class="hint">建立時自動生成 5 碼，無法手動修改。</p>';
+        formRoot.appendChild(slugCard);
+      }
+      if (state.model === 'product') {
+        const cat = await api('/api/categories?fields[0]=name&pagination[pageSize]=200');
+        state.categoryOptions = Array.isArray(cat?.data) ? cat.data : [];
+        categoryFilter.style.display = 'block';
+        categoryFilter.innerHTML = '<option value="">全部分類</option>';
+        state.categoryOptions.forEach((x) => {
+          const o = document.createElement('option');
+          o.value = String(x.id);
+          o.textContent = String(x.attributes?.name ?? x.name ?? x.id);
+          categoryFilter.appendChild(o);
+        });
+      } else {
+        categoryFilter.style.display = 'none';
+        categoryFilter.value = '';
+      }
+      fill(state.selected);
+      formRoot.oninput = (e) => {
+        const t = e.target;
+        if (t instanceof HTMLInputElement && t.readOnly) return;
+        markDirty();
+        if (t instanceof Element) {
+          const card = t.closest('.card');
+          const key = String(defs[state.model]?.title ?? '').trim();
+          if (key && card instanceof HTMLElement && card.dataset.field === key) updateSectionLabels();
+        }
+      };
+      formRoot.onchange = () => markDirty();
+    }
+
+    async function applyPendingUploads(card, { interactive = true } = {}) {
+      const grid = card.querySelector('.grid');
+      const info = card.querySelector('.pick-info');
+      const fileList = card.querySelector('.pick-files');
+      const field = card.dataset.field ?? '';
+      if (!(grid instanceof HTMLElement) || !(info instanceof HTMLElement)) return;
+      const files = Array.isArray(state.pendingUploads[field]) ? [...state.pendingUploads[field]] : [];
+      if (!files.length) return;
+
+      const max = state.model === 'promotion' && field === 'promoImages' ? 25 : Infinity;
+      if (Number.isFinite(max) && grid.children.length + files.length > max) {
+        const overflow = grid.children.length + files.length - max;
+        if (interactive) {
+          const yes = window.confirm(`促銷圖片上限 25 張。\n將以新圖片取代最後 ${overflow} 張舊圖，是否繼續？`);
+          if (!yes) return;
+        }
+        for (let i = 0; i < overflow; i += 1) {
+          const last = grid.lastElementChild;
+          if (last) last.remove();
+        }
+      }
+      const ids = await upload(files);
+      ids.forEach((id) => {
+        const c = document.createElement('article');
+        c.className = 'thumb pending';
+        c.dataset.id = String(id);
+        c.innerHTML = `<div class="ph">ID ${id}</div><div class="ops"><button type="button" class="op-btn op-left" data-a="l" aria-label="左移"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="op-btn op-right" data-a="r" aria-label="右移"><i class="fa-solid fa-arrow-right"></i></button><button type="button" class="op-btn op-del" data-a="d" aria-label="移除"><i class="fa-solid fa-trash"></i></button></div>`;
+        grid.appendChild(c);
+      });
+      state.pendingUploads[field] = [];
+      info.textContent = '未選擇檔案';
+      const pendingGrid = card.querySelector('.pending-grid');
+      if (pendingGrid instanceof HTMLElement) pendingGrid.innerHTML = '';
+      if (fileList instanceof HTMLElement) fileList.innerHTML = '';
+      const input = card.querySelector('.file-input');
+      if (input instanceof HTMLInputElement) input.value = '';
+      markDirty();
+    }
+
+    function mediaBind(card) {
+      const grid = card.querySelector('.grid');
+      const pendingGrid = card.querySelector('.pending-grid');
+      const input = card.querySelector('.file-input');
+      const info = card.querySelector('.pick-info');
+      const fileList = card.querySelector('.pick-files');
+      const field = card.dataset.field ?? '';
+      if (!(grid instanceof HTMLElement) || !(pendingGrid instanceof HTMLElement) || !(input instanceof HTMLInputElement) || !(info instanceof HTMLElement) || !(fileList instanceof HTMLElement)) return;
+
+      if (!Array.isArray(state.pendingUploads[field])) state.pendingUploads[field] = [];
+      const renderPending = () => {
+        const files = Array.isArray(state.pendingUploads[field]) ? state.pendingUploads[field] : [];
+        pendingGrid.innerHTML = '';
+        fileList.innerHTML = '';
+        files.forEach((file, idx) => {
+          const src = URL.createObjectURL(file);
+          const item = document.createElement('article');
+          item.className = 'thumb thumb--pending';
+          item.innerHTML = `<span class="pending-tag">新圖片</span><img src="${src}" alt="${file.name}"><div class="ops"><button type="button" data-rm="${idx}">移除圖片</button></div>`;
+          const rm = item.querySelector('button[data-rm]');
+          if (rm) {
+            rm.onclick = () => {
+              state.pendingUploads[field].splice(idx, 1);
+              renderPending();
+              info.textContent = state.pendingUploads[field].length > 0 ? `已選 ${state.pendingUploads[field].length} 張` : '未選擇檔案';
+              if (state.pendingUploads[field].length === 0) input.value = '';
+              markDirty();
+            };
+          }
+          pendingGrid.appendChild(item);
+
+          const nameRow = document.createElement('div');
+          nameRow.className = 'pick-file-row';
+          nameRow.textContent = `${idx + 1}. ${file.name}`;
+          fileList.appendChild(nameRow);
+        });
+      };
+
+      input.onchange = () => {
+        const files = Array.from(input.files ?? []);
+        if (!files.length) return;
+        state.pendingUploads[field].push(...files);
+        info.textContent = `已選 ${state.pendingUploads[field].length} 張`;
+        renderPending();
+        markDirty();
+      };
+
+      grid.querySelectorAll('.thumb').forEach((el, i) => {
+        const l = el.querySelector('[data-a="l"]');
+        const r = el.querySelector('[data-a="r"]');
+        const d = el.querySelector('[data-a="d"]');
+        const img = el.querySelector('img');
+        const existingBadge = el.querySelector('.order-badge');
+        if (!existingBadge) {
+          const badge = document.createElement('span');
+          badge.className = 'order-badge';
+          badge.textContent = state.model === 'product' && card.dataset.field === 'image' && i === 0 ? '主圖' : String(i + 1);
+          el.prepend(badge);
+        } else {
+          existingBadge.textContent = state.model === 'product' && card.dataset.field === 'image' && i === 0 ? '主圖' : String(i + 1);
+        }
+        if (img instanceof HTMLImageElement) {
+          img.style.cursor = 'zoom-in';
+          img.onclick = () => openPreview(img.src);
+        }
+        if (l) l.onclick = () => {
+          if (i > 0) {
+            grid.insertBefore(el, grid.children[i - 1]);
+            markDirty();
+          }
+          mediaBind(card);
+        };
+        if (r) r.onclick = () => {
+          if (grid.children[i + 1]) {
+            grid.insertBefore(grid.children[i + 1], el);
+            markDirty();
+          }
+          mediaBind(card);
+        };
+        if (d) d.onclick = () => {
+          if (window.confirm('確定移除此圖片？')) {
+            el.remove();
+            markDirty();
+            mediaBind(card);
+          }
+        };
+      });
+    }
+
+    function fillMedia(card, value) {
+      const grid = card.querySelector('.grid');
+      if (!(grid instanceof HTMLElement)) return;
+      const arr = Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : value?.data ? [value.data] : value ? [value] : [];
+      grid.innerHTML = '';
+      arr.forEach((m) => {
+        const raw = m?.url ?? m?.attributes?.url ?? '';
+        const src = raw.startsWith('http') ? raw : `${base}${raw}`;
+        const c = document.createElement('article');
+        c.className = 'thumb';
+        c.dataset.id = String(m?.id ?? '');
+        c.innerHTML = `<img src="${src}" alt=""><div class="ops"><button type="button" class="op-btn op-left" data-a="l" aria-label="左移"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="op-btn op-right" data-a="r" aria-label="右移"><i class="fa-solid fa-arrow-right"></i></button><button type="button" class="op-btn op-del" data-a="d" aria-label="移除"><i class="fa-solid fa-trash"></i></button></div>`;
+        grid.appendChild(c);
+      });
+      mediaBind(card);
+    }
+
+    function fill(row) {
+      state.selected = row ?? {};
+      state.selectedId = kOf(state.selected);
+      if (state.model === 'product') {
+        const slugInput = document.getElementById('productSlugReadonly');
+        if (slugInput instanceof HTMLInputElement) {
+          const value = String(state.selected.slug ?? '').trim();
+          slugInput.value = value;
+        }
+      }
+      formRoot.querySelectorAll('.card').forEach((card) => {
+        const field = card.dataset.field;
+        const type = card.dataset.type;
+        if (!field) return;
+        const v = state.selected[field];
+        if (type === 'boolean') {
+          const c = card.querySelector('input[type="checkbox"]');
+          if (c) c.checked = Boolean(v);
+        } else if (type === 'relation') {
+          const s = card.querySelector('select');
+          if (!(s instanceof HTMLSelectElement)) return;
+          s.innerHTML = '<option value="">請選擇分類</option>';
+          state.categoryOptions.forEach((x) => {
+            const o = document.createElement('option');
+            o.value = String(x.documentId ?? x.id ?? '');
+            o.textContent = String(x.attributes?.name ?? x.name ?? x.id);
+            s.appendChild(o);
+          });
+          s.value = String(v?.data?.documentId ?? v?.documentId ?? v?.data?.id ?? v?.id ?? '');
+        } else if (type === 'media') {
+          if (state.model === 'product' && field === 'image') {
+            const merged = [];
+            const head = Array.isArray(state.selected.image) ? state.selected.image : state.selected.image ? [state.selected.image] : [];
+            const tail = Array.isArray(state.selected.gallery) ? state.selected.gallery : state.selected.gallery ? [state.selected.gallery] : [];
+            merged.push(...head, ...tail);
+            fillMedia(card, merged);
+          } else {
+            fillMedia(card, v);
+          }
+        } else {
+          const i = card.querySelector('input,textarea');
+          if (!i) return;
+          if (type === 'datetime') i.value = v ? String(v).slice(0, 16) : '';
+          else if (type === 'json') i.value = v ? JSON.stringify(v) : '';
+          else i.value = v == null ? '' : String(v);
+        }
+      });
+      drawList();
+      updateSectionLabels();
+    }
+
+    function collect() {
+      const attrs = schemas[state.model].attributes;
+      const out = {};
+      let ok = true;
+      formRoot.querySelectorAll('.card').forEach((card) => {
+        const f = card.dataset.field;
+        const t = card.dataset.type;
+        if (!f) return;
+        const err = card.querySelector('.err');
+        if (err) err.textContent = '';
+
+        if (t === 'boolean') {
+          const c = card.querySelector('input[type="checkbox"]');
+          out[f] = Boolean(c?.checked);
+        } else if (t === 'relation') {
+          const s = card.querySelector('select');
+          out[f] = normalizeRelationValue(s?.value);
+        } else if (t === 'media') {
+          const ids = Array.from(card.querySelectorAll('.thumb')).map((x) => Number(x.dataset.id)).filter(Number.isFinite);
+          if (state.model === 'product' && f === 'image') {
+            out.image = ids[0] ?? null;
+            out.gallery = ids.slice(1);
+          } else {
+            out[f] = attrs[f].multiple ? ids : ids[0] ?? null;
+          }
+        } else {
+          const i = card.querySelector('input,textarea');
+          const raw = i?.value ?? '';
+          if (t === 'integer') out[f] = raw.trim() ? Number(raw) : null;
+          else if (t === 'json') out[f] = raw.trim() ? JSON.parse(raw) : null;
+          else out[f] = raw;
+        }
+
+        if (attrs[f]?.required && (out[f] === '' || out[f] == null)) {
+          if (err) err.textContent = '此欄位必填';
+          ok = false;
+        }
+      });
+      if (state.model === 'product') {
+        const slugInput = document.getElementById('productSlugReadonly');
+        const slugValue =
+          slugInput instanceof HTMLInputElement ? slugInput.value.trim() : String(state.selected.slug ?? '').trim();
+        out.slug = slugValue;
+      }
+      return { ok, out };
+    }
+
+    async function load() {
+      setStatus('載入中...');
+      const j = await api(`${defs[state.model].api}?populate=*`);
+      state.entries = norm(j);
+      state.selected = {};
+      state.selectedId = '';
+      fill({});
+      drawList();
+      state.dirty = false;
+      setStatus(`已載入 ${defs[state.model].label}`);
+    }
+
+    async function switchModel(model, options = {}) {
+      const { selectPromotionSlug, mobilePanel } = options;
+      try {
+        state.model = model;
+        root.dataset.model = model;
+        if (isMobileNarrow()) {
+          if (mobilePanel !== undefined) setMobilePanel(mobilePanel);
+          else setMobilePanel('list');
+        }
+        drawTabs();
+        await drawForm();
+        await load();
+        if (selectPromotionSlug) {
+          const slug = String(selectPromotionSlug).trim();
+          const row = state.entries.find((e) => String(e.slug ?? '').trim() === slug);
+          if (row) select(row);
+          else setStatus(`找不到促銷頁（slug）：${slug}`);
+        }
+        updateSectionLabels();
+      } catch (e) {
+        setStatus(`分頁切換失敗：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    async function hubAction(hubKey) {
+      if (!confirmDiscardIfDirty()) return;
+      state.dirty = false;
+      try {
+        if (hubKey === 'promo-weekly') await switchModel('promotion', { selectPromotionSlug: 'weekly-new' });
+        else if (hubKey === 'promo-special') await switchModel('promotion', { selectPromotionSlug: 'special-offers' });
+        else if (hubKey === 'promo-equipment') await switchModel('promotion', { selectPromotionSlug: 'equipment-sale' });
+        else if (hubKey === 'products-all') {
+          await switchModel('product');
+          categoryFilter.value = '';
+          drawList();
+        } else if (hubKey === 'products-by-category') {
+          await switchModel('product');
+          categoryFilter.value = '';
+          drawList();
+          setStatus('請先選分類，再調整各商品的排序');
+          queueMicrotask(() => categoryFilter.focus());
+        } else if (hubKey === 'categories-sort') {
+          await switchModel('category');
+          setStatus('已載入商品分類（可編輯 orderRank／排序）');
+        }
+      } catch (e) {
+        setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    async function save() {
+      if (state.saving) return;
+      state.saving = true;
+      saveBtn.setAttribute('disabled', 'true');
+      const { ok, out } = collect();
+      if (!ok) {
+        setStatus('請先修正欄位');
+        state.saving = false;
+        saveBtn.removeAttribute('disabled');
+        return;
+      }
+      try {
+        const mediaCards = Array.from(formRoot.querySelectorAll('.card')).filter((x) => x.dataset.type === 'media');
+        for (const card of mediaCards) {
+          await applyPendingUploads(card, { interactive: false });
+        }
+        const { ok: ok2, out: out2 } = collect();
+        if (!ok2) {
+          setStatus('請先修正欄位');
+          return;
+        }
+        const hasId = Boolean(state.selectedId);
+        const endpoint = hasId ? `${defs[state.model].api}/${state.selectedId}` : defs[state.model].api;
+        await api(endpoint, { method: hasId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: out2 }) });
+        state.dirty = false;
+        setStatus(hasId ? '更新成功' : '新增成功');
+        await load();
+      } finally {
+        state.saving = false;
+        saveBtn.removeAttribute('disabled');
+      }
+    }
+
+    searchInput.addEventListener('input', drawList);
+    categoryFilter.addEventListener('change', drawList);
+    const simpleModeLabel = simpleModeToggle.querySelector('.action-btn__label');
+    simpleModeToggle.onclick = () => {
+      state.simpleMode = !state.simpleMode;
+      simpleModeToggle.classList.toggle('is-on', state.simpleMode);
+      simpleModeToggle.classList.toggle('is-off', !state.simpleMode);
+      simpleModeToggle.setAttribute('aria-pressed', state.simpleMode ? 'true' : 'false');
+      const t = state.simpleMode ? '簡易' : '完整';
+      if (simpleModeLabel) simpleModeLabel.textContent = t;
+      drawForm().catch((e) => setStatus(`表單更新失敗：${e.message}`));
+    };
+    refreshBtn.onclick = () => switchModel(state.model).catch((e) => setStatus(`載入失敗：${e.message}`));
+    newBtn.onclick = () => {
+      const attrs = schemas[state.model].attributes;
+      const x = {};
+      Object.keys(attrs).forEach((k) => {
+        if (attrs[k].type === 'boolean') x[k] = Boolean(attrs[k].default);
+        else if (attrs[k].type === 'media') x[k] = attrs[k].multiple ? [] : null;
+        else x[k] = attrs[k].default ?? '';
+      });
+      if (state.model === 'product') x.slug = slug5();
+      if (state.model === 'product') x.enabled = true;
+      fill(x);
+      state.dirty = true;
+      setStatus('新增模式（待儲存）');
+      if (isMobileNarrow()) setMobilePanel('editor');
+    };
+    mobileSanityMenuBtn.addEventListener('click', () => {
+      if (root.dataset.mobilePanel === 'home') return;
+      if (!confirmDiscardIfDirty()) return;
+      state.dirty = false;
+      setMobilePanel('home');
+    });
+    mobileHub.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const row = t.closest('[data-hub]');
+      if (!(row instanceof HTMLButtonElement)) return;
+      const key = row.dataset.hub ?? '';
+      if (!key) return;
+      void hubAction(key);
+    });
+    window.addEventListener('resize', () => {
+      if (!isMobileNarrow()) setMobilePanel('editor');
+      else {
+        const p = root.dataset.mobilePanel;
+        if (p !== 'home' && p !== 'list' && p !== 'editor') setMobilePanel('home');
+      }
+    });
+    saveBtn.onclick = () => save().catch((e) => setStatus(`儲存失敗：${e.message}`));
+
+    state.simpleMode = true;
+    simpleModeToggle.classList.add('is-on');
+    if (simpleModeLabel) simpleModeLabel.textContent = '簡易';
+    drawTabs();
+    const narrow = isMobileNarrow();
+    if (narrow) setMobilePanel('home');
+    else setMobilePanel('editor');
+    switchModel('promotion', narrow ? { mobilePanel: 'home' } : {})
+      .catch((e) => setStatus(`初始化失敗：${e.message}`));
+    imgPreviewBackdrop.addEventListener('click', closePreview);
+    imgPreviewClose.addEventListener('click', closePreview);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePreview();
+    });
+  </script>
+</Layout>
+
+<style is:global>
+  .line-float { display: none !important; }
+  .mobile-sanity-bar,
+  .mobile-hub {
+    display: none;
+  }
+  .adminx { width: min(1500px, 100% - 16px); margin: 8px auto 18px; display: grid; gap: 10px; overflow-x: hidden; }
+  .topbar {
+    --tb-accent: #6b83d6;
+    --tb-accent-soft: #8fa3e8;
+    --tb-accent-deep: #5a6fbc;
+    --tb-ink: #2a3148;
+    --tb-border: #e8ecf4;
+    --tb-surface: #fafbff;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 18px;
+    padding: 14px 16px 18px;
+    overflow-x: hidden;
+    overflow-y: visible;
+    background: linear-gradient(165deg, #ffffff 0%, #fafbff 45%, #f3f5fc 100%);
+    border: 1px solid var(--tb-border);
+    border-radius: 14px;
+    box-shadow:
+      0 3px 16px rgba(91, 108, 180, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  }
+  .center-nav {
+    flex: 1 1 260px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    overflow: visible;
+  }
+  .center-nav__meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+  }
+  .section-label--desktop {
+    display: none;
+    font-size: clamp(0.72rem, 1.6vw, 0.82rem);
+    font-weight: 800;
+    color: #5c3d10;
+    letter-spacing: 0.02em;
+    padding: 4px 11px;
+    border-radius: 999px;
+    border: 1px solid #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    box-shadow: 0 1px 2px rgba(180, 120, 40, 0.08);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(100%, 200px);
+  }
+  .title-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: clamp(0.7rem, 1.7vw, 0.78rem);
+    color: var(--tb-ink, #2a3148);
+    font-weight: 800;
+    background: linear-gradient(135deg, #f5f7ff 0%, #ecefff 100%);
+    border: 1px solid #d9dff5;
+    border-radius: 999px;
+    padding: 4px 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 2px rgba(91, 108, 180, 0.06);
+    transition: box-shadow 0.22s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+  .title-status--desktop {
+    display: none;
+    max-width: min(100%, 220px);
+    flex-shrink: 0;
+  }
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    flex: 1 1 200px;
+    min-width: 0;
+    overflow: visible;
+    padding: 8px 2px 12px;
+    margin: -4px 0 -8px;
+    align-items: stretch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(180, 130, 70, 0.4) transparent;
+  }
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 9px 10px;
+    border-radius: 11px;
+    border: 1px solid #e8e2d9;
+    background: linear-gradient(180deg, #ffffff 0%, #faf8f5 100%);
+    color: #3d3830;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(120, 90, 50, 0.06);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      border-color 0.2s ease,
+      background 0.24s ease,
+      color 0.2s ease;
+  }
+  .tab > i {
+    font-size: 0.9em;
+    opacity: 0.85;
+    flex-shrink: 0;
+    transition: transform 0.22s ease, opacity 0.2s ease;
+  }
+  .tab:hover > i {
+    transform: scale(1.06);
+  }
+  .tab.is-active > i {
+    opacity: 1;
+  }
+  .tab:hover {
+    border-color: #e0d0b8;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf3 100%);
+    box-shadow: 0 4px 12px rgba(180, 130, 70, 0.12);
+    transform: translateY(-1px);
+  }
+  .tab:focus-visible {
+    outline: 2px solid #d4a574;
+    outline-offset: 2px;
+  }
+  .tab.is-active {
+    color: #5c3d10;
+    border-color: #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    box-shadow: 0 3px 12px rgba(180, 120, 40, 0.2);
+    transform: translateY(-1px);
+  }
+  .tab.is-active:hover {
+    border-color: #d4a017;
+    box-shadow: 0 5px 16px rgba(180, 120, 40, 0.22);
+  }
+  .actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .actions > .action-btn,
+  .actions > .mode-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      filter 0.2s ease,
+      background 0.24s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+  }
+  .action-btn > i {
+    font-size: 0.95em;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: transform 0.35s ease;
+  }
+  .action-btn__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .action-btn:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+  .action-btn:active {
+    transform: translateY(0);
+    transition-duration: 0.1s;
+  }
+  .actions .action-btn--solid {
+    min-height: 42px;
+    border: 1px solid #c5d4f0;
+    border-radius: 11px;
+    padding: 10px 12px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    letter-spacing: 0.02em;
+    color: var(--tb-ink, #2a3148);
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    box-shadow: 0 2px 8px rgba(91, 108, 180, 0.12);
+  }
+  .actions .action-btn--solid:hover {
+    filter: brightness(1.02);
+    background: linear-gradient(180deg, #dde5ff 0%, #cfd9f8 100%);
+    box-shadow: 0 4px 14px rgba(91, 108, 180, 0.16);
+    transform: translateY(-2px);
+  }
+  .actions .action-btn--solid:hover .fa-rotate-right {
+    transform: rotate(-35deg);
+  }
+  @keyframes admin-save-dirty-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.2), 0 2px 10px rgba(239, 68, 68, 0.12);
+    }
+    50% {
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.08), 0 4px 14px rgba(239, 68, 68, 0.15);
+    }
+  }
+  #saveBtn.is-dirty {
+    color: #7a1f1f;
+    border-color: #f5b5b5;
+    background: linear-gradient(180deg, #fff0f0 0%, #ffe4e4 100%);
+    animation: admin-save-dirty-pulse 2.2s ease-in-out infinite;
+  }
+  .mode-btn {
+    min-height: 42px;
+    border-radius: 11px;
+    border: 1px solid #dce1ee;
+    padding: 9px 10px;
+    font-weight: 800;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      border-color 0.2s ease,
+      background 0.24s ease,
+      color 0.2s ease;
+  }
+  .mode-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(91, 108, 180, 0.1);
+  }
+  .mode-btn.is-on {
+    color: var(--tb-ink, #2a3148);
+    border-color: #c5d4f0;
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    box-shadow: 0 2px 10px rgba(91, 108, 180, 0.12);
+  }
+  .mode-btn.is-on:hover {
+    filter: brightness(1.02);
+    background: linear-gradient(180deg, #dde5ff 0%, #cfd9f8 100%);
+    box-shadow: 0 4px 14px rgba(91, 108, 180, 0.16);
+  }
+  .mode-btn.is-off {
+    background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+    color: #454c5c;
+  }
+  .mode-btn.is-off:hover {
+    border-color: #c8d0e2;
+    background: #fff;
+  }
+  .mode-btn:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab,
+    .action-btn,
+    .mode-btn,
+    .tab > i,
+    .action-btn > i,
+    .title-status {
+      transition: none !important;
+      animation: none !important;
+    }
+    .tab:hover,
+    .tab.is-active,
+    .actions .action-btn--solid:hover,
+    .mode-btn:hover {
+      transform: none;
+    }
+    #saveBtn.is-dirty {
+      animation: none;
+      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
+    }
+  }
+
+  .workspace { display: grid; grid-template-columns: 320px 1fr; gap: 10px; min-height: calc(100vh - 170px); }
+  .listpane, .formpane { background: #fff; border: 1px solid #dbe4ea; border-radius: 12px; padding: 12px; }
+  .listpane {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding-block: 14px;
+  }
+  .listpane__filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .search--category {
+    flex: 0 1 155px;
+    min-width: 0;
+  }
+  .formpane__section-head {
+    display: none;
+  }
+  .search-wrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #8fa0bf;
+    font-size: 0.88rem;
+    pointer-events: none;
+  }
+  .search { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 10px; }
+  .search--with-icon {
+    padding-left: 34px;
+  }
+  .count { display: none; }
+  .entry-list {
+    display: grid;
+    gap: 8px;
+    max-height: calc(100vh - 270px);
+    overflow: auto;
+    padding: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 108, 180, 0.35) transparent;
+  }
+  .item {
+    text-align: left;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    color: #2a3148;
+    padding: 10px 12px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    transition:
+      transform 0.16s ease,
+      box-shadow 0.2s ease,
+      border-color 0.18s ease,
+      background 0.2s ease,
+      color 0.18s ease;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .item:hover {
+    border-color: #cfd9f8;
+    box-shadow: 0 6px 18px rgba(91, 108, 180, 0.12);
+    transform: translateY(-1px);
+  }
+  .item:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(91, 108, 180, 0.10);
+  }
+  .item:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+  .item.is-active {
+    border-color: #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    color: #5c3d10;
+    box-shadow: 0 8px 22px rgba(180, 120, 40, 0.20);
+  }
+  .item.is-active:hover {
+    border-color: #d4a017;
+    box-shadow: 0 10px 26px rgba(180, 120, 40, 0.22);
+  }
+
+  /* 商品清單（參考 sanity）：首圖縮圖 / 分類 / 主打 / 上架淡色 */
+  .item--product {
+    white-space: normal;
+    text-overflow: clip;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .item__thumbWrap {
+    flex-shrink: 0;
+  }
+  .item__thumb {
+    width: 56px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    display: block;
+    border: 1px solid #dbe4ea;
+    background: #f1f5f9;
+  }
+  .item__thumb--empty {
+    display: block;
+    width: 56px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px dashed #dbe4ea;
+    background: #f8fafc;
+  }
+  .item__main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .item__row1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+  .item__title {
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: inherit;
+  }
+  .item__meta {
+    font-size: 0.78rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .badge--featured {
+    background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+    border: 1px solid #fdba74;
+    color: #9a3412;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.16);
+  }
+
+  .item--enabled:not(.is-active) {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    color: #065f46;
+  }
+  .item--enabled:not(.is-active) .item__meta {
+    color: #047857;
+  }
+  .item--disabled:not(.is-active) {
+    border-color: rgba(249, 115, 22, 0.35);
+    background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+    color: #9a3412;
+  }
+  .item--disabled:not(.is-active) .item__meta {
+    color: #9a3412;
+  }
+  .item--product.item--enabled:hover:not(.is-active) {
+    border-color: rgba(16, 185, 129, 0.55);
+    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.14);
+  }
+  .item--product.item--disabled:hover:not(.is-active) {
+    border-color: rgba(249, 115, 22, 0.55);
+    box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
+  }
+
+  .status { margin: 0 0 8px; font-weight: 700; color: #334155; }
+  .form-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { border: 1px solid #d8e1e8; border-radius: 10px; padding: 10px; background: #fff; display: grid; gap: 8px; }
+  .card.span2 { grid-column: 1 / -1; }
+  .card label { font-weight: 700; color: #334155; }
+  .card input, .card textarea, .card select { width: 100%; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font: inherit; }
+  .card textarea { min-height: 110px; }
+  .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
+  .hint { margin: 0; font-size: .82rem; color: #64748b; }
+  .err { min-height: 1.1em; margin: 0; color: #be123c; font-size: .82rem; }
+
+  .card--bool { grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; }
+  .switch { width: 62px; height: 34px; position: relative; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #dbe5ec; border-radius: 999px; }
+  .switch span::before { content: ''; position: absolute; left: 3px; top: 3px; width: 28px; height: 28px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch input:checked + span { background: linear-gradient(120deg, #1e8f89, #34a3ba); }
+  .switch input:checked + span::before { transform: translateX(30px); }
+
+  .wall { display: grid; gap: 8px; }
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .pending-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .thumb { border: 1px solid #d2dae3; border-radius: 8px; overflow: hidden; background: #fff; position: relative; }
+  .thumb--pending { border: 2px solid #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, .2); background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); }
+  .thumb--pending:hover { border-color: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .22); }
+  .pending-tag { position: absolute; top: 6px; left: 6px; z-index: 2; background: #b45309; color: #fff; font-size: .72rem; font-weight: 800; border-radius: 999px; padding: 3px 8px; letter-spacing: .02em; }
+  .order-badge { position: absolute; left: 6px; top: 6px; z-index: 2; background: rgba(17, 24, 39, .86); color: #fff; font-size: .74rem; font-weight: 800; border-radius: 999px; padding: 2px 7px; }
+  .thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  .ph { height: 100px; display: grid; place-items: center; color: #475569; background: #e8f4f3; font-weight: 700; }
+  .ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; }
+  .ops button, .mini { border: 0; border-radius: 6px; background: #166f6a; color: #fff; font-size: .78rem; padding: 6px; }
+  .op-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; font-size: .84rem; }
+  .op-left { background: #0284c7 !important; }
+  .op-right { background: #0f766e !important; }
+  .op-del { background: #dc2626 !important; }
+  .thumb--pending .ops { grid-template-columns: 1fr; }
+  .mini-add { background: linear-gradient(135deg, #0d9488, #0f766e); font-weight: 800; min-width: 80px; }
+  .pick-info { font-size: .82rem; color: #64748b; min-width: 110px; }
+  .media-role { margin: 2px 0 0; font-size: .8rem; font-weight: 700; }
+  .media-role--main { color: #0f766e; }
+  .media-role--more { color: #475569; }
+  .uploader { display: flex; gap: 8px; align-items: center; }
+  .uploader input { min-height: 38px; }
+  .file-input {
+    color: transparent;
+    caret-color: transparent;
+  }
+  .file-input::file-selector-button {
+    color: #1f2a44;
+  }
+  .file-input::-webkit-file-upload-button {
+    color: #1f2a44;
+  }
+  .advanced { grid-column: 1 / -1; border: 1px dashed #b8c5d3; border-radius: 10px; padding: 10px; background: #f8fafc; }
+  .pick-files {
+    display: grid;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .pick-file-row {
+    font-size: 0.8rem;
+    color: #475569;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .advanced summary { cursor: pointer; font-weight: 800; color: #334155; }
+  .advanced-grid { margin-top: 10px; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .img-modal { position: fixed; inset: 0; z-index: 10030; display: grid; place-items: center; padding: 20px; }
+  .img-modal[hidden] { display: none !important; }
+  .img-modal__backdrop { position: absolute; inset: 0; border: 0; background: rgba(0,0,0,.76); }
+  .img-modal__close { position: absolute; top: 16px; right: 16px; width: 44px; height: 44px; border-radius: 999px; border: 0; background: #fff; color: #111827; font-size: 1.1rem; font-weight: 800; z-index: 2; }
+  .img-modal__img { position: relative; z-index: 1; max-width: min(94vw, 1280px); max-height: 88vh; width: auto; height: auto; border-radius: 8px; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+
+  /* 商品頁：降低空白、按鍵縮小約 30%（僅 product 模式） */
+  .adminx[data-model="product"] .workspace { gap: 8px; }
+  .adminx[data-model="product"] .listpane,
+  .adminx[data-model="product"] .formpane { padding: 9px; }
+  .adminx[data-model="product"] .form-grid { gap: 7px; }
+  .adminx[data-model="product"] .card { padding: 7px; gap: 5px; }
+  .adminx[data-model="product"] .card input,
+  .adminx[data-model="product"] .card textarea,
+  .adminx[data-model="product"] .card select { min-height: 32px; padding: 7px 8px; }
+  .adminx[data-model="product"] .card textarea { min-height: 88px; }
+  .adminx[data-model="product"] .ops button,
+  .adminx[data-model="product"] .mini { padding: 4px; font-size: .72rem; }
+
+  @media (max-width: 1080px) {
+    .workspace { grid-template-columns: 280px 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .card, .card.span2 { grid-column: 1 / -1; }
+  }
+  @media (max-width: 1080px) {
+    .topbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .center-nav {
+      order: 2;
+      flex: 1 1 auto;
+    }
+    .actions {
+      order: 3;
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: none;
+    }
+  }
+  @media (max-width: 420px) {
+    .tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: hidden;
+      overflow-y: visible;
+      padding: 6px 2px 10px;
+      margin: 0;
+      -webkit-overflow-scrolling: touch;
+      justify-content: space-between;
+    }
+    .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 6px 6px;
+      min-height: 38px;
+      gap: 6px;
+      font-size: 0.78rem;
+    }
+    .tab > i {
+      font-size: 0.85em;
+    }
+    .tab > span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+  }
+  @media (max-width: 860px) {
+    .mobile-sanity-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+      border: 1px solid #e8ecf4;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(91, 108, 180, 0.05);
+      position: relative;
+      z-index: 50;
+    }
+    .mobile-sanity-bar__logo {
+      flex-shrink: 0;
+      color: #7b8fd4;
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+    .mobile-sanity-bar__mid {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mobile-sanity-bar__textcol {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .mobile-sanity-bar__title {
+      flex-shrink: 0;
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: #2a3148;
+      white-space: nowrap;
+    }
+    .mobile-sanity-bar__section:empty {
+      display: none !important;
+    }
+    .mobile-sanity-bar__section:not(:empty) {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #5c3d10;
+      line-height: 1.25;
+      max-width: 100%;
+      overflow: hidden;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .formpane__section-head {
+      display: block;
+      margin: -3px -12px 8px -12px;
+      padding: 0;
+    }
+    .formpane__section-head:has(.formpane__section-title:empty) {
+      display: none;
+    }
+    .formpane__section-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #5c3d10;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      margin: 0;
+      padding: 6px 10px;
+      min-height: 30px;
+      position: relative;
+      transform: translateY(-1px);
+      background: linear-gradient(180deg, #fffbeb 0%, #ffffff 72%);
+      border-bottom: 1px solid #f0e4d0;
+      box-shadow: 0 4px 14px -6px rgba(92, 61, 16, 0.14);
+      white-space: normal;
+      word-break: break-word;
+    }
+    .adminx[data-model="product"] .formpane__section-head {
+      margin: -9px -9px 12px -9px;
+    }
+    .title-status--in-mid {
+      flex: 0 1 auto;
+      min-width: 0;
+      width: max-content;
+      max-width: min(100%, 11rem);
+      font-size: 0.72rem;
+      padding: 3px 10px;
+      justify-content: center;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mobile-sanity-bar__iconbtn {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: #334155;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .mobile-sanity-bar__iconbtn:active {
+      background: #f1f5f9;
+    }
+    .adminx[data-mobile-panel="home"] #mobileSanityMenuBtn {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .adminx[data-mobile-panel="home"] .topbar,
+    .adminx[data-mobile-panel="home"] .workspace {
+      display: none;
+    }
+    .adminx[data-mobile-panel="home"] .mobile-hub {
+      display: block;
+    }
+    .mobile-hub {
+      background: #fff;
+      border: 1px solid #dbe4ea;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .mobile-hub__list {
+      display: flex;
+      flex-direction: column;
+    }
+    .mobile-hub__row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 52px;
+      padding: 12px 14px;
+      border: 0;
+      border-bottom: 1px solid #e8eef4;
+      background: #fff;
+      font: inherit;
+      text-align: left;
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .mobile-hub__row:last-child {
+      border-bottom: 0;
+    }
+    .mobile-hub__row:active {
+      background: #f1f5f9;
+    }
+    .mobile-hub__icon {
+      color: #64748b;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .mobile-hub__label {
+      flex: 1;
+      min-width: 0;
+    }
+    .mobile-hub__chev {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .title-status--desktop {
+      display: none !important;
+    }
+    .advanced-grid { grid-template-columns: 1fr; }
+    .workspace { grid-template-columns: 1fr; min-height: 0; }
+    .entry-list { max-height: 240px; }
+    .actions {
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .actions .action-btn,
+    .actions .mode-btn {
+      padding: 8px 6px;
+      font-size: 0.78rem;
+    }
+    .actions .action-btn__label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .adminx[data-mobile-panel="list"] .formpane { display: none; }
+    .adminx[data-mobile-panel="editor"] .listpane { display: none; }
+  }
+
+  @media (min-width: 861px) {
+    .mobile-sanity-bar,
+    .mobile-hub {
+      display: none !important;
+    }
+    .title-status--desktop {
+      display: inline-flex;
+    }
+    #sectionLabelDesktop {
+      display: none !important;
+    }
+  }
+</style>

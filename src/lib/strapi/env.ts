@@ -4,7 +4,9 @@
  * 優先讀執行期 `process.env`（Vercel serverless 注入）。使用 `process.env['KEY']` 避免 Vite
  * 建置時把 `process.env.PUBLIC_*` 靜態替換成 undefined。再退回 `import.meta.env`（建置內嵌）。
  */
-function readProcessEnv(key: 'PUBLIC_STRAPI_URL' | 'PUBLIC_CMS'): string {
+function readProcessEnv(
+  key: 'PUBLIC_STRAPI_URL' | 'PUBLIC_CMS' | 'STRAPI_API_TOKEN' | 'PUBLIC_STRAPI_API_TOKEN' | 'STRAPI_ADMIN_URL' | 'PUBLIC_STRAPI_ADMIN_URL'
+): string {
   try {
     const v = typeof process !== 'undefined' && process.env ? process.env[key] : undefined;
     return typeof v === 'string' ? v.trim() : '';
@@ -20,10 +22,29 @@ export function readStrapiBaseUrl(): string {
   return u.replace(/\/+$/, '');
 }
 
+/** 管理頁專用 base URL；未設定時才回退到一般 Strapi URL */
+export function readStrapiAdminBaseUrl(): string {
+  const fromProcessPrivate = readProcessEnv('STRAPI_ADMIN_URL');
+  const fromProcessPublic = readProcessEnv('PUBLIC_STRAPI_ADMIN_URL');
+  const fromMetaPrivate = String(import.meta.env.STRAPI_ADMIN_URL ?? '').trim();
+  const fromMetaPublic = String(import.meta.env.PUBLIC_STRAPI_ADMIN_URL ?? '').trim();
+  const fromAny = fromProcessPrivate || fromProcessPublic || fromMetaPrivate || fromMetaPublic || readStrapiBaseUrl();
+  return fromAny.replace(/\/+$/, '');
+}
+
 /** 設為 `strapi` 時，商品／促銷資料改走 Strapi REST；其餘維持 Sanity */
 export function useStrapiCms(): boolean {
   const fromProcess = readProcessEnv('PUBLIC_CMS');
   const fromMeta = String(import.meta.env.PUBLIC_CMS ?? '').trim();
   const v = (fromProcess || fromMeta).toLowerCase();
   return v === 'strapi';
+}
+
+/** 後台管理頁使用的 API token（建議僅於本機開發環境設定） */
+export function readStrapiApiToken(): string {
+  const fromProcessPrivate = readProcessEnv('STRAPI_API_TOKEN');
+  const fromProcessPublic = readProcessEnv('PUBLIC_STRAPI_API_TOKEN');
+  const fromMetaPrivate = String(import.meta.env.STRAPI_API_TOKEN ?? '').trim();
+  const fromMetaPublic = String(import.meta.env.PUBLIC_STRAPI_API_TOKEN ?? '').trim();
+  return fromProcessPrivate || fromProcessPublic || fromMetaPrivate || fromMetaPublic;
 }

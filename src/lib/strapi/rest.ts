@@ -24,6 +24,10 @@ export function unwrapRelationOne(raw: unknown): Record<string, unknown> | null 
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
   const d = o.data;
+  // Strapi v5 populate 可能直接回傳平面物件（不包 data）。
+  if (d === undefined && (o.id !== undefined || o.documentId !== undefined)) {
+    return unwrapStrapiEntry(o);
+  }
   if (d === null || d === undefined) return null;
   if (Array.isArray(d)) {
     const first = d[0];
