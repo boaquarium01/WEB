@@ -1,22 +1,20 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { SITE_TITLE_SHORT } from '../../config/site';
-import { readFileSync } from 'node:fs';
 import { readStrapiAdminBaseUrl } from '../../lib/strapi/env';
+import promotionSchema from '../../../strapi-cms/src/api/promotion/content-types/promotion/schema.json';
+import productSchema from '../../../strapi-cms/src/api/product/content-types/product/schema.json';
+import categorySchema from '../../../strapi-cms/src/api/category/content-types/category/schema.json';
 
 type Schema = {
   config?: { metadatas?: Record<string, { edit?: { label?: string } }> };
   attributes: Record<string, { type: string; required?: boolean; multiple?: boolean; default?: unknown }>;
 };
 
-function readSchema(path: string) {
-  return JSON.parse(readFileSync(new URL(path, import.meta.url), 'utf-8')) as Schema;
-}
-
 const schemas = {
-  promotion: readSchema('../../../strapi-cms/src/api/promotion/content-types/promotion/schema.json'),
-  product: readSchema('../../../strapi-cms/src/api/product/content-types/product/schema.json'),
-  category: readSchema('../../../strapi-cms/src/api/category/content-types/category/schema.json')
+  promotion: promotionSchema as Schema,
+  product: productSchema as Schema,
+  category: categorySchema as Schema
 };
 
 const defs = {
