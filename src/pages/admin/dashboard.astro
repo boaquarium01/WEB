@@ -4,10 +4,6 @@ import { SITE_TITLE_SHORT } from '../../config/site';
 import { readFileSync } from 'node:fs';
 import { readStrapiAdminBaseUrl } from '../../lib/strapi/env';
 
-if (Astro.url.pathname.replace(/\/+$/, '') === '/admin/dashboard') {
-  return Astro.redirect('/');
-}
-
 type Schema = {
   config?: { metadatas?: Record<string, { edit?: { label?: string } }> };
   attributes: Record<string, { type: string; required?: boolean; multiple?: boolean; default?: unknown }>;
