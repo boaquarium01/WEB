@@ -1,6 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
 
-/** 本機 dev 未設 `ADMIN_PATH_SLUG` 時使用（25 碼，非順編）。 */
+/** 本機 dev 未設 `ADMIN_PATH_SLUG` 時使用（25 碼，符下方 20～48 規則）。 */
 const DEV_DEFAULT_ADMIN_PATH_SLUG = 'xK9m_pL2vNqR7wH4jF8YtZ3';
 
 /**
@@ -16,10 +16,12 @@ function readAdminPathSlugEnv(): string {
   return p || m;
 }
 
-/** 正式環境必設；25 碼英數與 _-。本機未設時使用 {@link DEV_DEFAULT_ADMIN_PATH_SLUG}。 */
+/** 英數與 _-，長度 20～48（過短易猜、與舊「恰好 25 碼」並存）。本機未設時使用 {@link DEV_DEFAULT_ADMIN_PATH_SLUG}。 */
+const ADMIN_PATH_SLUG_RE = /^[a-zA-Z0-9_-]{20,48}$/;
+
 function adminPathSlug(): string {
   const raw = readAdminPathSlugEnv();
-  if (/^[a-zA-Z0-9_-]{25}$/.test(raw)) return raw;
+  if (ADMIN_PATH_SLUG_RE.test(raw)) return raw;
   if (import.meta.env.DEV) return DEV_DEFAULT_ADMIN_PATH_SLUG;
   return '';
 }
