@@ -1069,9 +1069,21 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
         if (selectedCategory) items = items.filter((x) => categoryId(x) === selectedCategory);
         items.sort((a, b) => {
+          // 全部分類：先依分類下拉同順序（orderRank），再依分類內 sortOrder
+          const catOrder = new Map(
+            (state.categoryOptions ?? []).map((x, i) => [String(x.documentId ?? x.id ?? '').trim(), i])
+          );
+          const ida = categoryId(a);
+          const idb = categoryId(b);
+          const oa = catOrder.has(ida) ? catOrder.get(ida) : 999999;
+          const ob = catOrder.has(idb) ? catOrder.get(idb) : 999999;
+          if (oa !== ob) return oa - ob;
+
+          // fallback：若分類不在下拉（例如資料缺漏），再用名稱比對
           const ca = categoryName(a);
           const cb = categoryName(b);
           if (ca !== cb) return ca.localeCompare(cb, 'zh-Hant');
+
           const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
           const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
           if (sa !== sb) return sa - sb;
@@ -2460,6 +2472,19 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     scrollbar-width: thin;
     scrollbar-color: rgba(91, 108, 180, 0.35) transparent;
   }
+  /* 桌面：清單卡片拉開間距，減少擁擠感 */
+  @media (min-width: 861px) {
+    .entry-list {
+      gap: 10px;
+      padding: 4px;
+    }
+    .item {
+      padding: 11px 13px;
+    }
+    .entry-list > .item:not(.item--product) {
+      padding: 11px 13px;
+    }
+  }
   .item {
     text-align: left;
     width: 100%;
@@ -2505,6 +2530,47 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   .item.is-active:hover {
     border-color: #d4a017;
     box-shadow: 0 10px 26px rgba(180, 120, 40, 0.22);
+  }
+  /* 商品卡選中：改用更明確的藍色高亮與左側提示條 */
+  .item--product.is-active {
+    position: relative;
+    border-color: #7aa2f7;
+    background: linear-gradient(180deg, #eef4ff 0%, #e3edff 100%);
+    color: #1e3a8a;
+    box-shadow:
+      0 0 0 1px rgba(122, 162, 247, 0.35),
+      0 8px 22px rgba(59, 130, 246, 0.18);
+  }
+  .item--product.is-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 4px;
+    border-radius: 0 999px 999px 0;
+    background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+  }
+  .item--product.is-active .item__title {
+    color: #0f2f7a;
+  }
+  .item--product.is-active .item__meta,
+  .item--product.is-active .item__metaCategory {
+    color: #36518c;
+  }
+  .item--product.is-active .item__thumb {
+    border-color: rgba(59, 130, 246, 0.45);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.18);
+  }
+  .item--product.is-active .badge {
+    box-shadow: 0 2px 10px rgba(59, 130, 246, 0.12);
+  }
+  .item--product.is-active:hover {
+    border-color: #5f8ef3;
+    box-shadow:
+      0 0 0 1px rgba(122, 162, 247, 0.4),
+      0 10px 26px rgba(59, 130, 246, 0.22);
   }
   /* 一般清單卡（非商品卡）：與 .item 同為正常列高，勿縮小；高度由內容 + min-height 決定，不靠 grid 撐滿 */
   .entry-list > .item:not(.item--product) {
@@ -3767,29 +3833,48 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   }
 
   @media (min-width: 861px) {
-    /* 桌機：商品清單列緊湊高度（縮圖略小、內距收斂、與文字垂直置中） */
+    /* 桌機：商品清單增加卡片間距與呼吸感 */
     .entry-list > .item.item--product {
       align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      min-height: 0;
+      gap: 12px;
+      padding: 10px 12px;
+      min-height: 56px;
+      margin-bottom: 2px;
+      box-sizing: border-box;
     }
     .entry-list > .item.item--product .item__thumb,
     .entry-list > .item.item--product .item__thumb--empty {
-      width: 44px;
-      height: 34px;
-      border-radius: 8px;
+      width: 52px;
+      height: 40px;
+      border-radius: 10px;
     }
     .entry-list > .item.item--product .item__main {
-      gap: 2px;
+      gap: 4px;
     }
     .entry-list > .item.item--product .item__title {
-      font-size: 0.88rem;
+      font-size: 0.92rem;
       line-height: 1.25;
     }
     .entry-list > .item.item--product .item__meta {
-      font-size: 0.72rem;
-      line-height: 1.2;
+      font-size: 0.76rem;
+      line-height: 1.25;
+    }
+    /* 全部分類時避免分類名/標籤換行造成每張卡高度不同（看起來像間距不一致） */
+    .entry-list > .item.item--product .item__meta--withTags {
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      gap: 6px;
+    }
+    .entry-list > .item.item--product .item__metaCategory {
+      min-width: 0;
+      flex: 1 1 auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .entry-list > .item.item--product .item__metaTags {
+      flex-wrap: nowrap;
+      flex-shrink: 0;
     }
     .mobile-sanity-bar,
     .mobile-hub {
