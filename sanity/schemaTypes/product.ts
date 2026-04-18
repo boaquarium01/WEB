@@ -76,7 +76,7 @@ export const productType = defineType({
     }),
     defineField({
       name: 'excerpt',
-      title: '短述（列表用）',
+      title: '短述',
       type: 'text',
       rows: 2,
       group: 'basic'

@@ -400,7 +400,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         return;
       }
       const title = '水博館｜前台連結';
-      const sharePayload = { title, text: url, url };
+      // Avoid duplicate links in some apps: keep URL only in `url`.
+      const sharePayload = { title, text: '水博館前台連結', url };
       if (!navigator.share) {
         try {
           await navigator.clipboard.writeText(url);
@@ -1177,7 +1178,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         wrap.classList.add('card--bool');
         wrap.insertAdjacentHTML('beforeend', `<label class="switch"><input type="checkbox"><span></span></label>`);
       } else if (cfg.type === 'text' || cfg.type === 'blocks') {
-        const rows = cfg.type === 'blocks' ? 7 : field === 'excerpt' ? 2 : 4;
+        const rows = cfg.type === 'blocks' ? 8 : field === 'excerpt' ? 2 : 4;
         wrap.insertAdjacentHTML('beforeend', `<textarea rows="${rows}"></textarea>`);
       } else if (cfg.type === 'relation') {
         wrap.insertAdjacentHTML('beforeend', `<select></select>`);
@@ -1608,6 +1609,29 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       }
     }
 
+    async function refreshCurrentView() {
+      if (!confirmDiscardIfDirty()) return;
+      const selectedIdBefore = String(state.selectedId ?? '').trim();
+      const keepCategory = String(categoryFilter.value ?? '').trim();
+      state.dirty = false;
+
+      // Product view needs category options up-to-date before list redraw.
+      if (state.model === 'product') {
+        await ensureProductCategoryFilter();
+      }
+
+      await load(selectedIdBefore || undefined);
+
+      if (isProductSortMode()) {
+        if (keepCategory && Array.from(categoryFilter.options).some((o) => o.value === keepCategory)) {
+          categoryFilter.value = keepCategory;
+        }
+        drawList();
+      }
+
+      setStatus('已重整：最新資料');
+    }
+
     async function hubAction(hubKey) {
       if (!confirmDiscardIfDirty()) return;
       state.dirty = false;
@@ -1853,11 +1877,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         .then(() => syncPublicSiteButtons())
         .catch((e) => setStatus(`表單更新失敗：${e.message}`));
     };
-    refreshBtn.onclick = () =>
-      switchModel(state.model, {
-        categorySortMode: state.categorySortMode,
-        productSortMode: state.productSortMode
-      }).catch((e) => setStatus(`載入失敗：${e.message}`));
+    refreshBtn.onclick = () => void refreshCurrentView().catch((e) => setStatus(`載入失敗：${e.message}`));
     newBtn.onclick = () => {
       if (isCategorySortMode()) {
         openCategoryModal('create');
@@ -2784,8 +2804,28 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     margin: 0;
   }
   .card label { font-weight: 700; color: #334155; }
-  .card input, .card textarea, .card select { width: 100%; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font: inherit; }
+  .card input, .card textarea, .card select {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 10px;
+    font: inherit;
+    box-sizing: border-box;
+  }
   .card textarea { min-height: 110px; }
+  /* 摘要等短欄（excerpt）：與單行 input 同高，不套用大文字框 min-height */
+  .card textarea[rows='2'] {
+    min-height: 40px;
+    height: 40px;
+    resize: none;
+    line-height: normal;
+    overflow: hidden;
+  }
+  /* 全文／區塊編輯（span2）：較預設約 +10% */
+  .card.span2 textarea {
+    min-height: calc(110px * 1.1);
+  }
   .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
   .hint { margin: 0; font-size: .82rem; color: #64748b; }
   /* 預設不預留錯誤訊息空白；有內容時才顯示 */
@@ -3188,6 +3228,15 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   .adminx[data-model="product"] .card textarea,
   .adminx[data-model="product"] .card select { min-height: 32px; padding: 7px 8px; }
   .adminx[data-model="product"] .card textarea { min-height: 88px; }
+  /* 與同表單單行 input 外觀同高（40px），勿沿用 product 一般 textarea 的 88px */
+  .adminx[data-model="product"] .card textarea[rows='2'] {
+    min-height: 40px;
+    height: 40px;
+    overflow: hidden;
+  }
+  .adminx[data-model="product"] .card.span2 textarea {
+    min-height: calc(88px * 1.1);
+  }
   .adminx[data-model="product"] .ops button,
   .adminx[data-model="product"] .mini { padding: 4px; font-size: .72rem; }
 
@@ -3217,7 +3266,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       display: flex;
       flex-wrap: nowrap;
       gap: 6px;
-      overflow-x: hidden;
+      overflow-x: visible;
       overflow-y: visible;
       padding: 6px 2px 10px;
       margin: 0;

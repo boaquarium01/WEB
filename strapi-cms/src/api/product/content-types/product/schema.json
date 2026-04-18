@@ -28,7 +28,7 @@
         "list": { "label": "分類" }
       },
       "excerpt": {
-        "edit": { "label": "短述（列表用）" },
+        "edit": { "label": "短述" },
         "list": { "label": "短述" }
       },
       "body": {

@@ -13,7 +13,7 @@
   "content-manager.content-types.api::product.product.name": "名稱",
   "content-manager.content-types.api::product.product.slug": "網址 slug",
   "content-manager.content-types.api::product.product.category": "分類",
-  "content-manager.content-types.api::product.product.excerpt": "短述（列表用）",
+  "content-manager.content-types.api::product.product.excerpt": "短述",
   "content-manager.content-types.api::product.product.body": "內文",
   "content-manager.content-types.api::product.product.sortOrder": "分類內排序（數字越小越前面）",
   "content-manager.content-types.api::product.product.enabled": "上架／下架",
