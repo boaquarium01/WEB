@@ -115,7 +115,7 @@ const collectionJsonLd = {
                 data-alt={`${promo.title}（第 ${i + 1} 張）`}
                 aria-label={`放大檢視第 ${i + 1} 張圖片`}
               >
-                <div class="aspect-square overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
+                <div class="promo-thumb relative isolate aspect-square w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-sm">
                   {isStrapiPromoImg(source) ? (
                     <img
                       src={fullSrc}
@@ -124,7 +124,7 @@ const collectionJsonLd = {
                       height={900}
                       loading={i === 0 ? 'eager' : 'lazy'}
                       decoding="async"
-                      class="h-full w-full object-cover"
+                      class="h-full w-full object-cover object-center"
                     />
                   ) : (
                     <SanityImage
@@ -134,8 +134,7 @@ const collectionJsonLd = {
                       width={900}
                       height={900}
                       priority={i === 0}
-                      lqipCover
-                      imgClass="object-cover"
+                      fit="cover"
                       class="h-full w-full"
                     />
                   )}
@@ -215,6 +214,22 @@ const collectionJsonLd = {
 </Layout>
 
 <style>
+  /* 子元件根節點／內層 img 須 :global 才會套上（Astro scoped） */
+  .promo-thumb :global(> *) {
+    display: block;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+  }
+
+  .promo-thumb :global(img) {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+  }
+
   .promo-scroll-top-btn {
     position: fixed;
     right: 18px;

@@ -13,7 +13,7 @@
     "preview": "astro preview",
     "preview:local": "npm run build:local && cross-env ASTRO_LOCAL_NODE=1 astro preview",
     "astro": "astro",
-    "studio": "sanity dev --host",
+    "studio": "sanity dev --host --port 3334",
     "studio:deploy": "sanity deploy",
     "strapi:dev": "npm run develop --prefix strapi-cms",
     "strapi:build": "npm run build --prefix strapi-cms",

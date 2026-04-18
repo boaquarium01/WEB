@@ -1,6 +1,28 @@
 import { toHTML } from '@portabletext/to-html';
 import type { PortableTextBlock } from '@portabletext/types';
 
+/** 後台 textarea 純文字 → Portable Text blocks（對應 Sanity schema `array of block`） */
+export function plainTextToPortableBlocks(text: string): PortableTextBlock[] {
+	const s = String(text ?? '').replace(/\r\n/g, '\n');
+	const lines = s.split('\n');
+	const blocks: PortableTextBlock[] = [];
+	let i = 0;
+	for (const line of lines) {
+		const tline = line.trimEnd();
+		if (!tline.trim()) continue;
+		const key = `b_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 8)}`;
+		i += 1;
+		blocks.push({
+			_type: 'block',
+			_key: key,
+			style: 'normal',
+			markDefs: [],
+			children: [{ _type: 'span', _key: `${key}_s`, text: tline, marks: [] }]
+		} as PortableTextBlock);
+	}
+	return blocks;
+}
+
 export function portableTextToHtml(blocks: unknown[] | null | undefined): string {
   if (!Array.isArray(blocks) || blocks.length === 0) return '';
   try {

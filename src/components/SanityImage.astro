@@ -12,11 +12,17 @@ type Props = {
   width?: number;
   height?: number;
   /**
+   * 圖片在容器內的縮放：方格縮圖／需裁切留白請用 `cover`（中心裁切）；預設 `contain`。
+   * 請勿再透過 imgClass 同時傳入 object-cover/contain，避免與預設類別衝突。
+   */
+  fit?: 'contain' | 'cover';
+  /**
    * 輪播等已有「底層模糊圖」時設為 true，關閉 LQIP 背景，避免雙重模糊、主體看起來過小。
    */
   omitLqipBackground?: boolean;
   /**
    * LQIP 以 cover 填滿容器（預設 contain 在方形容器內會像中央一條／一塊，主圖載入後改 cover 會像由中往左右撐開）。
+   * 未指定時：`fit="cover"` 會自動為 true，與主圖一致。
    */
   lqipCover?: boolean;
 };
@@ -30,9 +36,15 @@ const {
   priority = false,
   width = 800,
   height = 600,
+  fit = 'contain',
   omitLqipBackground = false,
-  lqipCover = false
+  lqipCover: lqipCoverProp
 } = Astro.props as Props;
+
+const lqipCover = lqipCoverProp ?? fit === 'cover';
+
+/** cover + LQIP：用絕對定位填滿父層，避免 aspect-square 內 h% 未生效時底部露出模糊底圖 */
+const coverFill = fit === 'cover' && !omitLqipBackground;
 
 const srcSet = source ? buildSrcSet(source, SANITY_IMAGE_WIDTHS) : '';
 const lqip = source ? buildLqipUrl(source) : null;
@@ -44,7 +56,7 @@ const src = source ? buildDefaultSrc(source, width) : null;
     <div
       class:list={[
         'relative min-h-0 min-w-0',
-        omitLqipBackground ? 'bg-transparent h-full w-full overflow-visible' : 'overflow-hidden bg-slate-100',
+        omitLqipBackground ? 'bg-transparent h-full w-full overflow-visible' : ['overflow-hidden bg-slate-100', coverFill && 'h-full w-full'],
         cls
       ]}
       style={
@@ -71,7 +83,12 @@ const src = source ? buildDefaultSrc(source, width) : null;
         class:list={[
           omitLqipBackground
             ? 'opacity-100 carousel-slide__img--fill'
-            : 'h-full w-full object-contain object-center transition-opacity duration-500 opacity-0',
+            : coverFill
+              ? 'absolute inset-0 z-[1] h-full w-full object-cover object-center transition-opacity duration-500 opacity-0'
+              : [
+                  'h-full w-full object-center transition-opacity duration-500 opacity-0',
+                  fit === 'cover' ? 'object-cover' : 'object-contain'
+                ],
           imgClass
         ]}
         onload={omitLqipBackground ? undefined : "this.classList.remove('opacity-0')"}

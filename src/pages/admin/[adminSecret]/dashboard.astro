@@ -1,0 +1,3534 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { SITE_TITLE_SHORT } from '../../../config/site';
+import { readStrapiAdminBaseUrl } from '../../../lib/strapi/env';
+import { readAdminBackend } from '../../../lib/admin/adminBackend';
+import promotionSchema from '../../../../strapi-cms/src/api/promotion/content-types/promotion/schema.json';
+import productSchema from '../../../../strapi-cms/src/api/product/content-types/product/schema.json';
+import categorySchema from '../../../../strapi-cms/src/api/category/content-types/category/schema.json';
+
+type Schema = {
+  config?: { metadatas?: Record<string, { edit?: { label?: string } }> };
+  attributes: Record<string, { type: string; required?: boolean; multiple?: boolean; default?: unknown }>;
+};
+
+const schemas = {
+  promotion: promotionSchema as Schema,
+  product: productSchema as Schema,
+  category: categorySchema as Schema
+};
+
+const defs = {
+  promotion: { label: '促銷分頁', api: '/api/promotions', title: 'title' },
+  product: { label: '商品列表', api: '/api/products', title: 'name' },
+  category: { label: '分類管理', api: '/api/categories', title: 'name' }
+};
+
+const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
+const adminBackend = readAdminBackend();
+/** 官網前台 origin（供「前往前端／QR」）；可用 PUBLIC_SITE_URL 覆寫 */
+const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaquarium.vercel.app').replace(/\/+$/, '');
+---
+
+<Layout title={`後台管理｜${SITE_TITLE_SHORT}`} description="員工後台">
+  <main
+    class="adminx"
+    data-schemas={JSON.stringify(schemas)}
+    data-defs={JSON.stringify(defs)}
+    data-base={base}
+    data-admin-backend={adminBackend}
+    data-public-site-base={publicSiteBase}
+  >
+    <div class="mobile-sanity-bar">
+      <button type="button" id="mobileSanityMenuBtn" class="mobile-sanity-bar__iconbtn" aria-label="回首頁選單">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </button>
+      <span class="mobile-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
+      <div class="mobile-sanity-bar__mid">
+        <div class="mobile-sanity-bar__textcol">
+          <span class="mobile-sanity-bar__title">水博館官網後台</span>
+          <span id="sectionLabelMobile" class="mobile-sanity-bar__section" aria-live="polite">促銷分頁</span>
+        </div>
+        <span id="titleStatus" class="title-status title-status--in-mid">準備中</span>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div class="center-nav">
+        <div class="center-nav__meta">
+          <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
+          <span id="sectionLabelDesktop" class="section-label section-label--desktop" aria-live="polite">促銷分頁</span>
+        </div>
+        <div id="modelTabs" class="tabs"></div>
+      </div>
+      <div class="actions">
+        <button id="simpleModeToggle" class="mode-btn is-on action-btn" type="button" aria-pressed="true">
+          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span class="action-btn__label">簡易</span>
+        </button>
+        <button id="refreshBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+          <span class="action-btn__label">刷新</span>
+        </button>
+        <button id="newBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          <span class="action-btn__label">新增</span>
+        </button>
+        <button id="saveBtn" type="button" class="action-btn action-btn--solid">
+          <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+          <span class="action-btn__label">儲存</span>
+        </button>
+        <button id="openFrontendBtn" type="button" class="action-btn action-btn--solid action-btn--frontend" hidden aria-label="前往前台對應頁面">
+          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
+          <span class="action-btn__label">前端</span>
+        </button>
+        <button id="showQrBtn" type="button" class="action-btn action-btn--solid action-btn--qrcode" hidden aria-label="顯示前台網址 QR Code">
+          <i class="fa-solid fa-qrcode" aria-hidden="true"></i>
+          <span class="action-btn__label">QR Code</span>
+        </button>
+      </div>
+    </header>
+
+    <section id="mobileHub" class="mobile-hub" aria-label="管理選單首頁">
+      <nav class="mobile-hub__list">
+        <button type="button" class="mobile-hub__row" data-hub="promo-weekly">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
+          <span class="mobile-hub__label">每週新進魚隻 🐠</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="promo-special">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-tags"></i></span>
+          <span class="mobile-hub__label">預定優惠</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="promo-equipment">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-screwdriver-wrench"></i></span>
+          <span class="mobile-hub__label">器材促銷</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="products-all">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-box-open"></i></span>
+          <span class="mobile-hub__label">全部商品</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="products-by-category">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-arrow-down-wide-short"></i></span>
+          <span class="mobile-hub__label">調整分類內順序</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+        <button type="button" class="mobile-hub__row" data-hub="categories-sort">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder-tree"></i></span>
+          <span class="mobile-hub__label">分類管理</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
+      </nav>
+    </section>
+
+    <section class="workspace">
+      <aside class="listpane">
+        <div class="listpane__filters">
+          <select id="categoryFilter" class="search search--category" style="display:none;">
+            <option value="">全部分類</option>
+          </select>
+          <div class="search-wrap">
+            <span class="search-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
+            <input id="searchInput" class="search search--with-icon" placeholder="搜尋目前清單..." />
+          </div>
+        </div>
+        <div id="listCount" class="count">載入中...</div>
+        <div id="entryList" class="entry-list"></div>
+      </aside>
+
+      <section class="formpane">
+        <div class="formpane__section-head">
+          <span id="sectionLabelForm" class="formpane__section-title" aria-live="polite"></span>
+        </div>
+        <p id="statusText" class="status" style="display:none;">準備中...</p>
+        <form id="formRoot" class="form-grid"></form>
+      </section>
+    </section>
+
+    <!-- 分類管理：新增/編輯/刪除（避免 prompt 在手機被阻擋） -->
+    <div id="catManageModal" class="cat-modal" hidden role="dialog" aria-modal="true" aria-label="分類管理">
+      <button id="catModalBackdrop" class="cat-modal__backdrop" type="button" aria-label="關閉"></button>
+      <section class="cat-modal__panel" role="document">
+        <header class="cat-modal__head">
+          <h3 id="catModalTitle" class="cat-modal__title">分類管理</h3>
+          <button id="catModalClose" class="cat-modal__close" type="button" aria-label="關閉">✕</button>
+        </header>
+        <div class="cat-modal__body">
+          <label class="cat-modal__label">
+            <span>分類名稱</span>
+            <input id="catModalName" type="text" autocomplete="off" />
+          </label>
+          <label class="cat-modal__label">
+            <span>slug（英文網址名稱）</span>
+            <input id="catModalSlug" type="text" autocomplete="off" placeholder="例如 fish / equipment" />
+          </label>
+          <p class="cat-modal__hint">slug 建議小寫英數與連字號（-），需唯一。</p>
+        </div>
+        <footer class="cat-modal__foot">
+          <button id="catModalDelete" type="button" class="cat-modal__btn cat-modal__btn--danger" hidden>刪除</button>
+          <div class="cat-modal__spacer"></div>
+          <button id="catModalCancel" type="button" class="cat-modal__btn">取消</button>
+          <button id="catModalSave" type="button" class="cat-modal__btn cat-modal__btn--primary">儲存</button>
+        </footer>
+      </section>
+    </div>
+  </main>
+
+  <!-- 置於 main 外：全螢幕 fixed 不受 .adminx overflow／寬度影響（RWD 預覽） -->
+    <div id="qrModal" class="qr-modal" hidden role="dialog" aria-modal="true" aria-label="前台網址 QR Code">
+      <button type="button" id="qrModalBackdrop" class="qr-modal__backdrop" aria-label="關閉"></button>
+      <div class="qr-modal__panel">
+        <header class="qr-modal__head">
+          <span class="qr-modal__title">前台網址</span>
+          <button type="button" id="qrModalClose" class="qr-modal__close" aria-label="關閉">✕</button>
+        </header>
+        <div class="qr-modal__body">
+          <p id="qrModalUrl" class="qr-modal__url"></p>
+          <div class="qr-modal__imgWrap">
+            <img id="qrModalImg" class="qr-modal__img" width="240" height="240" alt="" />
+          </div>
+          <div class="qr-modal__actions">
+            <button type="button" id="qrModalSaveImg" class="qr-modal__btn qr-modal__btn--primary">儲存照片</button>
+            <button type="button" id="qrModalShare" class="qr-modal__btn qr-modal__btn--secondary">分享</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="imgPreviewModal" class="img-modal" hidden>
+    <button id="imgPreviewBackdrop" class="img-modal__backdrop" type="button" aria-label="關閉預覽"></button>
+    <button id="imgPreviewClose" class="img-modal__close" type="button" aria-label="關閉">✕</button>
+    <img id="imgPreviewEl" class="img-modal__img" alt="圖片預覽" />
+  </div>
+
+  <script>
+    import { applyBodyScrollLock, releaseBodyScrollLock } from '../../../scripts/scrollLock';
+    import { plainTextToStrapiBlocks, strapiBlocksToPlainText } from '../../../lib/strapi/blocks';
+    import { portableBlocksToPlainText } from '../../../lib/portableText';
+
+    const root = document.querySelector('.adminx');
+    if (!(root instanceof HTMLElement)) throw new Error('missing root');
+    const schemas = JSON.parse(root.dataset.schemas ?? '{}');
+    const defs = JSON.parse(root.dataset.defs ?? '{}');
+    const base = (root.dataset.base ?? 'http://localhost:1337').replace(/\/+$/, '');
+    const adminBackend = root.dataset.adminBackend === 'strapi' ? 'strapi' : 'sanity';
+
+    const openFrontendBtn = document.getElementById('openFrontendBtn');
+    const showQrBtn = document.getElementById('showQrBtn');
+    const qrModal = document.getElementById('qrModal');
+    const qrModalBackdrop = document.getElementById('qrModalBackdrop');
+    const qrModalClose = document.getElementById('qrModalClose');
+    const qrModalUrl = document.getElementById('qrModalUrl');
+    const qrModalImg = document.getElementById('qrModalImg');
+    const qrModalSaveImg = document.getElementById('qrModalSaveImg');
+    const qrModalShare = document.getElementById('qrModalShare');
+
+    const modelTabs = document.getElementById('modelTabs');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const newBtn = document.getElementById('newBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const simpleModeToggle = document.getElementById('simpleModeToggle');
+    const searchInput = document.getElementById('searchInput');
+    const entryList = document.getElementById('entryList');
+    const categoryFilter = document.getElementById('categoryFilter');
+    const listCount = document.getElementById('listCount');
+    const formRoot = document.getElementById('formRoot');
+    const statusText = document.getElementById('statusText');
+    const titleStatus = document.getElementById('titleStatus');
+    const titleStatusDesktop = document.getElementById('titleStatusDesktop');
+    const sectionLabelMobile = document.getElementById('sectionLabelMobile');
+    const sectionLabelForm = document.getElementById('sectionLabelForm');
+    const sectionLabelDesktop = document.getElementById('sectionLabelDesktop');
+    const imgPreviewModal = document.getElementById('imgPreviewModal');
+    const imgPreviewBackdrop = document.getElementById('imgPreviewBackdrop');
+    const imgPreviewClose = document.getElementById('imgPreviewClose');
+    const imgPreviewEl = document.getElementById('imgPreviewEl');
+    const mobileSanityMenuBtn = document.getElementById('mobileSanityMenuBtn');
+    const mobileHub = document.getElementById('mobileHub');
+    const catManageModal = document.getElementById('catManageModal');
+    const catModalBackdrop = document.getElementById('catModalBackdrop');
+    const catModalClose = document.getElementById('catModalClose');
+    const catModalTitle = document.getElementById('catModalTitle');
+    const catModalName = document.getElementById('catModalName');
+    const catModalSlug = document.getElementById('catModalSlug');
+    const catModalHint = document.querySelector('.cat-modal__hint');
+    const catModalCancel = document.getElementById('catModalCancel');
+    const catModalSave = document.getElementById('catModalSave');
+    const catModalDelete = document.getElementById('catModalDelete');
+    if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !listCount || !formRoot || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl || !mobileSanityMenuBtn || !mobileHub) {
+      throw new Error('missing ui');
+    }
+    if (!catManageModal || !catModalBackdrop || !catModalClose || !catModalTitle || !catModalName || !catModalSlug || !catModalCancel || !catModalSave || !catModalDelete) {
+      throw new Error('missing category modal ui');
+    }
+
+    const state = { model: 'promotion', entries: [], selectedId: '', selected: {}, categoryOptions: [], simpleMode: true, pendingUploads: {}, dirty: false, saving: false, categorySortMode: false, productSortMode: false };
+    const isCategorySortMode = () => state.model === 'category' && state.categorySortMode;
+    const isProductSortMode = () => state.model === 'product' && state.productSortMode;
+
+    function getPublicSiteOrigin() {
+      const raw = root.dataset.publicSiteBase ?? '';
+      const s = String(raw).trim().replace(/\/+$/, '');
+      return s || 'https://boaquarium.vercel.app';
+    }
+    /** 對應官網前台路徑：促銷 /promo/:slug、商品 /product/:slug、分類 /products/1?category=:slug */
+    function buildPublicFrontendUrl() {
+      if (isCategorySortMode() || isProductSortMode()) return '';
+      const m = state.model;
+      if (m === 'promotion') {
+        const s = String(state.selected?.slug ?? '').trim();
+        if (!s) return '';
+        return `${getPublicSiteOrigin()}/promo/${encodeURIComponent(s)}`;
+      }
+      if (m === 'product') {
+        const s = String(state.selected?.slug ?? '').trim();
+        if (!s) return '';
+        return `${getPublicSiteOrigin()}/product/${encodeURIComponent(s)}`;
+      }
+      if (m === 'category' && !isCategorySortMode()) {
+        const s = String(state.selected?.slug ?? state.selected?.attributes?.slug ?? '').trim();
+        if (!s) return '';
+        return `${getPublicSiteOrigin()}/products/1?category=${encodeURIComponent(s)}`;
+      }
+      return '';
+    }
+    function syncPublicSiteButtons() {
+      const url = buildPublicFrontendUrl();
+      const has = Boolean(url);
+      if (openFrontendBtn instanceof HTMLButtonElement) {
+        openFrontendBtn.hidden = !has;
+        openFrontendBtn.disabled = !has;
+      }
+      if (showQrBtn instanceof HTMLButtonElement) {
+        showQrBtn.hidden = !has;
+        showQrBtn.disabled = !has;
+        showQrBtn.dataset.frontendUrl = url;
+      }
+    }
+    function openQrModal(url) {
+      if (!(qrModal instanceof HTMLElement) || !qrModalUrl || !(qrModalImg instanceof HTMLImageElement)) return;
+      qrModalUrl.textContent = url;
+      qrModalImg.alt = `QR：${url}`;
+      qrModalImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=10&data=${encodeURIComponent(url)}`;
+      qrModal.hidden = false;
+      qrModal.setAttribute('aria-hidden', 'false');
+      try {
+        applyBodyScrollLock();
+      } catch {}
+    }
+    function closeQrModal() {
+      if (!(qrModal instanceof HTMLElement)) return;
+      qrModal.hidden = true;
+      qrModal.setAttribute('aria-hidden', 'true');
+      if (qrModalImg instanceof HTMLImageElement) {
+        qrModalImg.removeAttribute('src');
+        qrModalImg.alt = '';
+      }
+      try {
+        releaseBodyScrollLock();
+      } catch {}
+    }
+
+    async function getQrImageBlob() {
+      if (!(qrModalImg instanceof HTMLImageElement) || !qrModalImg.src) return null;
+      try {
+        const res = await fetch(qrModalImg.src, { mode: 'cors' });
+        if (!res.ok) return null;
+        return await res.blob();
+      } catch {
+        return null;
+      }
+    }
+
+    function suggestQrFilename() {
+      const publicUrl = qrModalUrl?.textContent?.trim() ?? '';
+      if (!publicUrl) return `boaquarium-qrcode-${Date.now()}.png`;
+      try {
+        const u = new URL(publicUrl);
+        const parts = u.pathname.split('/').filter(Boolean);
+        const last = parts[parts.length - 1] || 'qrcode';
+        const safe = String(last).replace(/[^a-zA-Z0-9\u4e00-\u9fff-_]/g, '_').slice(0, 48);
+        return `boaquarium-qrcode-${safe || 'link'}.png`;
+      } catch {
+        return `boaquarium-qrcode-${Date.now()}.png`;
+      }
+    }
+
+    async function saveQrPhoto() {
+      const fn = suggestQrFilename();
+      const blob = await getQrImageBlob();
+      if (blob && blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fn;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setStatus('已下載 QR 圖');
+        return;
+      }
+      const src = qrModalImg instanceof HTMLImageElement ? qrModalImg.src : '';
+      if (!src) {
+        setStatus('無 QR 圖可下載');
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = src;
+      a.download = fn;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setStatus('已觸發下載（若未儲存請在新分頁長按圖片另存）');
+    }
+
+    function isAbortError(err) {
+      return (
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        (err != null && typeof err === 'object' && 'name' in err && err.name === 'AbortError')
+      );
+    }
+
+    async function shareQrContent() {
+      const url = qrModalUrl?.textContent?.trim() ?? '';
+      if (!url) {
+        setStatus('沒有可分享的網址');
+        return;
+      }
+      const title = '水博館｜前台連結';
+      const sharePayload = { title, text: url, url };
+      if (!navigator.share) {
+        try {
+          await navigator.clipboard.writeText(url);
+          setStatus('已複製網址到剪貼簿');
+        } catch {
+          setStatus('無法複製，請手動複製上方網址');
+        }
+        return;
+      }
+      const blob = await getQrImageBlob();
+      if (blob && blob.size > 0) {
+        const fn = suggestQrFilename();
+        const mime = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png';
+        const file = new File([blob], fn, { type: mime });
+        if (navigator.canShare?.({ files: [file] })) {
+          try {
+            await navigator.share({ ...sharePayload, files: [file] });
+            return;
+          } catch (e) {
+            if (isAbortError(e)) return;
+          }
+        }
+      }
+      try {
+        await navigator.share(sharePayload);
+      } catch (e) {
+        if (isAbortError(e)) return;
+        try {
+          await navigator.clipboard.writeText(url);
+          setStatus('已複製網址到剪貼簿（分享不可用）');
+        } catch {
+          setStatus('分享失敗，請複製上方網址');
+        }
+      }
+    }
+
+    const TOKEN_KEY = 'adminx_strapi_token';
+    const readToken = () => {
+      try {
+        return String(localStorage.getItem(TOKEN_KEY) ?? '').trim();
+      } catch {
+        return '';
+      }
+    };
+    const writeToken = (token) => {
+      try {
+        if (!token) localStorage.removeItem(TOKEN_KEY);
+        else localStorage.setItem(TOKEN_KEY, token);
+      } catch {}
+    };
+    const authHeaders = () => {
+      const t = readToken();
+      return t ? { 'x-admin-token': t } : {};
+    };
+
+    const labelOf = (model, field) => {
+      // 後台精簡：商品主圖欄位統一顯示「圖片」
+      if (model === 'product' && field === 'image') return '圖片';
+      return schemas[model]?.config?.metadatas?.[field]?.edit?.label ?? field;
+    };
+    const kOf = (row) => String(row.documentId ?? row.id ?? '');
+    /** 與分類下拉 option.value 一致（documentId 優先，相容 Strapi populate / Sanity） */
+    function productCategoryId(row) {
+      const c = row?.category;
+      if (c == null || typeof c !== 'object') return '';
+      const raw =
+        c.documentId ??
+        c.id ??
+        c?.data?.documentId ??
+        c?.data?.id ??
+        c?._id ??
+        '';
+      return String(raw ?? '').trim();
+    }
+    /**
+     * 在各分類「出現槽位」不變下，依 sortOrder、名稱重排該分類內商品（用於載入後與後端一致）。
+     */
+    function applySortOrderWithinEachCategory(entries) {
+      const titleKey = defs.product.title;
+      const catKey = (row) => productCategoryId(row) || '__none';
+      const buckets = new Map();
+      for (const row of entries) {
+        const k = catKey(row);
+        if (!buckets.has(k)) buckets.set(k, []);
+        buckets.get(k).push(row);
+      }
+      for (const [, rows] of buckets) {
+        rows.sort((a, b) => {
+          const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+          const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+          if (sa !== sb) return sa - sb;
+          return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
+        });
+      }
+      const ptr = new Map();
+      for (const k of buckets.keys()) ptr.set(k, 0);
+      return entries.map((row) => {
+        const k = catKey(row);
+        const arr = buckets.get(k);
+        const i = ptr.get(k);
+        ptr.set(k, i + 1);
+        return arr[i];
+      });
+    }
+    const norm = (json) => Array.isArray(json?.data) ? json.data.map((x) => ({ ...(x.attributes ?? {}), ...x, id: x.id, documentId: x.documentId })) : [];
+    /** POST/PUT 單筆回傳 { data: {...} } → 與 norm 列項目同形 */
+    function normOne(json) {
+      const x = json?.data;
+      if (x == null) return null;
+      if (Array.isArray(x)) {
+        const first = x[0];
+        if (!first) return null;
+        return { ...(first.attributes ?? {}), ...first, id: first.id, documentId: first.documentId };
+      }
+      return { ...(x.attributes ?? {}), ...x, id: x.id, documentId: x.documentId };
+    }
+    /** Strapi categories API 回傳列，依 orderRank（數字 1,2,3…）排序，供篩選與表單下拉一致 */
+    function sortCategoriesByOrderRank(raw) {
+      if (!Array.isArray(raw)) return [];
+      return [...raw].sort((a, b) => {
+        const ra = Number(String(a.attributes?.orderRank ?? a.orderRank ?? '').trim());
+        const rb = Number(String(b.attributes?.orderRank ?? b.orderRank ?? '').trim());
+        const na = Number.isFinite(ra) ? ra : 999999;
+        const nb = Number.isFinite(rb) ? rb : 999999;
+        if (na !== nb) return na - nb;
+        const nameA = String(a.attributes?.name ?? a.name ?? '');
+        const nameB = String(b.attributes?.name ?? b.name ?? '');
+        return nameA.localeCompare(nameB, 'zh-Hant');
+      });
+    }
+    const advancedField = (field) =>
+      /slug|seo|sort|rank|order|legacy|activatedAt/i.test(field);
+    const essentialField = (field) =>
+      /title|name|excerpt|content|body|image|images|promoImages|gallery|enabled|featured|heroSpotlight/i.test(field);
+    const slug5 = () => Array.from({ length: 5 }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
+    const slugify = (text) =>
+      String(text ?? '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+    const isMobileNarrow = () => window.matchMedia('(max-width: 860px)').matches;
+    const isMobileHubHome = () => isMobileNarrow() && root.dataset.mobilePanel === 'home';
+    /** 窄螢幕停留在「管理選單」首頁時，不顯示「已載入 xxx」避免與畫面不符 */
+    function setLoadedStatus() {
+      if (isMobileHubHome()) {
+        setStatus('請選擇項目');
+        return;
+      }
+      setStatus(`已載入 ${defs[state.model].label}`);
+    }
+    function entryDisplayTitle() {
+      const def = defs[state.model];
+      const key = String(def?.title ?? '').trim();
+      if (!key) return '';
+      const card = formRoot.querySelector(`.card[data-field="${key}"]`);
+      if (card) {
+        const i = card.querySelector('input,textarea');
+        if (i instanceof HTMLInputElement || i instanceof HTMLTextAreaElement) {
+          const fromDom = String(i.value ?? '').trim();
+          if (fromDom) return fromDom;
+        }
+      }
+      return String(state.selected?.[key] ?? '').trim();
+    }
+    function updateSectionLabels() {
+      const lab = defs[state.model]?.label ?? '';
+      const narrow = isMobileNarrow();
+      const panel = root.dataset.mobilePanel ?? '';
+      sectionLabelDesktop.textContent = lab;
+      let barLine = '';
+      let formLine = '';
+      if (narrow && panel === 'home') {
+        barLine = '管理選單';
+      } else if (narrow) {
+        formLine = entryDisplayTitle() || lab;
+      }
+      sectionLabelMobile.textContent = barLine;
+      sectionLabelForm.textContent = formLine;
+    }
+    function setMobilePanel(panel) {
+      root.dataset.mobilePanel = panel;
+      const bar = root.querySelector('.mobile-sanity-bar');
+      if (bar instanceof HTMLElement) bar.setAttribute('aria-hidden', isMobileNarrow() ? 'false' : 'true');
+      mobileHub.setAttribute('aria-hidden', isMobileNarrow() && panel === 'home' ? 'false' : 'true');
+      updateSectionLabels();
+      if (panel === 'home' && isMobileNarrow()) {
+        setStatus('請選擇項目');
+      }
+    }
+    function confirmDiscardIfDirty() {
+      if (!state.dirty) return true;
+      return window.confirm('有更動尚未儲存，確定要離開嗎？');
+    }
+    function setStatus(text) {
+      const t = String(text ?? '');
+      titleStatus.textContent = t;
+      titleStatusDesktop.textContent = t;
+      statusText.textContent = t;
+      if (titleStatus instanceof HTMLElement) titleStatus.title = t;
+      if (titleStatusDesktop instanceof HTMLElement) titleStatusDesktop.title = t;
+      saveBtn.classList.toggle('is-dirty', state.dirty);
+    }
+    function markDirty() {
+      if (state.dirty) return;
+      state.dirty = true;
+      setStatus('有更動待儲存');
+    }
+    function openPreview(src) {
+      if (!(imgPreviewModal instanceof HTMLElement) || !(imgPreviewEl instanceof HTMLImageElement)) return;
+      imgPreviewEl.src = src;
+      imgPreviewModal.hidden = false;
+      try {
+        applyBodyScrollLock();
+      } catch {}
+    }
+    function closePreview() {
+      if (!(imgPreviewModal instanceof HTMLElement) || !(imgPreviewEl instanceof HTMLImageElement)) return;
+      imgPreviewModal.hidden = true;
+      imgPreviewEl.src = '';
+      try {
+        releaseBodyScrollLock();
+      } catch {}
+    }
+
+    async function api(path, init = {}) {
+      const mergedHeaders = { ...(init.headers ?? {}), ...authHeaders() };
+      if (adminBackend === 'sanity') {
+        const method = String(init.method ?? 'GET').toUpperCase();
+        let bodyField = null;
+        if (method !== 'GET' && init.body != null) {
+          bodyField = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
+        }
+        const res = await fetch('/api/admin/sanity-dashboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...mergedHeaders },
+          body: JSON.stringify({ path, method, body: bodyField })
+        });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const msg = errJson?.error?.message ? `：${errJson.error.message}` : '';
+          throw new Error(`HTTP ${res.status} ${path}${msg}`);
+        }
+        return res.json();
+      }
+      const proxy = `/api/admin/strapi-proxy?path=${encodeURIComponent(path)}`;
+      const res = await fetch(proxy, { ...init, headers: mergedHeaders });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const msg = errJson?.error?.message ? `：${errJson.error.message}` : '';
+        throw new Error(`HTTP ${res.status} ${path}${msg}`);
+      }
+      return res.json();
+    }
+
+    const UPLOAD_MAX_MB = 20;
+    const ALLOWED_IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    const ALLOWED_IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const MIME_TO_EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+    function uploadErrText(payload, status) {
+      const base = payload?.error?.message ?? payload?.message ?? '';
+      const details = payload?.error?.details ?? payload?.details;
+      if (!details) return String(base || `HTTP ${status}`);
+      const detailText = typeof details === 'string' ? details : JSON.stringify(details);
+      return String(base ? `${base} (${detailText})` : detailText || `HTTP ${status}`);
+    }
+
+    function fileExt(name = '') {
+      const idx = name.lastIndexOf('.');
+      if (idx < 0) return '';
+      return name.slice(idx + 1).toLowerCase();
+    }
+
+    function normalizeRelationValue(raw) {
+      const v = String(raw ?? '').trim();
+      if (!v) return null;
+      // 相容 Strapi v4/v5：純數字用數字 id，其餘視為 documentId。
+      if (/^\d+$/.test(v)) return Number(v);
+      return v;
+    }
+
+    function safeUploadName(file) {
+      const mime = String(file.type || '').toLowerCase();
+      const ext = fileExt(file.name) || MIME_TO_EXT[mime] || 'jpg';
+      const rawBase = String(file.name || 'upload').replace(/\.[^.]+$/, '');
+      const safeBase = rawBase
+        .normalize('NFKD')
+        .replace(/[^\w.-]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60) || `upload_${Date.now()}`;
+      return `${safeBase}.${ext}`;
+    }
+
+    function validateUploadFiles(files) {
+      const maxBytes = UPLOAD_MAX_MB * 1024 * 1024;
+      const failed = [];
+      const passed = [];
+      files.forEach((f) => {
+        const ext = fileExt(f.name);
+        const mime = String(f.type || '').toLowerCase();
+        if (!ALLOWED_IMAGE_EXT.includes(ext) && !ALLOWED_IMAGE_MIME.includes(mime)) {
+          failed.push(`${f.name}（不支援格式，僅限 ${ALLOWED_IMAGE_EXT.join('/')}）`);
+          return;
+        }
+        if (f.size > maxBytes) {
+          failed.push(`${f.name}（超過 ${UPLOAD_MAX_MB}MB）`);
+          return;
+        }
+        passed.push(f);
+      });
+      return { passed, failed };
+    }
+
+    function normalizeUploadIds(payload) {
+      if (!Array.isArray(payload)) return [];
+      const ids = [];
+      payload.forEach((x) => {
+        const raw = x?.id;
+        if (raw == null || raw === '') return;
+        if (typeof raw === 'number' && Number.isFinite(raw)) ids.push(raw);
+        else ids.push(String(raw));
+      });
+      return ids;
+    }
+
+    async function uploadBatch(files) {
+      const fd = new FormData();
+      files.forEach((f) => fd.append('files', f, safeUploadName(f)));
+      const url = adminBackend === 'sanity' ? '/api/admin/sanity-upload' : '/api/admin/strapi-proxy?path=%2Fapi%2Fupload';
+      const res = await fetch(url, { method: 'POST', body: fd, headers: authHeaders() });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(uploadErrText(payload, res.status));
+      return normalizeUploadIds(payload);
+    }
+
+    async function uploadOne(file) {
+      const fd = new FormData();
+      fd.append('files', file, safeUploadName(file));
+      const url = adminBackend === 'sanity' ? '/api/admin/sanity-upload' : '/api/admin/strapi-proxy?path=%2Fapi%2Fupload';
+      const res = await fetch(url, { method: 'POST', body: fd, headers: authHeaders() });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(uploadErrText(payload, res.status));
+      const raw = payload?.[0]?.id;
+      if (raw == null || raw === '') throw new Error('回傳缺少媒體 ID');
+      return typeof raw === 'number' && Number.isFinite(raw) ? raw : String(raw);
+    }
+
+    async function upload(files) {
+      if (!Array.isArray(files) || files.length === 0) return [];
+      const { passed, failed: invalidFiles } = validateUploadFiles(files);
+      if (invalidFiles.length) {
+        setStatus(`已略過不可上傳檔案：${invalidFiles.join('、')}`);
+      }
+      if (!passed.length) {
+        throw new Error(`上傳失敗：${invalidFiles.join('、')}`);
+      }
+      try {
+        return await uploadBatch(passed);
+      } catch (batchError) {
+        const okIds = [];
+        const failed = [];
+        for (const file of passed) {
+          try {
+            const id = await uploadOne(file);
+            okIds.push(id);
+          } catch (singleError) {
+            const reason = singleError instanceof Error ? singleError.message : String(singleError);
+            failed.push(`${file.name}（${reason}）`);
+          }
+        }
+        if (!okIds.length) {
+          throw new Error(`上傳失敗：${failed.join('、') || (batchError instanceof Error ? batchError.message : String(batchError))}`);
+        }
+        if (failed.length || invalidFiles.length) {
+          const allFailed = [...invalidFiles, ...failed];
+          setStatus(`部分圖片上傳失敗：${allFailed.join('、')}`);
+        }
+        return okIds;
+      }
+    }
+
+    const tabIcons = {
+      promotion: 'fa-tags',
+      product: 'fa-box-open',
+      category: 'fa-folder-tree'
+    };
+
+    function drawTabs() {
+      modelTabs.innerHTML = '';
+      Object.keys(defs).forEach((k) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `tab ${state.model === k ? 'is-active' : ''}`;
+        const ic = document.createElement('i');
+        ic.className = `fa-solid ${tabIcons[k] ?? 'fa-layer-group'}`;
+        ic.setAttribute('aria-hidden', 'true');
+        const lab = document.createElement('span');
+        lab.textContent = defs[k].label;
+        b.append(ic, lab);
+        // 「分類管理」固定走排序模式，避免從不同入口看到不同內容
+        b.onclick = () => {
+          if (k === 'category') return switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
+          return switchModel(k);
+        };
+        modelTabs.appendChild(b);
+      });
+    }
+
+    function drawList() {
+      const getProductThumbSrc = (row) => {
+        let media = row?.image ?? row?.images ?? null;
+        if (Array.isArray(media)) media = media[0] ?? null;
+        const raw =
+          media?.url ??
+          media?.attributes?.url ??
+          media?.data?.attributes?.url ??
+          media?.data?.url ??
+          '';
+        const s = String(raw ?? '');
+        if (!s) return '';
+        return s.startsWith('http') ? s : `${base}${s}`;
+      };
+
+      if (isCategorySortMode()) {
+        // 分類管理模式：只在載入時排序一次；之後以 state.entries 的順序為準（避免上下移後又被 orderRank 排回去）
+        const items = [...state.entries];
+        listCount.textContent = `共 ${items.length} 個分類`;
+        entryList.innerHTML = '';
+        items.forEach((row, idx) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'cat-manage-row';
+          const rank = idx + 1;
+          const slugText = String(row.slug ?? row?.attributes?.slug ?? '').trim();
+          wrap.innerHTML = `<span class="cat-manage-row__name">${String(row.name ?? `分類 #${idx + 1}`)}</span><span class="cat-manage-row__meta">排序：${rank}${slugText ? `　｜　slug：${slugText}` : ''}</span><span class="cat-manage-row__ops"><button type="button" class="cat-manage-row__btn" data-dir="up" ${idx === 0 ? 'disabled' : ''} aria-label="上移"><i class="fa-solid fa-arrow-up"></i></button><button type="button" class="cat-manage-row__btn" data-dir="down" ${idx === items.length - 1 ? 'disabled' : ''} aria-label="下移"><i class="fa-solid fa-arrow-down"></i></button><button type="button" class="cat-manage-row__btn cat-manage-row__btn--edit" data-act="edit" aria-label="編輯"><i class="fa-solid fa-pen"></i></button><button type="button" class="cat-manage-row__btn cat-manage-row__btn--del" data-act="del" aria-label="刪除"><i class="fa-solid fa-trash"></i></button></span>`;
+          wrap.querySelectorAll('.cat-manage-row__btn').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const t = ev.currentTarget;
+              if (!(t instanceof HTMLButtonElement)) return;
+              const act = t.dataset.act ?? '';
+              if (act === 'edit') {
+                openCategoryModal('edit', row);
+                return;
+              }
+              if (act === 'del') {
+                void deleteCategory(row).catch((e) => setStatus(`刪除失敗：${e instanceof Error ? e.message : String(e)}`));
+                return;
+              }
+              const dir = t.dataset.dir;
+              const to = dir === 'up' ? idx - 1 : idx + 1;
+              if (to < 0 || to >= state.entries.length) return;
+              const next = [...state.entries];
+              const [moved] = next.splice(idx, 1);
+              next.splice(to, 0, moved);
+              state.entries = next;
+              markDirty();
+              drawList();
+              setStatus('已調整分類順序，請按儲存');
+            });
+          });
+          entryList.appendChild(wrap);
+        });
+        return;
+      }
+      if (isProductSortMode()) {
+        const titleKey = defs.product.title;
+        const selectedCategory = String(categoryFilter.value ?? '').trim();
+        const allItems = [...state.entries];
+        const categoryName = (row) =>
+          String(row?.category?.name ?? row?.category?.data?.attributes?.name ?? row?.category?.data?.name ?? '').trim();
+        // 順序必須與 state.entries 一致（僅篩選該分類），不可再依 sortOrder 排序；
+        // 否則使用者調整順序後會立刻被 sort 回舊順序，看起來像按鈕無反應。
+        const items = selectedCategory ? allItems.filter((x) => productCategoryId(x) === selectedCategory) : [];
+        if (!selectedCategory) {
+          listCount.textContent = '請先選擇分類';
+          entryList.innerHTML = '';
+          return;
+        }
+        listCount.textContent = `共 ${items.length} 個商品`;
+        entryList.innerHTML = '';
+        items.forEach((row, idx) => {
+          const rank = idx + 1;
+          const enabled = Boolean(row.enabled);
+          const featured = Boolean(row.featured);
+          const heroSpotlight = Boolean(row.heroSpotlight);
+          const thumbSrc = getProductThumbSrc(row);
+          const cat = categoryName(row) || '未分類';
+          const title = String(row[titleKey] ?? '').trim() || `商品 #${idx + 1}`;
+
+          const wrap = document.createElement('div');
+          wrap.className = `item item--product item--product-sort ${enabled ? 'item--enabled' : 'item--disabled'}`;
+          wrap.setAttribute('role', 'group');
+          wrap.setAttribute('aria-label', `${title}，排序第 ${rank} 位`);
+
+          const thumbWrap = document.createElement('span');
+          thumbWrap.className = 'item__thumbWrap';
+          if (thumbSrc) {
+            const img = document.createElement('img');
+            img.className = 'item__thumb';
+            img.src = thumbSrc;
+            img.alt = '首圖';
+            img.loading = 'lazy';
+            thumbWrap.appendChild(img);
+          } else {
+            const ph = document.createElement('span');
+            ph.className = 'item__thumb item__thumb--empty';
+            ph.setAttribute('aria-hidden', 'true');
+            thumbWrap.appendChild(ph);
+          }
+
+          const main = document.createElement('span');
+          main.className = 'item__main';
+
+          const row1 = document.createElement('span');
+          row1.className = 'item__row1';
+          const titleEl = document.createElement('span');
+          titleEl.className = 'item__title';
+          titleEl.textContent = title;
+          const rankEl = document.createElement('span');
+          rankEl.className = 'item__sortRank';
+          rankEl.textContent = `排序：${rank}`;
+          row1.append(titleEl, rankEl);
+
+          const meta = document.createElement('span');
+          meta.className = 'item__meta item__meta--withTags';
+          const catEl = document.createElement('span');
+          catEl.className = 'item__metaCategory';
+          catEl.textContent = cat;
+          const tagWrap = document.createElement('span');
+          tagWrap.className = 'item__metaTags';
+          tagWrap.setAttribute('aria-label', '商品標籤');
+          if (heroSpotlight) {
+            const spot = document.createElement('span');
+            spot.className = 'badge badge--spotlight';
+            spot.textContent = '主打';
+            tagWrap.appendChild(spot);
+          }
+          if (featured) {
+            const hot = document.createElement('span');
+            hot.className = 'badge badge--hot';
+            hot.textContent = '熱銷';
+            tagWrap.appendChild(hot);
+          }
+          meta.append(catEl, tagWrap);
+
+          main.append(row1, meta);
+
+          const rail = document.createElement('div');
+          rail.className = 'item__sortRail';
+          const btnRow = document.createElement('div');
+          btnRow.className = 'item__sortBtnRow';
+
+          const btnUp = document.createElement('button');
+          btnUp.type = 'button';
+          btnUp.className = 'item__sortBtn';
+          btnUp.dataset.dir = 'up';
+          btnUp.setAttribute('aria-label', '上移');
+          btnUp.innerHTML = '<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>';
+          if (idx === 0) btnUp.disabled = true;
+
+          const btnDown = document.createElement('button');
+          btnDown.type = 'button';
+          btnDown.className = 'item__sortBtn';
+          btnDown.dataset.dir = 'down';
+          btnDown.setAttribute('aria-label', '下移');
+          btnDown.innerHTML = '<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>';
+          if (idx === items.length - 1) btnDown.disabled = true;
+
+          const btnEdit = document.createElement('button');
+          btnEdit.type = 'button';
+          btnEdit.className = 'item__sortBtn item__sortBtn--edit';
+          btnEdit.dataset.act = 'edit';
+          btnEdit.setAttribute('aria-label', '編輯');
+          btnEdit.innerHTML = '<i class="fa-solid fa-pen" aria-hidden="true"></i>';
+
+          const btnDel = document.createElement('button');
+          btnDel.type = 'button';
+          btnDel.className = 'item__sortBtn item__sortBtn--del';
+          btnDel.dataset.act = 'del';
+          btnDel.setAttribute('aria-label', '刪除');
+          btnDel.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+
+          btnRow.append(btnUp, btnDown, btnEdit, btnDel);
+          rail.appendChild(btnRow);
+
+          wrap.append(thumbWrap, main, rail);
+
+          btnRow.querySelectorAll('button').forEach((btn) => {
+            btn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              const t = ev.currentTarget;
+              if (!(t instanceof HTMLButtonElement)) return;
+              const act = t.dataset.act ?? '';
+              if (act === 'edit') {
+                const keepCat = String(categoryFilter.value ?? '').trim();
+                void switchModel('product').then(() => {
+                  categoryFilter.value = keepCat;
+                  drawList();
+                  select(row);
+                  if (isMobileNarrow()) setMobilePanel('editor');
+                }).catch((e) => setStatus(`無法開啟商品卡：${e instanceof Error ? e.message : String(e)}`));
+                return;
+              }
+              if (act === 'del') {
+                const name = String(row.name ?? '').trim() || '此商品';
+                const yes = window.confirm(`確定刪除「${name}」？\n\n刪除後無法復原。`);
+                if (!yes) return;
+                const id = kOf(row);
+                if (!id) return;
+                setStatus('刪除商品中…');
+                void api(`${defs.product.api}/${id}`, { method: 'DELETE' })
+                  .then(async () => {
+                    await load();
+                    categoryFilter.value = selectedCategory;
+                    drawList();
+                    setStatus('已刪除商品');
+                  })
+                  .catch((e) => setStatus(`刪除失敗：${e instanceof Error ? e.message : String(e)}`));
+                return;
+              }
+              const dir = t.dataset.dir;
+              const to = dir === 'up' ? idx - 1 : idx + 1;
+              if (to < 0 || to >= items.length) return;
+              const movedItems = [...items];
+              const [moved] = movedItems.splice(idx, 1);
+              movedItems.splice(to, 0, moved);
+              const cat = selectedCategory;
+              let mi = 0;
+              const next = state.entries.map((r) => (productCategoryId(r) === cat ? movedItems[mi++] : r));
+              if (mi !== movedItems.length) {
+                setStatus('排序合併異常：請刷新頁面');
+                return;
+              }
+              state.entries = next;
+              markDirty();
+              drawList();
+              setStatus('順序已改，請儲存');
+            });
+          });
+
+          entryList.appendChild(wrap);
+        });
+        return;
+      }
+
+      const q = String(searchInput.value ?? '').trim().toLowerCase();
+      const titleKey = defs[state.model].title;
+      let items = [...state.entries];
+      let categoryName = () => '';
+      let categoryId = () => '';
+      if (state.model === 'product') {
+        const selectedCategory = String(categoryFilter.value ?? '').trim();
+        categoryName = (row) =>
+          String(row?.category?.name ?? row?.category?.data?.attributes?.name ?? row?.category?.data?.name ?? '').trim();
+        categoryId = (row) => productCategoryId(row);
+
+        if (selectedCategory) items = items.filter((x) => categoryId(x) === selectedCategory);
+        items.sort((a, b) => {
+          const ca = categoryName(a);
+          const cb = categoryName(b);
+          if (ca !== cb) return ca.localeCompare(cb, 'zh-Hant');
+          const sa = Number.isFinite(Number(a.sortOrder)) ? Number(a.sortOrder) : 999999;
+          const sb = Number.isFinite(Number(b.sortOrder)) ? Number(b.sortOrder) : 999999;
+          if (sa !== sb) return sa - sb;
+          return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
+        });
+      }
+      items = items.filter((x) => String(x[titleKey] ?? '').toLowerCase().includes(q));
+      listCount.textContent = '';
+      entryList.innerHTML = '';
+      items.forEach((row) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        const isActive = kOf(row) === state.selectedId;
+        if (state.model === 'product') {
+          const enabled = Boolean(row.enabled);
+          const featured = Boolean(row.featured);
+          const heroSpotlight = Boolean(row.heroSpotlight);
+          const thumbSrc = getProductThumbSrc(row);
+          const cat = categoryName(row) || '未分類';
+          const title = String(row[titleKey] ?? '').trim() || `項目 #${row.id}`;
+
+          b.className = `item item--product ${isActive ? 'is-active' : ''} ${enabled ? 'item--enabled' : 'item--disabled'}`;
+
+          const thumbWrap = document.createElement('span');
+          thumbWrap.className = 'item__thumbWrap';
+          if (thumbSrc) {
+            const img = document.createElement('img');
+            img.className = 'item__thumb';
+            img.src = thumbSrc;
+            img.alt = '首圖';
+            img.loading = 'lazy';
+            thumbWrap.appendChild(img);
+          } else {
+            const ph = document.createElement('span');
+            ph.className = 'item__thumb item__thumb--empty';
+            ph.setAttribute('aria-hidden', 'true');
+            thumbWrap.appendChild(ph);
+          }
+
+          const main = document.createElement('span');
+          main.className = 'item__main';
+
+          const row1 = document.createElement('span');
+          row1.className = 'item__row1';
+
+          const titleEl = document.createElement('span');
+          titleEl.className = 'item__title';
+          titleEl.textContent = title;
+          row1.appendChild(titleEl);
+
+          const meta = document.createElement('span');
+          meta.className = 'item__meta item__meta--withTags';
+
+          const catEl = document.createElement('span');
+          catEl.className = 'item__metaCategory';
+          catEl.textContent = cat;
+
+          const tagWrap = document.createElement('span');
+          tagWrap.className = 'item__metaTags';
+          tagWrap.setAttribute('aria-label', '商品標籤');
+          if (heroSpotlight) {
+            const spot = document.createElement('span');
+            spot.className = 'badge badge--spotlight';
+            spot.textContent = '主打';
+            tagWrap.appendChild(spot);
+          }
+          if (featured) {
+            const hot = document.createElement('span');
+            hot.className = 'badge badge--hot';
+            hot.textContent = '熱銷';
+            tagWrap.appendChild(hot);
+          }
+
+          meta.append(catEl, tagWrap);
+
+          main.append(row1, meta);
+          b.append(thumbWrap, main);
+        } else {
+          b.className = `item ${isActive ? 'is-active' : ''}`;
+          b.textContent = String(row[titleKey] ?? `項目 #${row.id}`);
+        }
+        b.onclick = () => select(row);
+        entryList.appendChild(b);
+      });
+    }
+    function select(row) {
+      if (isCategorySortMode() || isProductSortMode()) return;
+      fill(row);
+      state.dirty = false;
+      setStatus(`已載入 ${defs[state.model].label}`);
+      if (isMobileNarrow()) setMobilePanel('editor');
+    }
+
+    function fieldEl(field, cfg) {
+      const wrap = document.createElement('section');
+      wrap.className = 'card';
+      wrap.dataset.field = field;
+      wrap.dataset.type = cfg.type;
+      wrap.dataset.multiple = String(Boolean(cfg.multiple));
+      if (cfg.type === 'media' || field === 'content' || field === 'body') wrap.classList.add('span2');
+      wrap.innerHTML = `<label>${labelOf(state.model, field)}</label>`;
+
+      if (cfg.type === 'boolean') {
+        wrap.classList.add('card--bool');
+        wrap.insertAdjacentHTML('beforeend', `<label class="switch"><input type="checkbox"><span></span></label>`);
+      } else if (cfg.type === 'text' || cfg.type === 'blocks') {
+        const rows = cfg.type === 'blocks' ? 7 : field === 'excerpt' ? 2 : 4;
+        wrap.insertAdjacentHTML('beforeend', `<textarea rows="${rows}"></textarea>`);
+      } else if (cfg.type === 'relation') {
+        wrap.insertAdjacentHTML('beforeend', `<select></select>`);
+      } else if (cfg.type === 'media') {
+        wrap.insertAdjacentHTML(
+          'beforeend',
+          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><input class="file-input" type="file" accept="image/*" ${cfg.multiple ? 'multiple' : ''}><span class="pick-info">未選擇檔案</span></div><div class="pick-files" aria-live="polite"></div></div>`
+        );
+      } else {
+        wrap.insertAdjacentHTML('beforeend', `<input type="${cfg.type === 'datetime' ? 'datetime-local' : 'text'}">`);
+      }
+      wrap.insertAdjacentHTML('beforeend', `<p class="err"></p>`);
+      return wrap;
+    }
+
+    /** 商品分頁必備：篩選下拉與表單分類選項（排序模式會略過 drawForm，須單獨載入） */
+    async function ensureProductCategoryFilter() {
+      const prev = String(categoryFilter.value ?? '').trim();
+      const cat = await api('/api/categories?fields[0]=name&fields[1]=orderRank&pagination[pageSize]=200');
+      state.categoryOptions = sortCategoriesByOrderRank(Array.isArray(cat?.data) ? cat.data : []);
+      categoryFilter.style.display = 'block';
+      categoryFilter.innerHTML = '<option value="">全部分類</option>';
+      state.categoryOptions.forEach((x) => {
+        const o = document.createElement('option');
+        o.value = String(x.documentId ?? x.id ?? '');
+        o.textContent = String(x.attributes?.name ?? x.name ?? x.id);
+        categoryFilter.appendChild(o);
+      });
+      if (prev && Array.from(categoryFilter.options).some((opt) => opt.value === prev)) {
+        categoryFilter.value = prev;
+      }
+    }
+
+    async function drawForm() {
+      formRoot.innerHTML = '';
+      const attrs = schemas[state.model]?.attributes ?? {};
+      const advancedKeys = [];
+      Object.keys(attrs).forEach((f) => {
+        if (state.model === 'product' && f === 'slug') return;
+        if (state.model === 'product' && f === 'gallery') return;
+        // Strapi 只保留 orderRank，避免出現第二個舊排序欄位
+        if (state.model === 'category' && f === 'legacySortOrder') return;
+        if (state.model === 'promotion' && f === 'title' && state.simpleMode) {
+          advancedKeys.push(f);
+          return;
+        }
+        const cfg = attrs[f];
+        if (state.simpleMode && advancedField(f)) {
+          advancedKeys.push(f);
+          return;
+        }
+        if (state.simpleMode && !essentialField(f) && !cfg.required && cfg.type !== 'media' && cfg.type !== 'boolean') {
+          advancedKeys.push(f);
+          return;
+        }
+        formRoot.appendChild(fieldEl(f, cfg));
+      });
+
+      if (advancedKeys.length > 0) {
+        const details = document.createElement('details');
+        details.className = 'advanced';
+        details.innerHTML = `<summary>進階設定（slug / SEO / 排序）</summary><div class="advanced-grid"></div>`;
+        const grid = details.querySelector('.advanced-grid');
+        if (grid) {
+          advancedKeys.forEach((f) => grid.appendChild(fieldEl(f, attrs[f])));
+        }
+        formRoot.appendChild(details);
+      }
+
+      if (state.model === 'product') {
+        const slugCard = document.createElement('section');
+        slugCard.className = 'card span2 slug-card';
+        slugCard.innerHTML =
+          '<label>商品 slug (自動生成)</label><input id="productSlugReadonly" type="text" readonly />';
+        formRoot.appendChild(slugCard);
+      }
+      if (state.model === 'product') {
+        if (!state.categoryOptions.length) {
+          await ensureProductCategoryFilter();
+        }
+      } else {
+        categoryFilter.style.display = 'none';
+        categoryFilter.value = '';
+      }
+      fill(state.selected);
+      formRoot.oninput = (e) => {
+        const t = e.target;
+        if (t instanceof HTMLInputElement && t.readOnly) return;
+        markDirty();
+        if (t instanceof Element) {
+          const card = t.closest('.card');
+          const key = String(defs[state.model]?.title ?? '').trim();
+          if (key && card instanceof HTMLElement && card.dataset.field === key) updateSectionLabels();
+        }
+      };
+      formRoot.onchange = () => markDirty();
+    }
+
+    async function applyPendingUploads(card, { interactive = true } = {}) {
+      const grid = card.querySelector('.grid');
+      const info = card.querySelector('.pick-info');
+      const fileList = card.querySelector('.pick-files');
+      const field = card.dataset.field ?? '';
+      if (!(grid instanceof HTMLElement) || !(info instanceof HTMLElement)) return;
+      const files = Array.isArray(state.pendingUploads[field]) ? [...state.pendingUploads[field]] : [];
+      if (!files.length) return;
+
+      const max = state.model === 'promotion' && field === 'promoImages' ? 25 : Infinity;
+      if (Number.isFinite(max) && grid.children.length + files.length > max) {
+        const overflow = grid.children.length + files.length - max;
+        if (interactive) {
+          const yes = window.confirm(`促銷圖片上限 25 張。\n將以新圖片取代最後 ${overflow} 張舊圖，是否繼續？`);
+          if (!yes) return;
+        }
+        for (let i = 0; i < overflow; i += 1) {
+          const last = grid.lastElementChild;
+          if (last) last.remove();
+        }
+      }
+      const ids = await upload(files);
+      ids.forEach((id) => {
+        const c = document.createElement('article');
+        c.className = 'thumb pending';
+        c.dataset.id = String(id);
+        const label = String(id).length > 24 ? `${String(id).slice(0, 12)}…` : String(id);
+        c.innerHTML = `<div class="ph">ID ${label}</div><div class="ops"><button type="button" class="op-btn op-left" data-a="l" aria-label="左移"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="op-btn op-right" data-a="r" aria-label="右移"><i class="fa-solid fa-arrow-right"></i></button><button type="button" class="op-btn op-del" data-a="d" aria-label="移除"><i class="fa-solid fa-trash"></i></button></div>`;
+        grid.appendChild(c);
+      });
+      state.pendingUploads[field] = [];
+      info.textContent = '未選擇檔案';
+      const pendingGrid = card.querySelector('.pending-grid');
+      if (pendingGrid instanceof HTMLElement) pendingGrid.innerHTML = '';
+      if (fileList instanceof HTMLElement) fileList.innerHTML = '';
+      const input = card.querySelector('.file-input');
+      if (input instanceof HTMLInputElement) input.value = '';
+      markDirty();
+    }
+
+    function mediaBind(card) {
+      const grid = card.querySelector('.grid');
+      const pendingGrid = card.querySelector('.pending-grid');
+      const input = card.querySelector('.file-input');
+      const info = card.querySelector('.pick-info');
+      const fileList = card.querySelector('.pick-files');
+      const field = card.dataset.field ?? '';
+      if (!(grid instanceof HTMLElement) || !(pendingGrid instanceof HTMLElement) || !(input instanceof HTMLInputElement) || !(info instanceof HTMLElement) || !(fileList instanceof HTMLElement)) return;
+
+      if (!Array.isArray(state.pendingUploads[field])) state.pendingUploads[field] = [];
+      const renderPending = () => {
+        const files = Array.isArray(state.pendingUploads[field]) ? state.pendingUploads[field] : [];
+        pendingGrid.innerHTML = '';
+        fileList.innerHTML = '';
+        files.forEach((file, idx) => {
+          const src = URL.createObjectURL(file);
+          const item = document.createElement('article');
+          item.className = 'thumb thumb--pending';
+          item.innerHTML = `<span class="pending-tag">新圖片</span><img src="${src}" alt="${file.name}"><div class="ops"><button type="button" data-rm="${idx}">移除圖片</button></div>`;
+          const rm = item.querySelector('button[data-rm]');
+          if (rm) {
+            rm.onclick = () => {
+              state.pendingUploads[field].splice(idx, 1);
+              renderPending();
+              info.textContent = state.pendingUploads[field].length > 0 ? `已選 ${state.pendingUploads[field].length} 張` : '未選擇檔案';
+              if (state.pendingUploads[field].length === 0) input.value = '';
+              markDirty();
+            };
+          }
+          pendingGrid.appendChild(item);
+
+          const nameRow = document.createElement('div');
+          nameRow.className = 'pick-file-row';
+          nameRow.textContent = `${idx + 1}. ${file.name}`;
+          fileList.appendChild(nameRow);
+        });
+      };
+
+      input.onchange = () => {
+        const files = Array.from(input.files ?? []);
+        if (!files.length) return;
+        state.pendingUploads[field].push(...files);
+        info.textContent = `已選 ${state.pendingUploads[field].length} 張`;
+        renderPending();
+        markDirty();
+      };
+
+      grid.querySelectorAll('.thumb').forEach((el, i) => {
+        const l = el.querySelector('[data-a="l"]');
+        const r = el.querySelector('[data-a="r"]');
+        const d = el.querySelector('[data-a="d"]');
+        const img = el.querySelector('img');
+        const existingBadge = el.querySelector('.order-badge');
+        if (!existingBadge) {
+          const badge = document.createElement('span');
+          badge.className = 'order-badge';
+          badge.textContent = state.model === 'product' && card.dataset.field === 'image' && i === 0 ? '主圖' : String(i + 1);
+          el.prepend(badge);
+        } else {
+          existingBadge.textContent = state.model === 'product' && card.dataset.field === 'image' && i === 0 ? '主圖' : String(i + 1);
+        }
+        if (img instanceof HTMLImageElement) {
+          img.style.cursor = 'zoom-in';
+          img.onclick = () => openPreview(img.src);
+        }
+        if (l) l.onclick = () => {
+          if (i > 0) {
+            grid.insertBefore(el, grid.children[i - 1]);
+            markDirty();
+          }
+          mediaBind(card);
+        };
+        if (r) r.onclick = () => {
+          if (grid.children[i + 1]) {
+            grid.insertBefore(grid.children[i + 1], el);
+            markDirty();
+          }
+          mediaBind(card);
+        };
+        if (d) d.onclick = () => {
+          if (window.confirm('確定移除此圖片？')) {
+            el.remove();
+            markDirty();
+            mediaBind(card);
+          }
+        };
+      });
+    }
+
+    function fillMedia(card, value) {
+      const grid = card.querySelector('.grid');
+      if (!(grid instanceof HTMLElement)) return;
+      const arr = Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : value?.data ? [value.data] : value ? [value] : [];
+      grid.innerHTML = '';
+      arr.forEach((m) => {
+        const raw = m?.url ?? m?.attributes?.url ?? '';
+        const src = raw.startsWith('http') ? raw : `${base}${raw}`;
+        const c = document.createElement('article');
+        c.className = 'thumb';
+        c.dataset.id = String(m?.id ?? '');
+        c.innerHTML = `<img src="${src}" alt=""><div class="ops"><button type="button" class="op-btn op-left" data-a="l" aria-label="左移"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="op-btn op-right" data-a="r" aria-label="右移"><i class="fa-solid fa-arrow-right"></i></button><button type="button" class="op-btn op-del" data-a="d" aria-label="移除"><i class="fa-solid fa-trash"></i></button></div>`;
+        grid.appendChild(c);
+      });
+      mediaBind(card);
+    }
+
+    function fill(row) {
+      state.selected = row ?? {};
+      state.selectedId = kOf(state.selected);
+      if (state.model === 'product') {
+        const slugInput = document.getElementById('productSlugReadonly');
+        if (slugInput instanceof HTMLInputElement) {
+          const value = String(state.selected.slug ?? '').trim();
+          slugInput.value = value;
+        }
+      }
+      formRoot.querySelectorAll('.card').forEach((card) => {
+        const field = card.dataset.field;
+        const type = card.dataset.type;
+        if (!field) return;
+        const v = state.selected[field];
+        if (type === 'boolean') {
+          const c = card.querySelector('input[type="checkbox"]');
+          if (c) c.checked = Boolean(v);
+        } else if (type === 'relation') {
+          const s = card.querySelector('select');
+          if (!(s instanceof HTMLSelectElement)) return;
+          s.innerHTML = '<option value="">請選擇分類</option>';
+          state.categoryOptions.forEach((x) => {
+            const o = document.createElement('option');
+            o.value = String(x.documentId ?? x.id ?? '');
+            o.textContent = String(x.attributes?.name ?? x.name ?? x.id);
+            s.appendChild(o);
+          });
+          s.value = String(v?.data?.documentId ?? v?.documentId ?? v?.data?.id ?? v?.id ?? '');
+        } else if (type === 'media') {
+          if (state.model === 'product' && field === 'image') {
+            const merged = [];
+            const head = Array.isArray(state.selected.image) ? state.selected.image : state.selected.image ? [state.selected.image] : [];
+            const tail = Array.isArray(state.selected.gallery) ? state.selected.gallery : state.selected.gallery ? [state.selected.gallery] : [];
+            merged.push(...head, ...tail);
+            fillMedia(card, merged);
+          } else {
+            fillMedia(card, v);
+          }
+        } else {
+          const i = card.querySelector('input,textarea');
+          if (!i) return;
+          if (type === 'datetime') i.value = v ? String(v).slice(0, 16) : '';
+          else if (type === 'json') i.value = v ? JSON.stringify(v) : '';
+          else if (type === 'blocks') {
+            if (Array.isArray(v)) {
+              const fb = v[0];
+              const isPortable = Boolean(fb && typeof fb === 'object' && fb._type === 'block');
+              i.value = isPortable ? portableBlocksToPlainText(v) : strapiBlocksToPlainText(v);
+            } else i.value = v == null ? '' : String(v);
+          } else i.value = v == null ? '' : String(v);
+        }
+      });
+      drawList();
+      updateSectionLabels();
+      syncPublicSiteButtons();
+    }
+
+    function collect() {
+      const attrs = schemas[state.model].attributes;
+      const out = {};
+      let ok = true;
+      formRoot.querySelectorAll('.card').forEach((card) => {
+        const f = card.dataset.field;
+        const t = card.dataset.type;
+        if (!f) return;
+        const err = card.querySelector('.err');
+        if (err) err.textContent = '';
+
+        if (t === 'boolean') {
+          const c = card.querySelector('input[type="checkbox"]');
+          out[f] = Boolean(c?.checked);
+        } else if (t === 'relation') {
+          const s = card.querySelector('select');
+          out[f] = normalizeRelationValue(s?.value);
+        } else if (t === 'media') {
+          const rawIds = Array.from(card.querySelectorAll('.thumb'))
+            .map((x) => String(x.dataset.id ?? '').trim())
+            .filter(Boolean)
+            .map((s) => (/^\d+$/.test(s) ? Number(s) : s));
+          if (state.model === 'product' && f === 'image') {
+            out.image = rawIds[0] ?? null;
+            out.gallery = rawIds.slice(1);
+          } else {
+            out[f] = attrs[f].multiple ? rawIds : rawIds[0] ?? null;
+          }
+        } else {
+          const i = card.querySelector('input,textarea');
+          const raw = i?.value ?? '';
+          if (t === 'integer') out[f] = raw.trim() ? Number(raw) : null;
+          else if (t === 'json') out[f] = raw.trim() ? JSON.parse(raw) : null;
+          else if (t === 'blocks') out[f] = plainTextToStrapiBlocks(raw);
+          else out[f] = raw;
+        }
+
+        if (attrs[f]?.required && (out[f] === '' || out[f] == null)) {
+          if (err) err.textContent = '此欄位必填';
+          ok = false;
+        }
+      });
+      if (state.model === 'product') {
+        const slugInput = document.getElementById('productSlugReadonly');
+        const slugValue =
+          slugInput instanceof HTMLInputElement ? slugInput.value.trim() : String(state.selected.slug ?? '').trim();
+        out.slug = slugValue;
+      }
+      return { ok, out };
+    }
+
+    /**
+     * @param {string} [selectIdAfter] 載入後自動選取（維持編輯畫面，避免儲存後表單被清空／手機跳出編輯）
+     */
+    async function load(selectIdAfter) {
+      setStatus('載入中...');
+      const j = await api(`${defs[state.model].api}?populate=*`);
+      state.entries = norm(j);
+      if (state.model === 'product' && state.entries.length) {
+        state.entries = applySortOrderWithinEachCategory(state.entries);
+      }
+      if (isCategorySortMode()) {
+        // 只在載入時依 orderRank 排序一次，後續調整以陣列順序為準
+        state.entries = [...state.entries].sort((a, b) => {
+          const ra = Number.isFinite(Number(a.orderRank)) ? Number(a.orderRank) : 999999;
+          const rb = Number.isFinite(Number(b.orderRank)) ? Number(b.orderRank) : 999999;
+          if (ra !== rb) return ra - rb;
+          return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'zh-Hant');
+        });
+      }
+      state.selected = {};
+      state.selectedId = '';
+      fill({});
+      drawList();
+      state.dirty = false;
+      setLoadedStatus();
+      const sid = String(selectIdAfter ?? '').trim();
+      if (sid) {
+        const row = state.entries.find((e) => kOf(e) === sid);
+        if (row) select(row);
+      }
+      syncPublicSiteButtons();
+    }
+
+    async function switchModel(model, options = {}) {
+      const {
+        selectPromotionSlug,
+        mobilePanel,
+        // 「分類管理」預設開排序模式：只調整順序、不顯示右側表單
+        categorySortMode = model === 'category',
+        productSortMode = false
+      } = options;
+      try {
+        state.model = model;
+        state.categorySortMode = model === 'category' ? Boolean(categorySortMode) : false;
+        state.productSortMode = model === 'product' ? Boolean(productSortMode) : false;
+        root.dataset.categorySortMode = state.categorySortMode ? '1' : '0';
+        root.dataset.productSortMode = state.productSortMode ? '1' : '0';
+        root.dataset.model = model;
+        if (model === 'product') {
+          await ensureProductCategoryFilter();
+        }
+        if (isMobileNarrow()) {
+          if (mobilePanel !== undefined) setMobilePanel(mobilePanel);
+          else if (state.categorySortMode || state.productSortMode) setMobilePanel('list');
+          else setMobilePanel('list');
+        }
+        drawTabs();
+        if (state.categorySortMode || state.productSortMode) {
+          formRoot.innerHTML = '';
+          state.selected = {};
+          state.selectedId = '';
+        } else {
+          await drawForm();
+        }
+        await load();
+        if (selectPromotionSlug) {
+          const slug = String(selectPromotionSlug).trim();
+          const row = state.entries.find((e) => String(e.slug ?? '').trim() === slug);
+          if (row) select(row);
+          else setStatus(`找不到促銷頁（slug）：${slug}`);
+        }
+        updateSectionLabels();
+      } catch (e) {
+        setStatus(`分頁切換失敗：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    async function hubAction(hubKey) {
+      if (!confirmDiscardIfDirty()) return;
+      state.dirty = false;
+      try {
+        if (hubKey === 'promo-weekly') await switchModel('promotion', { selectPromotionSlug: 'weekly-new' });
+        else if (hubKey === 'promo-special') await switchModel('promotion', { selectPromotionSlug: 'special-offers' });
+        else if (hubKey === 'promo-equipment') await switchModel('promotion', { selectPromotionSlug: 'equipment-sale' });
+        else if (hubKey === 'products-all') {
+          await switchModel('product');
+          categoryFilter.value = '';
+          drawList();
+        } else if (hubKey === 'products-by-category') {
+          await switchModel('product', { productSortMode: true, mobilePanel: 'list' });
+          if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
+          drawList();
+          setStatus('選分類→↑↓→頂部「儲存」');
+          queueMicrotask(() => categoryFilter.focus());
+        } else if (hubKey === 'categories-sort') {
+          await switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
+          setStatus('分類管理：可用 ↑↓ 調整');
+        }
+      } catch (e) {
+        setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+
+    async function saveCategoryOrder() {
+      // 逐筆更新（避免大量 Promise.all 併發造成偶發失敗，也方便定位哪筆出錯）
+      for (let idx = 0; idx < state.entries.length; idx += 1) {
+        const row = state.entries[idx];
+        const id = kOf(row);
+        if (!id) continue;
+        // Strapi schema: orderRank 是 string
+        const nextRank = String(idx + 1);
+        const current = String(row.orderRank ?? '').trim();
+        if (current === nextRank) continue;
+        setStatus(`儲存中…（${idx + 1}/${state.entries.length}）`);
+        await api(`${defs.category.api}/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { orderRank: nextRank } })
+        });
+      }
+      state.dirty = false;
+      await load();
+      setStatus('分類順序已儲存');
+    }
+
+    async function saveProductCategoryOrder() {
+      const selectedCategory = String(categoryFilter.value ?? '').trim();
+      if (!selectedCategory) {
+        setStatus('請先選擇分類');
+        return;
+      }
+      const items = state.entries.filter((x) => productCategoryId(x) === selectedCategory);
+      const updates = [];
+      for (let idx = 0; idx < items.length; idx += 1) {
+        const row = items[idx];
+        const id = kOf(row);
+        if (!id) continue;
+        const nextSort = idx + 1;
+        const current = Number(row.sortOrder);
+        if (Number.isFinite(current) && current === nextSort) continue;
+        updates.push({ id, sortOrder: nextSort });
+      }
+      if (!updates.length) {
+        state.dirty = false;
+        setStatus('順序與後端一致，無需儲存');
+        return;
+      }
+      setStatus(`儲存中…（${updates.length} 筆）`);
+      if (adminBackend === 'sanity') {
+        await api('/api/products/batch-sort-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { items: updates } })
+        });
+      } else {
+        const chunkSize = 6;
+        for (let i = 0; i < updates.length; i += chunkSize) {
+          const chunk = updates.slice(i, i + chunkSize);
+          setStatus(`儲存中…（${Math.min(i + chunk.length, updates.length)}/${updates.length}）`);
+          await Promise.all(
+            chunk.map((u) =>
+              api(`${defs.product.api}/${u.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: { sortOrder: u.sortOrder } })
+              })
+            )
+          );
+        }
+      }
+      state.dirty = false;
+      const keepCat = selectedCategory;
+      await load();
+      if (keepCat && Array.from(categoryFilter.options).some((o) => o.value === keepCat)) {
+        categoryFilter.value = keepCat;
+      }
+      drawList();
+      setStatus('商品排序已儲存');
+    }
+
+    const catModalState = { mode: 'create', id: '', originalSlug: '', manualSlug: false };
+
+    function openCategoryModal(mode, row = null) {
+      catModalState.mode = mode;
+      catModalState.manualSlug = false;
+      catModalState.id = row ? kOf(row) : '';
+      const currentName = row ? String(row.name ?? '') : '';
+      const currentSlug = row ? String(row.slug ?? row?.attributes?.slug ?? '') : '';
+      catModalState.originalSlug = currentSlug;
+      catModalTitle.textContent = mode === 'edit' ? '編輯分類' : '新增分類';
+      catModalName.value = currentName;
+      catModalSlug.value = currentSlug;
+      catModalDelete.hidden = mode !== 'edit';
+      if (catModalHint instanceof HTMLElement) catModalHint.textContent = 'slug 建議小寫英數與連字號（-），需唯一。';
+      catManageModal.hidden = false;
+      catManageModal.setAttribute('aria-hidden', 'false');
+      try { applyBodyScrollLock(); } catch {}
+      queueMicrotask(() => catModalName.focus());
+    }
+
+    function closeCategoryModal() {
+      catManageModal.hidden = true;
+      catManageModal.setAttribute('aria-hidden', 'true');
+      try { releaseBodyScrollLock(); } catch {}
+    }
+
+    async function deleteCategory(row) {
+      const id = kOf(row);
+      if (!id) return;
+      const name = String(row.name ?? '').trim() || '此分類';
+      const yes = window.confirm(`確定要刪除「${name}」？\n\n刪除後無法復原。`);
+      if (!yes) return;
+      setStatus('刪除分類中…');
+      await api(`${defs.category.api}/${id}`, { method: 'DELETE' });
+      await load();
+      setStatus('已刪除分類');
+    }
+
+    async function saveCategoryModal() {
+      const name = String(catModalName.value ?? '').trim();
+      let slug = String(catModalSlug.value ?? '').trim();
+      if (!name) throw new Error('請輸入分類名稱');
+      if (!slug) slug = slugify(name) || `cat-${slug5()}`;
+      const payload = { name, slug };
+      if (catModalState.mode === 'create') {
+        const nextRank = String(state.entries.length + 1);
+        setStatus('新增分類中…');
+        await api(defs.category.api, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { ...payload, orderRank: nextRank } })
+        });
+        await load();
+        setStatus('已新增分類');
+      } else {
+        if (!catModalState.id) throw new Error('缺少分類 ID');
+        setStatus('更新分類中…');
+        await api(`${defs.category.api}/${catModalState.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: payload })
+        });
+        await load();
+        setStatus('已更新分類');
+      }
+      closeCategoryModal();
+    }
+
+    async function save() {
+      if (state.saving) return;
+      state.saving = true;
+      saveBtn.setAttribute('disabled', 'true');
+      if (isCategorySortMode()) {
+        try {
+          await saveCategoryOrder();
+        } finally {
+          state.saving = false;
+          saveBtn.removeAttribute('disabled');
+        }
+        return;
+      }
+      if (isProductSortMode()) {
+        try {
+          await saveProductCategoryOrder();
+        } finally {
+          state.saving = false;
+          saveBtn.removeAttribute('disabled');
+        }
+        return;
+      }
+      const { ok, out } = collect();
+      if (!ok) {
+        setStatus('請先修正欄位');
+        state.saving = false;
+        saveBtn.removeAttribute('disabled');
+        return;
+      }
+      try {
+        const mediaCards = Array.from(formRoot.querySelectorAll('.card')).filter((x) => x.dataset.type === 'media');
+        for (const card of mediaCards) {
+          await applyPendingUploads(card, { interactive: false });
+        }
+        const { ok: ok2, out: out2 } = collect();
+        if (!ok2) {
+          setStatus('請先修正欄位');
+          return;
+        }
+        const hasId = Boolean(state.selectedId);
+        const endpoint = hasId ? `${defs[state.model].api}/${state.selectedId}` : defs[state.model].api;
+        const idBeforeSave = state.selectedId;
+        const resJson = await api(endpoint, { method: hasId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: out2 }) });
+        let reselectId = idBeforeSave;
+        if (!hasId) {
+          const created = normOne(resJson);
+          if (created) reselectId = kOf(created);
+        }
+        state.dirty = false;
+        setStatus(hasId ? '更新成功' : '新增成功');
+        await load(reselectId || undefined);
+      } finally {
+        state.saving = false;
+        saveBtn.removeAttribute('disabled');
+      }
+    }
+
+    searchInput.addEventListener('input', () => {
+      if (isProductSortMode()) return;
+      drawList();
+    });
+    categoryFilter.addEventListener('change', drawList);
+    const simpleModeLabel = simpleModeToggle.querySelector('.action-btn__label');
+    simpleModeToggle.onclick = () => {
+      state.simpleMode = !state.simpleMode;
+      simpleModeToggle.classList.toggle('is-on', state.simpleMode);
+      simpleModeToggle.classList.toggle('is-off', !state.simpleMode);
+      simpleModeToggle.setAttribute('aria-pressed', state.simpleMode ? 'true' : 'false');
+      const t = state.simpleMode ? '簡易' : '完整';
+      if (simpleModeLabel) simpleModeLabel.textContent = t;
+      void drawForm()
+        .then(() => syncPublicSiteButtons())
+        .catch((e) => setStatus(`表單更新失敗：${e.message}`));
+    };
+    refreshBtn.onclick = () =>
+      switchModel(state.model, {
+        categorySortMode: state.categorySortMode,
+        productSortMode: state.productSortMode
+      }).catch((e) => setStatus(`載入失敗：${e.message}`));
+    newBtn.onclick = () => {
+      if (isCategorySortMode()) {
+        openCategoryModal('create');
+        return;
+      }
+      if (isProductSortMode()) {
+        setStatus('此頁僅調整排序，不提供新增');
+        return;
+      }
+      const attrs = schemas[state.model].attributes;
+      const x = {};
+      Object.keys(attrs).forEach((k) => {
+        if (attrs[k].type === 'boolean') x[k] = Boolean(attrs[k].default);
+        else if (attrs[k].type === 'media') x[k] = attrs[k].multiple ? [] : null;
+        else x[k] = attrs[k].default ?? '';
+      });
+      if (state.model === 'product') x.slug = slug5();
+      if (state.model === 'product') x.enabled = true;
+      fill(x);
+      state.dirty = true;
+      setStatus('新增模式（待儲存）');
+      if (isMobileNarrow()) setMobilePanel('editor');
+    };
+
+    // 分類 modal events
+    catModalBackdrop.addEventListener('click', closeCategoryModal);
+    catModalClose.addEventListener('click', closeCategoryModal);
+    catModalCancel.addEventListener('click', closeCategoryModal);
+    catModalSave.addEventListener('click', () => {
+      void saveCategoryModal().catch((e) => setStatus(`儲存失敗：${e instanceof Error ? e.message : String(e)}`));
+    });
+    catModalDelete.addEventListener('click', () => {
+      if (catModalState.mode !== 'edit') return;
+      const row = state.entries.find((x) => kOf(x) === catModalState.id) ?? null;
+      if (!row) {
+        setStatus('找不到分類');
+        return;
+      }
+      void deleteCategory(row).then(() => closeCategoryModal()).catch((e) => setStatus(`刪除失敗：${e instanceof Error ? e.message : String(e)}`));
+    });
+    catModalName.addEventListener('input', () => {
+      if (catModalState.manualSlug) return;
+      const next = slugify(catModalName.value);
+      if (next) catModalSlug.value = next;
+    });
+    catModalSlug.addEventListener('input', () => {
+      catModalState.manualSlug = true;
+    });
+    mobileSanityMenuBtn.addEventListener('click', () => {
+      if (root.dataset.mobilePanel === 'home') return;
+      if (!confirmDiscardIfDirty()) return;
+      state.dirty = false;
+      setMobilePanel('home');
+    });
+    mobileHub.addEventListener('click', (ev) => {
+      const t = ev.target;
+      if (!(t instanceof Element)) return;
+      const row = t.closest('[data-hub]');
+      if (!(row instanceof HTMLButtonElement)) return;
+      const key = row.dataset.hub ?? '';
+      if (!key) return;
+      void hubAction(key);
+    });
+    window.addEventListener('resize', () => {
+      if (!isMobileNarrow()) setMobilePanel('editor');
+      else {
+        const p = root.dataset.mobilePanel;
+        if (p !== 'home' && p !== 'list' && p !== 'editor') setMobilePanel('home');
+      }
+    });
+    saveBtn.onclick = () => save().catch((e) => setStatus(`儲存失敗：${e instanceof Error ? e.message : String(e)}`));
+
+    if (openFrontendBtn) {
+      openFrontendBtn.addEventListener('click', () => {
+        const url = buildPublicFrontendUrl();
+        if (!url) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+      });
+    }
+    if (showQrBtn) {
+      showQrBtn.addEventListener('click', () => {
+        const url = buildPublicFrontendUrl();
+        if (!url) return;
+        openQrModal(url);
+      });
+    }
+    if (qrModalBackdrop) qrModalBackdrop.addEventListener('click', closeQrModal);
+    if (qrModalClose) qrModalClose.addEventListener('click', closeQrModal);
+    if (qrModalSaveImg) qrModalSaveImg.addEventListener('click', () => void saveQrPhoto());
+    if (qrModalShare) qrModalShare.addEventListener('click', () => void shareQrContent());
+
+    // 若後端沒有設 STRAPI_API_TOKEN，通常會得到 401/403；提供一次性輸入 token 的 fallback。
+    window.addEventListener('keydown', (e) => {
+      if (!(e instanceof KeyboardEvent)) return;
+      if (e.key !== 'T' || !e.altKey) return;
+      const current = readToken();
+      const next = window.prompt('輸入 Strapi API Token（僅保存在此瀏覽器）\n\n清空可輸入空字串。', current);
+      if (next == null) return;
+      writeToken(String(next).trim());
+      setStatus(readToken() ? '已設定 Token（Alt+T 可修改）' : '已清除 Token（改用部署環境變數）');
+    });
+
+    state.simpleMode = true;
+    simpleModeToggle.classList.add('is-on');
+    if (simpleModeLabel) simpleModeLabel.textContent = '簡易';
+    drawTabs();
+    const narrow = isMobileNarrow();
+    if (narrow) setMobilePanel('home');
+    else setMobilePanel('editor');
+    switchModel('promotion', narrow ? { mobilePanel: 'home' } : {})
+      .catch((e) => setStatus(`初始化失敗：${e.message}`));
+    imgPreviewBackdrop.addEventListener('click', closePreview);
+    imgPreviewClose.addEventListener('click', closePreview);
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      if (qrModal instanceof HTMLElement && !qrModal.hidden) {
+        closeQrModal();
+        return;
+      }
+      if (!(imgPreviewModal instanceof HTMLElement) || imgPreviewModal.hidden) return;
+      closePreview();
+    });
+  </script>
+</Layout>
+
+<style is:global>
+  .line-float { display: none !important; }
+  .mobile-sanity-bar,
+  .mobile-hub {
+    display: none;
+  }
+  /* 勿在 main 上使用 overflow-x: hidden，否則子層 position:sticky 可能無法貼視窗頂 */
+  .adminx {
+    width: min(1500px, 100% - 16px);
+    margin: 8px auto 18px;
+    display: grid;
+    gap: 10px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .topbar {
+    --tb-accent: #6b83d6;
+    --tb-accent-soft: #8fa3e8;
+    --tb-accent-deep: #5a6fbc;
+    --tb-ink: #2a3148;
+    --tb-border: #e8ecf4;
+    --tb-surface: #fafbff;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    align-self: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 18px;
+    padding: 14px 16px 18px;
+    overflow-x: hidden;
+    overflow-y: visible;
+    background: linear-gradient(165deg, #ffffff 0%, #fafbff 45%, #f3f5fc 100%);
+    border: 1px solid var(--tb-border);
+    border-radius: 14px;
+    box-shadow:
+      0 3px 16px rgba(91, 108, 180, 0.06),
+      0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  }
+  .center-nav {
+    flex: 1 1 260px;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 14px;
+    overflow: visible;
+  }
+  .center-nav__meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px 10px;
+    overflow: hidden;
+  }
+  .section-label--desktop {
+    display: none;
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: clamp(0.72rem, 1.6vw, 0.82rem);
+    font-weight: 800;
+    color: #5c3d10;
+    letter-spacing: 0.02em;
+    padding: 4px 11px;
+    border-radius: 999px;
+    border: 1px solid #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    box-shadow: 0 1px 2px rgba(180, 120, 40, 0.08);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: min(100%, 200px);
+  }
+  .title-status {
+    display: inline-flex;
+    align-items: center;
+    font-size: clamp(0.7rem, 1.7vw, 0.78rem);
+    color: var(--tb-ink, #2a3148);
+    font-weight: 800;
+    background: linear-gradient(135deg, #f5f7ff 0%, #ecefff 100%);
+    border: 1px solid #d9dff5;
+    border-radius: 999px;
+    padding: 4px 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 1px 2px rgba(91, 108, 180, 0.06);
+    transition: box-shadow 0.22s ease, border-color 0.2s ease, transform 0.2s ease;
+  }
+  .title-status--desktop {
+    display: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: min(100%, 220px);
+    flex-shrink: 1;
+  }
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    flex: 1 1 200px;
+    min-width: 0;
+    overflow: visible;
+    padding: 8px 2px 12px;
+    margin: -4px 0 -8px;
+    align-items: stretch;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(180, 130, 70, 0.4) transparent;
+  }
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    padding: 9px 10px;
+    border-radius: 11px;
+    border: 1px solid #e8e2d9;
+    background: linear-gradient(180deg, #ffffff 0%, #faf8f5 100%);
+    color: #3d3830;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(120, 90, 50, 0.06);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      border-color 0.2s ease,
+      background 0.24s ease,
+      color 0.2s ease;
+  }
+  .tab > i {
+    font-size: 0.9em;
+    opacity: 0.85;
+    flex-shrink: 0;
+    transition: transform 0.22s ease, opacity 0.2s ease;
+  }
+  .tab:hover > i {
+    transform: scale(1.06);
+  }
+  .tab.is-active > i {
+    opacity: 1;
+  }
+  .tab:hover {
+    border-color: #e0d0b8;
+    background: linear-gradient(180deg, #ffffff 0%, #fffaf3 100%);
+    box-shadow: 0 4px 12px rgba(180, 130, 70, 0.12);
+    transform: translateY(-1px);
+  }
+  .tab:focus-visible {
+    outline: 2px solid #d4a574;
+    outline-offset: 2px;
+  }
+  .tab.is-active {
+    color: #5c3d10;
+    border-color: #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    box-shadow: 0 3px 12px rgba(180, 120, 40, 0.2);
+    transform: translateY(-1px);
+  }
+  .tab.is-active:hover {
+    border-color: #d4a017;
+    box-shadow: 0 5px 16px rgba(180, 120, 40, 0.22);
+  }
+  .actions {
+    flex: 1 1 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    row-gap: 8px;
+  }
+  .actions > .action-btn,
+  .actions > .mode-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      filter 0.2s ease,
+      background 0.24s ease,
+      border-color 0.2s ease,
+      color 0.2s ease;
+  }
+  .action-btn > i {
+    font-size: 0.95em;
+    line-height: 1;
+    flex-shrink: 0;
+    transition: transform 0.35s ease;
+  }
+  .action-btn__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .action-btn:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+  .action-btn:active {
+    transform: translateY(0);
+    transition-duration: 0.1s;
+  }
+  .actions .action-btn--solid {
+    min-height: 42px;
+    border: 1px solid #c5d4f0;
+    border-radius: 11px;
+    padding: 10px 12px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    letter-spacing: 0.02em;
+    color: var(--tb-ink, #2a3148);
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    box-shadow: 0 2px 8px rgba(91, 108, 180, 0.12);
+  }
+  .actions .action-btn--solid:hover {
+    filter: brightness(1.02);
+    background: linear-gradient(180deg, #dde5ff 0%, #cfd9f8 100%);
+    box-shadow: 0 4px 14px rgba(91, 108, 180, 0.16);
+    transform: translateY(-2px);
+  }
+  .actions .action-btn--solid:hover .fa-rotate-right {
+    transform: rotate(-35deg);
+  }
+  @keyframes admin-save-dirty-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.2), 0 2px 10px rgba(239, 68, 68, 0.12);
+    }
+    50% {
+      box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.08), 0 4px 14px rgba(239, 68, 68, 0.15);
+    }
+  }
+  #saveBtn.is-dirty {
+    color: #7a1f1f;
+    border-color: #f5b5b5;
+    background: linear-gradient(180deg, #fff0f0 0%, #ffe4e4 100%);
+    animation: admin-save-dirty-pulse 2.2s ease-in-out infinite;
+  }
+  .mode-btn {
+    min-height: 42px;
+    border-radius: 11px;
+    border: 1px solid #dce1ee;
+    padding: 9px 10px;
+    font-weight: 800;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    max-width: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    transition:
+      transform 0.2s ease,
+      box-shadow 0.24s ease,
+      border-color 0.2s ease,
+      background 0.24s ease,
+      color 0.2s ease;
+  }
+  .mode-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(91, 108, 180, 0.1);
+  }
+  .mode-btn.is-on {
+    color: var(--tb-ink, #2a3148);
+    border-color: #c5d4f0;
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    box-shadow: 0 2px 10px rgba(91, 108, 180, 0.12);
+  }
+  .mode-btn.is-on:hover {
+    filter: brightness(1.02);
+    background: linear-gradient(180deg, #dde5ff 0%, #cfd9f8 100%);
+    box-shadow: 0 4px 14px rgba(91, 108, 180, 0.16);
+  }
+  .mode-btn.is-off {
+    background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+    color: #454c5c;
+  }
+  .mode-btn.is-off:hover {
+    border-color: #c8d0e2;
+    background: #fff;
+  }
+  .mode-btn:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tab,
+    .action-btn,
+    .mode-btn,
+    .tab > i,
+    .action-btn > i,
+    .title-status {
+      transition: none !important;
+      animation: none !important;
+    }
+    .tab:hover,
+    .tab.is-active,
+    .actions .action-btn--solid:hover,
+    .mode-btn:hover {
+      transform: none;
+    }
+    #saveBtn.is-dirty {
+      animation: none;
+      box-shadow: 0 0 0 2px rgba(248, 113, 113, 0.25);
+    }
+  }
+
+  .workspace {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 10px;
+    min-height: calc(100vh - 170px);
+    min-width: 0;
+    overflow-x: hidden;
+  }
+  .adminx[data-category-sort-mode="1"] .workspace { grid-template-columns: 1fr; }
+  .adminx[data-category-sort-mode="1"] .formpane { display: none; }
+  .adminx[data-category-sort-mode="1"] .listpane { display: grid; }
+  .adminx[data-category-sort-mode="1"] .listpane__filters { display: none; }
+  .adminx[data-category-sort-mode="1"] .entry-list {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+  .adminx[data-category-sort-mode="1"] #searchInput,
+  .adminx[data-category-sort-mode="1"] #categoryFilter { display: none !important; }
+  .adminx[data-product-sort-mode="1"] .workspace { grid-template-columns: 1fr; }
+  .adminx[data-product-sort-mode="1"] .formpane { display: none; }
+  .adminx[data-product-sort-mode="1"] .listpane { display: grid; }
+  .adminx[data-product-sort-mode="1"] #searchInput { display: none !important; }
+  .adminx[data-product-sort-mode="1"] #categoryFilter { display: block !important; }
+  .adminx[data-product-sort-mode="1"] .listpane__filters {
+    display: flex;
+    justify-content: flex-start;
+  }
+  .adminx[data-product-sort-mode="1"] .search-wrap { display: none; }
+  .listpane, .formpane { background: #fff; border: 1px solid #dbe4ea; border-radius: 12px; padding: 12px; }
+  .listpane {
+    display: grid;
+    align-content: start;
+    gap: 10px;
+    padding-block: 14px;
+  }
+  .listpane__filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .search--category {
+    flex: 0 1 155px;
+    min-width: 0;
+  }
+  .formpane__section-head {
+    display: none;
+  }
+  .search-wrap {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #8fa0bf;
+    font-size: 0.88rem;
+    pointer-events: none;
+  }
+  .search { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 0 10px; }
+  .search--with-icon {
+    padding-left: 34px;
+  }
+  .count { display: none; }
+  .entry-list {
+    display: grid;
+    gap: 6px;
+    /* 父層為 flex 且給予剩餘高度時，避免 grid 將多餘空間平均撐高每一列（促銷等單行項目變超高） */
+    align-content: start;
+    align-items: start;
+    max-height: calc(100vh - 270px);
+    overflow: auto;
+    padding: 2px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(91, 108, 180, 0.35) transparent;
+  }
+  .item {
+    text-align: left;
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    color: #2a3148;
+    padding: 10px 12px;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    transition:
+      transform 0.16s ease,
+      box-shadow 0.2s ease,
+      border-color 0.18s ease,
+      background 0.2s ease,
+      color 0.18s ease;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .item:hover {
+    border-color: #cfd9f8;
+    box-shadow: 0 6px 18px rgba(91, 108, 180, 0.12);
+    transform: translateY(-1px);
+  }
+  .item:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(91, 108, 180, 0.10);
+  }
+  .item:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+  .item.is-active {
+    border-color: #e9c46a;
+    background: linear-gradient(180deg, #fffbeb 0%, #fdecc8 100%);
+    color: #5c3d10;
+    box-shadow: 0 8px 22px rgba(180, 120, 40, 0.20);
+  }
+  .item.is-active:hover {
+    border-color: #d4a017;
+    box-shadow: 0 10px 26px rgba(180, 120, 40, 0.22);
+  }
+  /* 一般清單卡（非商品卡）：與 .item 同為正常列高，勿縮小；高度由內容 + min-height 決定，不靠 grid 撐滿 */
+  .entry-list > .item:not(.item--product) {
+    min-height: 44px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    line-height: 1.35;
+    font-size: 0.95rem;
+  }
+
+  /* 商品清單（參考 sanity）：首圖縮圖 / 分類 / 主打 / 上架淡色 */
+  .item--product {
+    white-space: normal;
+    text-overflow: clip;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  /* 分類內排序：與一般商品卡同列高，右側為上下移／編輯／刪除 */
+  .item--product-sort {
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    cursor: default;
+  }
+  .item--product-sort:hover {
+    transform: none;
+  }
+  .item--product-sort .item__main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .item__sortRank {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #64748b;
+    white-space: nowrap;
+    margin-left: 8px;
+  }
+  .item__sortRail {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    padding-left: 2px;
+  }
+  .item__sortBtnRow {
+    display: grid;
+    grid-template-columns: repeat(2, 32px);
+    gap: 4px;
+  }
+  .item__sortBtn {
+    width: 32px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid #c5d4f0;
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    color: #1f2a44;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: pointer;
+  }
+  .item__sortBtn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .item__sortBtn--del {
+    border-color: rgba(248, 113, 113, 0.55);
+    color: #991b1b;
+    background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
+  }
+  .item__thumbWrap {
+    flex-shrink: 0;
+  }
+  .item__thumb {
+    width: 56px;
+    height: 44px;
+    border-radius: 10px;
+    object-fit: cover;
+    display: block;
+    border: 1px solid #dbe4ea;
+    background: #f1f5f9;
+  }
+  .item__thumb--empty {
+    display: block;
+    width: 56px;
+    height: 44px;
+    border-radius: 10px;
+    border: 1px dashed #dbe4ea;
+    background: #f8fafc;
+  }
+  .item__main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .item__row1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+  .item__title {
+    font-weight: 900;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: inherit;
+  }
+  .item__meta {
+    font-size: 0.78rem;
+    color: #64748b;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .item__meta--withTags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 8px;
+    white-space: normal;
+    text-overflow: unset;
+  }
+  .item__metaCategory {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .item__metaTags {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .badge--featured {
+    background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+    border: 1px solid #fdba74;
+    color: #9a3412;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.16);
+  }
+  /* 首頁熱銷 */
+  .badge--hot {
+    background: linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fbbf24;
+    color: #92400e;
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
+  }
+  /* 首頁主打區 */
+  .badge--spotlight {
+    background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+    border: 1px solid #a78bfa;
+    color: #5b21b6;
+    box-shadow: 0 2px 10px rgba(139, 92, 246, 0.12);
+  }
+
+  .item--enabled:not(.is-active) {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 100%);
+    color: #065f46;
+  }
+  .item--enabled:not(.is-active) .item__meta {
+    color: #047857;
+  }
+  .item--disabled:not(.is-active) {
+    border-color: rgba(249, 115, 22, 0.35);
+    background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+    color: #9a3412;
+  }
+  .item--disabled:not(.is-active) .item__meta {
+    color: #9a3412;
+  }
+  .item--product.item--enabled:hover:not(.is-active) {
+    border-color: rgba(16, 185, 129, 0.55);
+    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.14);
+  }
+  .item--product.item--disabled:hover:not(.is-active) {
+    border-color: rgba(249, 115, 22, 0.55);
+    box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
+  }
+  /* 分類管理清單：獨立樣式（避免沿用 .item 造成裁切） */
+  .cat-manage-row {
+    width: 100%;
+    border: 1px solid #e6edf5;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+    color: #2a3148;
+    padding: 10px 12px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+    gap: 4px;
+    overflow: visible;
+    box-sizing: border-box;
+  }
+  .cat-manage-row__name {
+    font-weight: 900;
+    color: #1f2937;
+    min-width: 0;
+  }
+  .cat-manage-row__meta {
+    font-size: 0.78rem;
+    color: #64748b;
+  }
+  .cat-manage-row__ops {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .cat-manage-row__btn {
+    width: 32px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid #c5d4f0;
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    color: #1f2a44;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .cat-manage-row__btn[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .status { margin: 0 0 8px; font-weight: 700; color: #334155; }
+  .form-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 精簡後台：移除欄位區塊外框，改用簡潔分隔 */
+  .card {
+    border: 0;
+    border-radius: 0;
+    padding: 5px 0;
+    background: transparent;
+    display: grid;
+    gap: 6px;
+    box-shadow: none;
+  }
+  .form-grid > .card {
+    border-bottom: 1px solid rgba(219, 228, 234, 0.55);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+  }
+  .form-grid > .card:last-child {
+    border-bottom: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .form-grid > .card:first-child {
+    padding-top: 0;
+  }
+  .card.span2 { grid-column: 1 / -1; }
+
+  /* 分類欄位：標籤 + 下拉合併同一列（減少高度） */
+  .card[data-field="category"] {
+    grid-template-columns: 84px 1fr;
+    align-items: center;
+    column-gap: 8px;
+    row-gap: 0;
+    padding-block: 5px;
+  }
+  .card[data-field="category"] > label {
+    margin: 0;
+    white-space: nowrap;
+  }
+  .card[data-field="category"] > select {
+    margin: 0;
+  }
+  .card label { font-weight: 700; color: #334155; }
+  .card input, .card textarea, .card select { width: 100%; min-height: 40px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font: inherit; }
+  .card textarea { min-height: 110px; }
+  .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
+  .hint { margin: 0; font-size: .82rem; color: #64748b; }
+  /* 預設不預留錯誤訊息空白；有內容時才顯示 */
+  .err { margin: 0; color: #be123c; font-size: .82rem; }
+  .err:empty { display: none; }
+
+  /* Bool 欄位：更緊湊，減少中間留白 */
+  .card--bool {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 6px;
+    padding-block: 5px;
+  }
+  .card--bool > label {
+    margin: 0;
+    line-height: 1.1;
+  }
+  .switch { width: 56px; height: 30px; position: relative; display: inline-block; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch span { position: absolute; inset: 0; background: #dbe5ec; border-radius: 999px; }
+  .switch span::before { content: ''; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch input:checked + span { background: linear-gradient(120deg, #1e8f89, #34a3ba); }
+  .switch input:checked + span::before { transform: translateX(26px); }
+
+  .wall { display: grid; gap: 8px; }
+  .grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .pending-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+  .thumb { border: 1px solid #d2dae3; border-radius: 8px; overflow: hidden; background: #fff; position: relative; }
+  .thumb--pending { border: 2px solid #f59e0b; box-shadow: 0 0 0 2px rgba(245, 158, 11, .2); background: linear-gradient(180deg, #fffbeb 0%, #fff 100%); }
+  .thumb--pending:hover { border-color: #d97706; box-shadow: 0 0 0 3px rgba(217, 119, 6, .22); }
+  .pending-tag { position: absolute; top: 6px; left: 6px; z-index: 2; background: #b45309; color: #fff; font-size: .72rem; font-weight: 800; border-radius: 999px; padding: 3px 8px; letter-spacing: .02em; }
+  .order-badge { position: absolute; left: 6px; top: 6px; z-index: 2; background: rgba(17, 24, 39, .86); color: #fff; font-size: .74rem; font-weight: 800; border-radius: 999px; padding: 2px 7px; }
+  .thumb img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }
+  .ph { height: 100px; display: grid; place-items: center; color: #475569; background: #e8f4f3; font-weight: 700; }
+  .ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 6px; }
+  .ops button, .mini { border: 0; border-radius: 6px; background: #166f6a; color: #fff; font-size: .78rem; padding: 6px; }
+  .op-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; font-size: .84rem; }
+  .op-left { background: #0284c7 !important; }
+  .op-right { background: #0f766e !important; }
+  .op-del { background: #dc2626 !important; }
+  .thumb--pending .ops { grid-template-columns: 1fr; }
+  .mini-add { background: linear-gradient(135deg, #0d9488, #0f766e); font-weight: 800; min-width: 80px; }
+  .pick-info { font-size: .82rem; color: #64748b; min-width: 110px; }
+  .media-role { margin: 2px 0 0; font-size: .8rem; font-weight: 700; }
+  .media-role--main { color: #0f766e; }
+  .media-role--more { color: #475569; }
+  .uploader { display: flex; gap: 8px; align-items: center; }
+  .uploader input { min-height: 38px; }
+  .file-input {
+    color: transparent;
+    caret-color: transparent;
+  }
+  .file-input::file-selector-button {
+    color: #1f2a44;
+  }
+  .file-input::-webkit-file-upload-button {
+    color: #1f2a44;
+  }
+  .advanced { grid-column: 1 / -1; border: 1px dashed #b8c5d3; border-radius: 10px; padding: 10px; background: #f8fafc; }
+  .pick-files {
+    display: grid;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .pick-file-row {
+    font-size: 0.8rem;
+    color: #475569;
+    line-height: 1.35;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .advanced summary { cursor: pointer; font-weight: 800; color: #334155; }
+  .advanced-grid { margin-top: 10px; display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  .qr-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10035;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
+  }
+  .qr-modal[hidden] {
+    display: none !important;
+  }
+  .qr-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.55);
+    cursor: pointer;
+    z-index: 0;
+  }
+  .qr-modal__panel {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 360px);
+    max-height: min(90dvh, 92svh);
+    overflow: auto;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+    border: 1px solid #e2e8f0;
+  }
+  .qr-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #e8eef4;
+  }
+  .qr-modal__title {
+    font-weight: 900;
+    font-size: 0.95rem;
+    color: #1e293b;
+  }
+  .qr-modal__close {
+    border: 0;
+    background: transparent;
+    font-size: 1.15rem;
+    line-height: 1;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: #64748b;
+    border-radius: 8px;
+  }
+  .qr-modal__close:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  .qr-modal__body {
+    padding: 14px 16px 18px;
+  }
+  .qr-modal__url {
+    margin: 0 0 14px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    word-break: break-all;
+    color: #475569;
+    line-height: 1.4;
+    text-align: left;
+  }
+  .qr-modal__imgWrap {
+    display: flex;
+    justify-content: center;
+  }
+  .qr-modal__img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+  }
+  .qr-modal__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+  .qr-modal__btn {
+    flex: 1 1 auto;
+    min-width: 120px;
+    min-height: 42px;
+    cursor: pointer;
+    border-radius: 11px;
+    padding: 10px 14px;
+    font-weight: 700;
+    font-size: 0.86rem;
+    letter-spacing: 0.02em;
+    transition:
+      filter 0.2s ease,
+      box-shadow 0.2s ease,
+      background 0.2s ease,
+      transform 0.12s ease;
+  }
+  .qr-modal__btn:focus-visible {
+    outline: 2px solid var(--tb-accent-soft);
+    outline-offset: 2px;
+  }
+  .qr-modal__btn--primary {
+    border: 1px solid #c5d4f0;
+    color: var(--tb-ink, #2a3148);
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    box-shadow: 0 2px 8px rgba(91, 108, 180, 0.12);
+  }
+  .qr-modal__btn--primary:hover {
+    filter: brightness(1.02);
+    transform: translateY(-1px);
+  }
+  .qr-modal__btn--secondary {
+    border: 1px solid #dce1ee;
+    color: #334155;
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+  }
+  .qr-modal__btn--secondary:hover {
+    background: #f8fafc;
+    transform: translateY(-1px);
+  }
+
+  .img-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10030;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: max(10px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(14px, env(safe-area-inset-bottom, 0px))
+      max(12px, env(safe-area-inset-left, 0px));
+    box-sizing: border-box;
+    overflow: hidden;
+    touch-action: none;
+  }
+  .img-modal[hidden] {
+    display: none !important;
+  }
+  .img-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.78);
+    z-index: 0;
+    cursor: pointer;
+  }
+  .img-modal__close {
+    position: fixed;
+    top: max(10px, calc(env(safe-area-inset-top, 0px) + 8px));
+    right: max(10px, calc(env(safe-area-inset-right, 0px) + 8px));
+    left: auto;
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+    border: 0;
+    background: #fff;
+    color: #111827;
+    font-size: 1.15rem;
+    font-weight: 800;
+    z-index: 10033;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .img-modal__img {
+    position: relative;
+    z-index: 1;
+    width: auto;
+    height: auto;
+    max-width: min(100%, calc(100vw - 24px));
+    max-height: min(82dvh, calc(100svh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 100px));
+    object-fit: contain;
+    object-position: center;
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+  }
+
+  /* 分類管理 Modal（RWD 固定不破版） */
+  .cat-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10080;
+    display: grid;
+    place-items: center;
+    padding: 16px;
+  }
+  .cat-modal[hidden] { display: none !important; }
+  .cat-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: rgba(0, 0, 0, 0.55);
+  }
+  .cat-modal__panel {
+    position: relative;
+    z-index: 1;
+    width: min(560px, 100%);
+    max-height: min(86vh, 760px);
+    overflow: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    background: #fff;
+    box-shadow: 0 22px 60px rgba(0, 0, 0, 0.25);
+  }
+  .cat-modal__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid #eef2ff;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+    position: sticky;
+    top: 0;
+  }
+  .cat-modal__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: 0.02em;
+  }
+  .cat-modal__close {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    cursor: pointer;
+    font-weight: 900;
+    color: #0f172a;
+  }
+  .cat-modal__body {
+    padding: 12px 14px 10px;
+    display: grid;
+    gap: 10px;
+  }
+  .cat-modal__label {
+    display: grid;
+    gap: 6px;
+    font-weight: 800;
+    color: #334155;
+  }
+  .cat-modal__label > span {
+    font-size: 0.86rem;
+  }
+  .cat-modal__label > input {
+    width: 100%;
+    min-height: 40px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font: inherit;
+  }
+  .cat-modal__hint {
+    margin: 0;
+    font-size: 0.82rem;
+    color: #64748b;
+    line-height: 1.35;
+  }
+  .cat-modal__foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-top: 1px solid #eef2ff;
+    background: #fff;
+    position: sticky;
+    bottom: 0;
+  }
+  .cat-modal__spacer { flex: 1; }
+  .cat-modal__btn {
+    min-height: 38px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .cat-modal__btn--primary {
+    border-color: #c5d4f0;
+    background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
+    color: #1f2a44;
+  }
+  .cat-modal__btn--danger {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
+    color: #991b1b;
+  }
+
+  /* 商品頁：降低空白、按鍵縮小約 30%（僅 product 模式） */
+  .adminx[data-model="product"] .workspace { gap: 8px; }
+  .adminx[data-model="product"] .listpane,
+  .adminx[data-model="product"] .formpane { padding: 9px; }
+  .adminx[data-model="product"] .form-grid { gap: 0; }
+  .adminx[data-model="product"] .card { padding: 5px 0; gap: 6px; }
+  .adminx[data-model="product"] .form-grid > .card {
+    border-bottom: 1px solid rgba(219, 228, 234, 0.55);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+  }
+  .adminx[data-model="product"] .form-grid > .card:last-child {
+    border-bottom: 0;
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  .adminx[data-model="product"] .form-grid > .card:first-child {
+    padding-top: 0;
+  }
+  .adminx[data-model="product"] .card input,
+  .adminx[data-model="product"] .card textarea,
+  .adminx[data-model="product"] .card select { min-height: 32px; padding: 7px 8px; }
+  .adminx[data-model="product"] .card textarea { min-height: 88px; }
+  .adminx[data-model="product"] .ops button,
+  .adminx[data-model="product"] .mini { padding: 4px; font-size: .72rem; }
+
+  @media (max-width: 1080px) {
+    .workspace { grid-template-columns: 280px 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .card, .card.span2 { grid-column: 1 / -1; }
+  }
+  @media (max-width: 1080px) {
+    .topbar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .center-nav {
+      order: 2;
+      flex: 1 1 auto;
+    }
+    .actions {
+      order: 3;
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: none;
+    }
+  }
+  @media (max-width: 420px) {
+    .tabs {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 6px;
+      overflow-x: hidden;
+      overflow-y: visible;
+      padding: 6px 2px 10px;
+      margin: 0;
+      -webkit-overflow-scrolling: touch;
+      justify-content: space-between;
+    }
+    .tab {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 6px 6px;
+      min-height: 38px;
+      gap: 6px;
+      font-size: 0.78rem;
+    }
+    .tab > i {
+      font-size: 0.85em;
+    }
+    .tab > span {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+  }
+  @media (max-width: 860px) {
+    .topbar {
+      gap: 8px 10px;
+      padding: 9px 10px 10px;
+      border-radius: 12px;
+      align-items: stretch;
+    }
+    /* 狀態已在 mobile-sanity-bar，避免空列影響分頁／按鈕對齊 */
+    .center-nav__meta {
+      display: none !important;
+    }
+    .center-nav {
+      flex: 1 1 auto;
+      width: 100%;
+      min-width: 0;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+    }
+    .tabs {
+      flex: 0 0 auto;
+      width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      gap: 8px;
+      padding: 4px 1px 6px;
+      margin: 0;
+      align-items: stretch;
+    }
+    .tab {
+      min-height: 38px;
+      padding: 6px 8px;
+      font-size: 0.82rem;
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+    .mobile-sanity-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+      border: 1px solid #e8ecf4;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(91, 108, 180, 0.05);
+      position: relative;
+      z-index: 50;
+    }
+    .mobile-sanity-bar__logo {
+      flex-shrink: 0;
+      color: #7b8fd4;
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+    .mobile-sanity-bar__mid {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mobile-sanity-bar__textcol {
+      flex: 1 1 0;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .mobile-sanity-bar__title {
+      flex-shrink: 0;
+      font-weight: 800;
+      font-size: 0.95rem;
+      color: #2a3148;
+      white-space: nowrap;
+    }
+    .mobile-sanity-bar__section:empty {
+      display: none !important;
+    }
+    .mobile-sanity-bar__section:not(:empty) {
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #5c3d10;
+      line-height: 1.25;
+      max-width: 100%;
+      overflow: hidden;
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    /* 與商品編輯相同：貼齊 formpane 內距（9px），標題列位置一致 */
+    .formpane {
+      padding: 9px;
+    }
+    .formpane__section-head {
+      display: block;
+      margin: -9px -9px 12px -9px;
+      padding: 0;
+      overflow: hidden;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+    .formpane__section-head:has(.formpane__section-title:empty) {
+      display: none;
+    }
+    .formpane__section-title {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #5c3d10;
+      letter-spacing: 0.02em;
+      line-height: 1;
+      margin: 0;
+      padding: 6px 10px;
+      min-height: 30px;
+      position: relative;
+      width: 100%;
+      box-sizing: border-box;
+      background: linear-gradient(180deg, #fffbeb 0%, #ffffff 72%);
+      border-bottom: 1px solid #f0e4d0;
+      box-shadow: 0 4px 14px -6px rgba(92, 61, 16, 0.14);
+      white-space: normal;
+      word-break: break-word;
+    }
+    /* 狀態可換行，避免長句被單行省略 */
+    .title-status--in-mid {
+      display: block;
+      flex: 0 1 46%;
+      min-width: 0;
+      max-width: min(13rem, calc(100vw - 152px));
+      font-size: 0.72rem;
+      padding: 5px 8px;
+      text-align: center;
+      white-space: normal;
+      overflow: visible;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      line-height: 1.38;
+      border-radius: 10px;
+      box-sizing: border-box;
+    }
+    .mobile-sanity-bar__iconbtn {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      color: #334155;
+      font-size: 1rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .mobile-sanity-bar__iconbtn:active {
+      background: #f1f5f9;
+    }
+    .adminx[data-mobile-panel="home"] #mobileSanityMenuBtn {
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .adminx[data-mobile-panel="home"] .topbar,
+    .adminx[data-mobile-panel="home"] .workspace {
+      display: none;
+    }
+    .adminx[data-mobile-panel="home"] .mobile-hub {
+      display: block;
+    }
+    .mobile-hub {
+      background: #fff;
+      border: 1px solid #dbe4ea;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .mobile-hub__list {
+      display: flex;
+      flex-direction: column;
+    }
+    .mobile-hub__row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      min-height: 52px;
+      padding: 12px 14px;
+      border: 0;
+      border-bottom: 1px solid #e8eef4;
+      background: #fff;
+      font: inherit;
+      text-align: left;
+      color: #0f172a;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    .mobile-hub__row:last-child {
+      border-bottom: 0;
+    }
+    .mobile-hub__row:active {
+      background: #f1f5f9;
+    }
+    .mobile-hub__icon {
+      color: #64748b;
+      width: 22px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .mobile-hub__label {
+      flex: 1;
+      min-width: 0;
+    }
+    .mobile-hub__chev {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+    .title-status--desktop {
+      display: none !important;
+    }
+    .advanced-grid { grid-template-columns: 1fr; }
+    .workspace { grid-template-columns: 1fr; min-height: calc(100svh - 170px); }
+    .listpane {
+      display: flex;
+      flex-direction: column;
+      min-height: calc(100svh - 220px);
+    }
+    .entry-list {
+      flex: 1 1 auto;
+      max-height: none;
+      min-height: 0;
+      overflow: auto;
+      align-content: start;
+    }
+    .entry-list > .item:not(.item--product) {
+      min-height: 44px;
+      padding: 10px 12px;
+      font-size: 0.95rem;
+    }
+    .actions {
+      flex: 0 0 auto;
+      width: 100%;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      align-items: stretch;
+    }
+    .actions > .action-btn,
+    .actions > .mode-btn {
+      flex: unset;
+      width: 100%;
+      min-width: 0;
+      min-height: 38px;
+      padding: 6px 4px;
+      font-size: 0.75rem;
+      border-radius: 10px;
+      box-sizing: border-box;
+      justify-content: center;
+    }
+    .actions .action-btn__label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .adminx[data-mobile-panel="list"] .formpane { display: none; }
+    .adminx[data-mobile-panel="editor"] .listpane { display: none; }
+    .adminx[data-category-sort-mode="1"] .workspace {
+      grid-template-columns: 1fr;
+    }
+    .adminx[data-category-sort-mode="1"] .formpane {
+      display: none !important;
+    }
+    .adminx[data-category-sort-mode="1"] .listpane {
+      display: grid !important;
+    }
+    .adminx[data-category-sort-mode="1"] .listpane__filters {
+      display: none !important;
+    }
+    .adminx[data-category-sort-mode="1"] .entry-list {
+      max-height: none;
+      overflow: visible;
+      padding-right: 0;
+    }
+    .adminx[data-category-sort-mode="1"] #searchInput,
+    .adminx[data-category-sort-mode="1"] #categoryFilter {
+      display: none !important;
+    }
+    .adminx[data-product-sort-mode="1"] .workspace {
+      grid-template-columns: 1fr;
+    }
+    .adminx[data-product-sort-mode="1"] .formpane {
+      display: none !important;
+    }
+    .adminx[data-product-sort-mode="1"] .listpane {
+      display: grid !important;
+    }
+    .adminx[data-product-sort-mode="1"] .search-wrap {
+      display: none !important;
+    }
+    .adminx[data-product-sort-mode="1"] #categoryFilter {
+      display: block !important;
+      flex: 1 1 auto;
+      max-width: 100%;
+    }
+  }
+
+  @media (min-width: 861px) {
+    /* 桌機：商品清單列緊湊高度（縮圖略小、內距收斂、與文字垂直置中） */
+    .entry-list > .item.item--product {
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      min-height: 0;
+    }
+    .entry-list > .item.item--product .item__thumb,
+    .entry-list > .item.item--product .item__thumb--empty {
+      width: 44px;
+      height: 34px;
+      border-radius: 8px;
+    }
+    .entry-list > .item.item--product .item__main {
+      gap: 2px;
+    }
+    .entry-list > .item.item--product .item__title {
+      font-size: 0.88rem;
+      line-height: 1.25;
+    }
+    .entry-list > .item.item--product .item__meta {
+      font-size: 0.72rem;
+      line-height: 1.2;
+    }
+    .mobile-sanity-bar,
+    .mobile-hub {
+      display: none !important;
+    }
+    .title-status--desktop {
+      display: inline-flex;
+    }
+    #sectionLabelDesktop {
+      display: none !important;
+    }
+  }
+</style>

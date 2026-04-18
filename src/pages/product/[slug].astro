@@ -289,9 +289,31 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
         class="product-lightbox__backdrop"
         aria-label="關閉放大圖"
       ></button>
-      <div class="product-lightbox__shell">
+      <button type="button" id="productLightboxClose" class="product-lightbox__close" aria-label="關閉">
+        <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        id="productLightboxPrev"
+        class="product-lightbox__nav product-lightbox__nav--prev"
+        aria-label="上一張"
+        hidden
+      >
+        <i class="fa-solid fa-chevron-left text-xl" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        id="productLightboxNext"
+        class="product-lightbox__nav product-lightbox__nav--next"
+        aria-label="下一張"
+        hidden
+      >
+        <i class="fa-solid fa-chevron-right text-xl" aria-hidden="true"></i>
+      </button>
+      <div id="productLightboxShell" class="product-lightbox__shell">
         <img id="productLightboxImg" class="product-lightbox__img" alt="" decoding="async" />
       </div>
+      <p id="productLightboxCounter" class="product-lightbox__counter" aria-live="polite" hidden></p>
     </div>
   </div>
 </Layout>
@@ -743,7 +765,25 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     max-width: min(96vw, 1400px);
     max-height: min(92vh, 900px);
     margin: 0;
-    pointer-events: none;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .product-lightbox__shell:active,
+  .product-lightbox__shell.is-dragging {
+    cursor: grabbing;
+  }
+
+  @media (pointer: fine) {
+    .product-lightbox__shell {
+      cursor: default;
+      touch-action: auto;
+    }
+    .product-lightbox__shell:active,
+    .product-lightbox__shell.is-dragging {
+      cursor: default;
+    }
   }
 
   .product-lightbox__img {
@@ -763,10 +803,82 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       animation: none;
     }
   }
+
+  .product-lightbox__close {
+    position: absolute;
+    top: max(10px, env(safe-area-inset-top, 0px));
+    right: max(10px, env(safe-area-inset-right, 0px));
+    z-index: 2;
+    display: inline-flex;
+    width: 46px;
+    height: 46px;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #0f172a;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .product-lightbox__nav {
+    position: absolute;
+    top: 50%;
+    z-index: 3;
+    display: none;
+    width: min(20vw, 160px);
+    height: min(72vh, 560px);
+    max-height: calc(100% - 120px);
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.92);
+    cursor: pointer;
+    transform: translateY(-50%);
+    -webkit-tap-highlight-color: transparent;
+  }
+  @media (pointer: fine) {
+    .product-lightbox__nav:not([hidden]) {
+      display: inline-flex;
+    }
+  }
+  .product-lightbox__nav--prev {
+    left: max(10px, env(safe-area-inset-left, 0px));
+  }
+  .product-lightbox__nav--next {
+    right: max(10px, env(safe-area-inset-right, 0px));
+  }
+
+  .product-lightbox__counter {
+    position: absolute;
+    left: 50%;
+    bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    margin: 0;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.72);
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .product-lightbox__counter[hidden] {
+    display: none !important;
+  }
 </style>
 
 <script>
-  import { applyBodyScrollLock, releaseBodyScrollLock } from '../../scripts/scrollLock';
+  import { setupGalleryLightbox } from '../../scripts/galleryLightbox';
 
   function setupProductCarousels() {
     document.querySelectorAll('[data-product-carousel]').forEach((root) => {
@@ -963,65 +1075,40 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
   setupProductCarousels();
 
   function setupProductImageLightbox() {
-    const lightbox = document.getElementById('productImageLightbox');
-    const backdrop = document.getElementById('productLightboxBackdrop');
-    const lbImg = document.getElementById('productLightboxImg');
-    if (!lightbox || !backdrop || !lbImg) return;
-
-    let open = false;
-
-    function closeLightbox() {
-      if (!open) return;
-      open = false;
-      lightbox.hidden = true;
-      lightbox.setAttribute('aria-hidden', 'true');
-      releaseBodyScrollLock();
-      lbImg.removeAttribute('src');
-      lbImg.alt = '';
-    }
-
-    function openLightboxFromImg(img) {
-      if (!(img instanceof HTMLImageElement)) return;
-      const src = img.currentSrc || img.src;
-      if (!src) return;
-      lbImg.alt = img.alt || '';
-      lbImg.src = src;
-      open = true;
-      lightbox.hidden = false;
-      lightbox.setAttribute('aria-hidden', 'false');
-      applyBodyScrollLock();
-      backdrop.focus({ preventScroll: true });
-    }
-
-    function onCarouselClick(e) {
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (t.closest('.carousel-nav') || t.closest('.carousel-dot')) return;
-
-      const slide = t.closest('.carousel-slide');
-      const img = slide?.querySelector('.carousel-slide__contain img');
-      if (!img || !(img instanceof HTMLImageElement)) return;
-
-      openLightboxFromImg(img);
-    }
-
-    document.querySelectorAll('[data-product-lightbox-group]:not([data-lightbox-bound])').forEach((root) => {
-      root.setAttribute('data-lightbox-bound', '1');
-      root.addEventListener('click', onCarouselClick);
-    });
-
-    if (lightbox.dataset.lightboxGlobalBound === '1') return;
-    lightbox.dataset.lightboxGlobalBound = '1';
-
-    backdrop.addEventListener('click', () => {
-      closeLightbox();
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && open) {
-        e.preventDefault();
-        closeLightbox();
-      }
+    setupGalleryLightbox({
+      pageRootSelector: '[data-product-lightbox-group]',
+      triggerSelector: '.carousel-slide',
+      ignoreSelector: '.carousel-nav, .carousel-dot',
+      indexOfTrigger: (trigger) => {
+        const root = trigger.closest('[data-product-lightbox-group]');
+        if (!(root instanceof HTMLElement)) return 0;
+        const slides = Array.from(root.querySelectorAll('.carousel-slide'));
+        const i = slides.indexOf(trigger);
+        return i >= 0 ? i : 0;
+      },
+      collectItems: () => {
+        const root = document.querySelector('[data-product-lightbox-group]');
+        if (!(root instanceof HTMLElement)) return [];
+        return Array.from(root.querySelectorAll('.carousel-slide'))
+          .map((slide) => {
+            const img = slide.querySelector('.carousel-slide__contain img');
+            if (!(img instanceof HTMLImageElement)) return null;
+            const src = String(img.currentSrc || img.src || '').trim();
+            if (!src) return null;
+            return { src, alt: img.alt || '' };
+          })
+          .filter((x): x is { src: string; alt: string } => x !== null);
+      },
+      lightboxId: 'productImageLightbox',
+      backdropId: 'productLightboxBackdrop',
+      closeBtnId: 'productLightboxClose',
+      shellId: 'productLightboxShell',
+      imgId: 'productLightboxImg',
+      counterId: 'productLightboxCounter',
+      prevBtnId: 'productLightboxPrev',
+      nextBtnId: 'productLightboxNext',
+      wheelDismiss: true,
+      swipeDownDismiss: true
     });
   }
 

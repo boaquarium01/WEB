@@ -33,7 +33,7 @@
       },
       "body": {
         "edit": {
-          "label": "內文（富文本）",
+          "label": "內文",
           "description": "商品介紹頁主要內容；未填短述時前台可能由此摘錄列表預覽。"
         },
         "list": { "label": "內文" }
@@ -135,19 +135,19 @@
       "type": "boolean",
       "default": true
     },
-    "featured": {
-      "type": "boolean",
-      "default": false
-    },
-    "featuredSortOrder": {
-      "type": "integer"
-    },
     "heroSpotlight": {
       "type": "boolean",
       "default": false
     },
     "heroSpotlightActivatedAt": {
       "type": "datetime"
+    },
+    "featured": {
+      "type": "boolean",
+      "default": false
+    },
+    "featuredSortOrder": {
+      "type": "integer"
     },
     "image": {
       "type": "media",

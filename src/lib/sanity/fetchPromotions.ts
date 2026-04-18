@@ -1,6 +1,7 @@
 import { createClient, type SanityClient } from '@sanity/client';
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
 import type { Promotion } from '../../data/promotion';
+import { dedupePromotionDocuments } from './dedupePromotions';
 
 const API_VERSION = '2025-03-18';
 
@@ -100,7 +101,8 @@ export async function getAllPromotions(): Promise<Promotion[]> {
     console.warn('[Sanity] 促銷分頁查詢失敗。', msg);
     return [];
   }
-  return docs.map(mapToPromotion).filter(Boolean) as Promotion[];
+  const deduped = dedupePromotionDocuments(docs);
+  return deduped.map(mapToPromotion).filter(Boolean) as Promotion[];
 }
 
 export async function getAllPromotionSlugs(): Promise<string[]> {

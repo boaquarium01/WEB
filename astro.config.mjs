@@ -21,13 +21,13 @@ const useLocalNodeAdapter = process.env.ASTRO_LOCAL_NODE === '1';
 
 const integrations = [
   react(),
-  // 嵌入式 Studio：http://localhost:3333/admin（與 `npm run dev` 同埠，勿另開 sanity dev 佔 3333）
+  // 嵌入式 Studio：`/admin` 保留給自訂後台路徑，Studio 改掛 `/cms-studio`
   sanity({
     projectId: sanityProjectId,
     dataset: sanityDataset,
     useCdn: false,
     apiVersion: '2025-03-18',
-    studioBasePath: '/admin'
+    studioBasePath: '/cms-studio'
   })
 ];
 

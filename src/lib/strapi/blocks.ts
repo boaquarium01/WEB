@@ -116,3 +116,23 @@ export function isPortableTextBlocks(blocks: unknown[] | null | undefined): bool
   if (!x || typeof x !== 'object') return false;
   return (x as Blockish)._type === 'block';
 }
+
+/**
+ * 後台 textarea 純文字 → Strapi Rich Text（Blocks）最小結構（paragraph + text）
+ * 與 strapiBlocksToPlainText 可對應：每行一個 paragraph（空行略過）
+ */
+export function plainTextToStrapiBlocks(text: string): unknown[] {
+  const s = String(text ?? '').replace(/\r\n/g, '\n');
+  if (!s.trim()) return [];
+  const lines = s.split('\n');
+  const blocks: unknown[] = [];
+  for (const line of lines) {
+    const t = line.trimEnd();
+    if (!t.trim()) continue;
+    blocks.push({
+      type: 'paragraph',
+      children: [{ type: 'text', text: t }]
+    });
+  }
+  return blocks;
+}

@@ -12,10 +12,18 @@ function buildTargetUrl(request: Request): string {
 async function proxy(request: Request): Promise<Response> {
   try {
     const targetUrl = buildTargetUrl(request);
-    const token = readStrapiApiToken();
     const method = request.method.toUpperCase();
     const headers = new Headers();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // 允許三種授權來源（優先順序由上到下）：
+    // 1) 原始 request 的 Authorization（方便後台以瀏覽器端臨時帶入）
+    // 2) 自訂 x-admin-token（避免某些環境過濾 Authorization）
+    // 3) 伺服器環境變數 STRAPI_API_TOKEN（正式部署建議使用）
+    const passthroughAuth = request.headers.get('authorization') ?? '';
+    const headerToken = request.headers.get('x-admin-token') ?? '';
+    const envToken = readStrapiApiToken();
+    if (passthroughAuth.trim()) headers.set('Authorization', passthroughAuth);
+    else if (headerToken.trim()) headers.set('Authorization', `Bearer ${headerToken.trim()}`);
+    else if (envToken.trim()) headers.set('Authorization', `Bearer ${envToken.trim()}`);
 
     let body: BodyInit | undefined;
     const contentType = request.headers.get('content-type') ?? '';

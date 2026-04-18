@@ -36,7 +36,7 @@ const structure = (S: any, context: any) => {
   /** 分類內順序：@sanity/orderable-document-list 不支援「同 type 多組篩選清單」的 orderRank，改為依分類列出商品並預設 sortOrder 排序，方便對照改「分類內排序」數字 */
   const productsByCategorySort: any = S.listItem()
     .id('products-by-category-sort')
-    .title('依分類調整順序')
+    .title('調整分類內順序')
     .child(
       S.documentTypeList('category')
         .title('選擇分類')
@@ -73,7 +73,7 @@ const structure = (S: any, context: any) => {
 };
 
 /**
- * `@sanity/astro` 會在嵌入式 `/admin`（瀏覽器端）載入 `sanity.config.ts`。
+ * `@sanity/astro` 會在嵌入式 Studio 路徑（見 astro.config `studioBasePath`，預設 `/cms-studio`）載入 `sanity.config.ts`。
  * 因此不能在未防呆的情況下直接使用 `process.env`（瀏覽器沒有 `process`）。
  * 這裡同時支援兩種情境：
  * - 瀏覽器：優先用 `import.meta.env.*`
@@ -131,7 +131,7 @@ export default defineConfig({
   projectId,
   dataset,
   // 寫入／拖曳排序：請在 Studio 右上角登入；並在 sanity.io/manage → API → CORS 加入
-  // http://localhost:3334（npm run studio）、http://localhost:3333（npm run dev 的 /admin）
+  // http://localhost:3334（npm run studio）、http://localhost:3333（npm run dev 的 /cms-studio）
   // 勿設定 auth: { token }（v3 的 AuthConfig 不支援，無法以此帶入寫入權限）
   plugins: [structureTool({ structure })],
   theme: studioTheme,

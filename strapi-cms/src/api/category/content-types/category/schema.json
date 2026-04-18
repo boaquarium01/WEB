@@ -5,7 +5,7 @@
     "singularName": "category",
     "pluralName": "categories",
     "displayName": "商品分類",
-    "description": "對應 Sanity `category`：name、slug、拖曳排序字串 orderRank、舊欄位 legacySortOrder（sortOrder）"
+    "description": "對應 Sanity `category`：name、slug、拖曳排序字串 orderRank"
   },
   "options": {
     "draftAndPublish": false
@@ -31,20 +31,11 @@
       },
       "orderRank": {
         "edit": {
-          "label": "拖曳排序（orderRank）",
-          "description": "與 Sanity 可排序列表對齊；請搭配外掛或維運流程調整順序。"
+          "label": "排序",
+          "description": "分類顯示順序（由後台分類管理調整）。"
         },
         "list": {
           "label": "排序"
-        }
-      },
-      "legacySortOrder": {
-        "edit": {
-          "label": "排序（備援，舊資料）",
-          "description": "請優先使用拖曳排序；此欄僅相容舊資料或備援。"
-        },
-        "list": {
-          "label": "舊排序"
         }
       },
       "products": {
@@ -70,11 +61,6 @@
     "orderRank": {
       "type": "string",
       "maxLength": 256
-    },
-    "legacySortOrder": {
-      "type": "integer",
-      "default": 100,
-      "min": 0
     },
     "products": {
       "type": "relation",

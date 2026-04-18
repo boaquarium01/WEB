@@ -83,7 +83,7 @@ export const productType = defineType({
     }),
     defineField({
       name: 'body',
-      title: '內文（富文本）',
+      title: '內文',
       description: '商品介紹頁主要內容；未填「短述」時會從此處摘錄列表預覽。',
       type: 'array',
       of: [{ type: 'block' }],
@@ -94,7 +94,7 @@ export const productType = defineType({
       name: 'sortOrder',
       title: '分類內排序（數字越小越前面）',
       description:
-        `建議用左側「依分類調整順序」對照列表調整排序`,
+        `建議用左側「調整分類內順序」對照列表調整排序`,
       type: 'number',
       group: 'display',
       initialValue: defaultCategorySortOrderStudio
@@ -105,19 +105,6 @@ export const productType = defineType({
       type: 'boolean',
       group: 'display',
       initialValue: true
-    }),
-    defineField({
-      name: 'featured',
-      title: '首頁熱銷',
-      type: 'boolean',
-      initialValue: false,
-      group: 'display'
-    }),
-    defineField({
-      name: 'featuredSortOrder',
-      title: '首頁熱銷排序（數字越小越前面）',
-      type: 'number',
-      group: 'display'
     }),
     defineField({
       name: 'heroSpotlight',
@@ -139,6 +126,19 @@ export const productType = defineType({
       group: 'display',
       readOnly: true,
       hidden: true
+    }),
+    defineField({
+      name: 'featured',
+      title: '首頁熱銷',
+      type: 'boolean',
+      initialValue: false,
+      group: 'display'
+    }),
+    defineField({
+      name: 'featuredSortOrder',
+      title: '首頁熱銷排序（數字越小越前面）',
+      type: 'number',
+      group: 'display'
     }),
     // —— 圖片 ——
     defineField({

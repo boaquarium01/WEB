@@ -433,7 +433,7 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
 export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   collectionName: 'categories';
   info: {
-    description: '\u5C0D\u61C9 Sanity `category`\uFF1Aname\u3001slug\u3001\u62D6\u66F3\u6392\u5E8F\u5B57\u4E32 orderRank\u3001\u820A\u6B04\u4F4D legacySortOrder\uFF08sortOrder\uFF09';
+    description: '\u5C0D\u61C9 Sanity `category`\uFF1Aname\u3001slug\u3001\u62D6\u66F3\u6392\u5E8F\u5B57\u4E32 orderRank';
     displayName: '\u5546\u54C1\u5206\u985E';
     pluralName: 'categories';
     singularName: 'category';
@@ -445,14 +445,6 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    legacySortOrder: Schema.Attribute.Integer &
-      Schema.Attribute.SetMinMax<
-        {
-          min: 0;
-        },
-        number
-      > &
-      Schema.Attribute.DefaultTo<100>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
