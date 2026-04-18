@@ -260,6 +260,14 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !listCount || !formRoot || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl || !mobileSanityMenuBtn || !mobileHub) {
       throw new Error('missing ui');
     }
+
+    // Save progress bar (avoid pseudo-element layering issues).
+    if (saveBtn instanceof HTMLElement && !saveBtn.querySelector('.save-progress')) {
+      const p = document.createElement('span');
+      p.className = 'save-progress';
+      p.setAttribute('aria-hidden', 'true');
+      saveBtn.appendChild(p);
+    }
     if (!catManageModal || !catModalBackdrop || !catModalClose || !catModalTitle || !catModalName || !catModalSlug || !catModalCancel || !catModalSave || !catModalDelete) {
       throw new Error('missing category modal ui');
     }
@@ -1818,12 +1826,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     async function save() {
       if (state.saving) return;
       state.saving = true;
+      saveBtn.setAttribute('data-saving', '1');
+      saveBtn.setAttribute('aria-busy', 'true');
       saveBtn.setAttribute('disabled', 'true');
       if (isCategorySortMode()) {
         try {
           await saveCategoryOrder();
         } finally {
           state.saving = false;
+          saveBtn.removeAttribute('data-saving');
+          saveBtn.removeAttribute('aria-busy');
           saveBtn.removeAttribute('disabled');
         }
         return;
@@ -1833,6 +1845,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           await saveProductCategoryOrder();
         } finally {
           state.saving = false;
+          saveBtn.removeAttribute('data-saving');
+          saveBtn.removeAttribute('aria-busy');
           saveBtn.removeAttribute('disabled');
         }
         return;
@@ -1841,6 +1855,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       if (!ok) {
         setStatus('請先修正欄位');
         state.saving = false;
+        saveBtn.removeAttribute('data-saving');
+        saveBtn.removeAttribute('aria-busy');
         saveBtn.removeAttribute('disabled');
         return;
       }
@@ -1868,6 +1884,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         await load(reselectId || undefined);
       } finally {
         state.saving = false;
+        saveBtn.removeAttribute('data-saving');
+        saveBtn.removeAttribute('aria-busy');
         saveBtn.removeAttribute('disabled');
       }
     }
@@ -2304,6 +2322,72 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95);
     pointer-events: none;
     animation: admin-dirty-save-dot 1.1s ease-in-out infinite;
+  }
+  @keyframes admin-saving-bar {
+    0% {
+      transform: translateX(-110%);
+    }
+    100% {
+      transform: translateX(110%);
+    }
+  }
+  @keyframes admin-saving-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  #saveBtn[data-saving='1'] {
+    position: relative;
+    filter: saturate(1.05);
+    /* reserve space so progress bar never overlaps label */
+    padding-bottom: 16px;
+  }
+  #saveBtn .save-progress {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 2px;
+    height: 2px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(148, 163, 184, 0.35);
+    box-shadow: inset 0 1px 1px rgba(15, 23, 42, 0.06);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateZ(0);
+  }
+  #saveBtn[data-saving='1'] .save-progress {
+    opacity: 1;
+  }
+  #saveBtn .save-progress::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(59, 130, 246, 0) 0%,
+      rgba(59, 130, 246, 0.95) 45%,
+      rgba(59, 130, 246, 0) 100%
+    );
+    transform: translateX(-110%);
+    animation: admin-saving-bar 1.05s ease-in-out infinite;
+  }
+  #saveBtn[data-saving='1'] > i {
+    animation: admin-saving-spin 0.95s linear infinite;
+    transform-origin: 50% 50%;
+    position: relative;
+    z-index: 1;
+  }
+  #saveBtn[data-saving='1'] > .action-btn__label {
+    position: relative;
+    z-index: 1;
+  }
+  /* 儲存中避免紅點跟著旋轉造成干擾 */
+  #saveBtn[data-saving='1'] > i::after {
+    display: none;
   }
   .adminx[data-dirty='true'] .title-status {
     color: #7f1d1d;
