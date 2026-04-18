@@ -26,7 +26,7 @@ const defs = {
 
 const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
 const adminBackend = readAdminBackend();
-/** 官網前台 origin（供「前往前端／QR」）；可用 PUBLIC_SITE_URL 覆寫 */
+/** 官網前台 origin（供「官網預覽／QR」）；可用 PUBLIC_SITE_URL 覆寫 */
 const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaquarium.vercel.app').replace(/\/+$/, '');
 ---
 
@@ -74,9 +74,9 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           <i class="fa-solid fa-plus" aria-hidden="true"></i>
           <span class="action-btn__label">新增</span>
         </button>
-        <button id="openFrontendBtn" type="button" class="action-btn action-btn--solid action-btn--frontend" hidden aria-label="前往前台對應頁面">
-          <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i>
-          <span class="action-btn__label">前端</span>
+        <button id="openFrontendBtn" type="button" class="action-btn action-btn--solid action-btn--frontend" hidden aria-label="在瀏覽器中開啟官網對應頁面（預覽）">
+          <i class="fa-solid fa-globe" aria-hidden="true"></i>
+          <span class="action-btn__label">官網</span>
         </button>
         <button id="showQrBtn" type="button" class="action-btn action-btn--solid action-btn--qrcode" hidden aria-label="顯示前台網址 QR Code">
           <i class="fa-solid fa-qrcode" aria-hidden="true"></i>
