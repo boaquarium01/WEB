@@ -1,4 +1,5 @@
 import { setupGalleryLightbox } from './galleryLightbox';
+import { initScrollReveal } from './initScrollReveal';
 
 const PROMO_SCROLL_FLAG = '__aqPromoScrollBound';
 
@@ -6,6 +7,24 @@ const PROMO_SCROLL_FLAG = '__aqPromoScrollBound';
  * 促銷分頁：回到頂部鈕 + 圖片 lightbox（須由頁面內含 #promoPageRoot、#promoLightbox 等節點）
  */
 export function mountPromoPage(): void {
+  // Ensure reveal-on-scroll is bound on this page (prevents invisible-but-clickable promo grid on some clients).
+  initScrollReveal();
+  // Fallback: if reveal observer doesn't fire (mobile WebView quirks), force-reveal above-the-fold blocks.
+  const forceRevealAboveFold = () => {
+    const els = Array.from(document.querySelectorAll('#promoPageRoot .reveal-on-scroll')) as HTMLElement[];
+    if (!els.length) return;
+    const vh = window.innerHeight || 0;
+    for (const el of els) {
+      if (el.classList.contains('is-revealed')) continue;
+      const r = el.getBoundingClientRect();
+      // In/near viewport → reveal to avoid permanent opacity:0
+      if (r.bottom >= -40 && r.top <= vh + 40) el.classList.add('is-revealed');
+    }
+  };
+  // Run once now and again after layout/async images settle.
+  forceRevealAboveFold();
+  window.setTimeout(forceRevealAboveFold, 220);
+
   const g = globalThis as unknown as Record<string, unknown>;
   if (!g[PROMO_SCROLL_FLAG]) {
     g[PROMO_SCROLL_FLAG] = true;
@@ -18,6 +37,12 @@ export function mountPromoPage(): void {
     syncScrollTopBtn();
     window.addEventListener('scroll', syncScrollTopBtn, { passive: true });
     document.addEventListener('astro:page-load', syncScrollTopBtn);
+    document.addEventListener('astro:page-load', () => initScrollReveal());
+    document.addEventListener('astro:page-load', () => {
+      initScrollReveal();
+      forceRevealAboveFold();
+      window.setTimeout(forceRevealAboveFold, 220);
+    });
     document.addEventListener(
       'click',
       (e) => {

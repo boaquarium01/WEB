@@ -65,8 +65,9 @@ const PROMOTION_PROJECTION = `
   promoImages
 `;
 
-const ALL_PROMOTIONS_QUERY = `*[_type == "promotion" && defined(slug.current)] | order(_updatedAt desc) {${PROMOTION_PROJECTION}}`;
-const PROMOTION_BY_SLUG_QUERY = `*[_type == "promotion" && slug.current == $slug][0] {${PROMOTION_PROJECTION}}`;
+// Public site should not read drafts; drafts may be incomplete and can override published docs.
+const ALL_PROMOTIONS_QUERY = `*[_type == "promotion" && defined(slug.current) && !(_id in path("drafts.**"))] | order(_updatedAt desc) {${PROMOTION_PROJECTION}}`;
+const PROMOTION_BY_SLUG_QUERY = `*[_type == "promotion" && slug.current == $slug && !(_id in path("drafts.**"))][0] {${PROMOTION_PROJECTION}}`;
 
 function mapToPromotion(doc: SanityPromotionDoc): Promotion | null {
   const slug = String(doc.slug ?? '').trim();
@@ -110,9 +111,15 @@ export async function getAllPromotionSlugs(): Promise<string[]> {
 }
 
 async function getPromotionByDocId(client: SanityClient, docId: string): Promise<SanityPromotionDoc | null> {
+  // Prefer published doc for public pages; only fall back to draft if published is missing.
   try {
+    const published = await client.fetch<SanityPromotionDoc | null>(
+      `*[_type == "promotion" && _id == $id][0] {${PROMOTION_PROJECTION}}`,
+      { id: docId }
+    );
+    if (published) return published;
     return await client.fetch<SanityPromotionDoc | null>(
-      `*[_type == "promotion" && _id in [$id, 'drafts.' + $id]][0] {${PROMOTION_PROJECTION}}`,
+      `*[_type == "promotion" && _id == ('drafts.' + $id)][0] {${PROMOTION_PROJECTION}}`,
       { id: docId }
     );
   } catch {
