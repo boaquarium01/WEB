@@ -233,17 +233,28 @@ function refImageFromId(id: string | number | null | undefined) {
 	return { _type: 'image' as const, asset: { _type: 'reference' as const, _ref: s } };
 }
 
-/** collect()：純 id[]（數字或 image-*）或 Strapi 的 `{ id }[]` */
-function mixedImageRefs(input: unknown): Array<{ _type: 'image'; asset: { _type: 'reference'; _ref: string } }> {
+type ImageRefBlock = {
+	_type: 'image';
+	_key: string;
+	asset: { _type: 'reference'; _ref: string };
+};
+
+/** collect()：純 id[]（數字或 image-*）或 Strapi 的 `{ id }[]`；陣列項必含 `_key` 才能在 Studio 編輯／拖曳 */
+function mixedImageRefs(input: unknown): ImageRefBlock[] {
 	if (!Array.isArray(input)) return [];
-	const out: Array<{ _type: 'image'; asset: { _type: 'reference'; _ref: string } }> = [];
-	for (const x of input) {
+	const out: ImageRefBlock[] = [];
+	for (let i = 0; i < input.length; i++) {
+		const x = input[i];
 		const raw =
 			typeof x === 'object' && x != null && 'id' in x
 				? String((x as { id?: string | number }).id ?? '')
 				: String(x ?? '');
 		const ref = refImageFromId(raw);
-		if (ref) out.push(ref);
+		if (ref) {
+			const aid = ref.asset._ref;
+			const suffix = aid.replace(/^image-/, '').slice(0, 32) || String(i);
+			out.push({ ...ref, _key: `img_${i}_${suffix}` });
+		}
 	}
 	return out;
 }
