@@ -32,14 +32,6 @@ export function readStrapiAdminBaseUrl(): string {
   return fromAny.replace(/\/+$/, '');
 }
 
-/** 設為 `strapi` 時，商品／促銷資料改走 Strapi REST；其餘維持 Sanity */
-export function useStrapiCms(): boolean {
-  const fromProcess = readProcessEnv('PUBLIC_CMS');
-  const fromMeta = String(import.meta.env.PUBLIC_CMS ?? '').trim();
-  const v = (fromProcess || fromMeta).toLowerCase();
-  return v === 'strapi';
-}
-
 /** 後台管理頁使用的 API token（建議僅於本機開發環境設定） */
 export function readStrapiApiToken(): string {
   const fromProcessPrivate = readProcessEnv('STRAPI_API_TOKEN');
