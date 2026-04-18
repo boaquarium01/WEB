@@ -32,6 +32,8 @@ function promoImageFullSrc(img: unknown, width: number): string {
 // 促銷頁圖片排序需即時反映 Sanity 拖曳順序，避免被建置時快取住
 export const prerender = false;
 
+Astro.response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
+
 const BRAND_SUFFIX = '水博館水族館';
 const PROMO_TABS = [
   { slug: 'weekly-new', label: '每週新進魚隻🐠' },

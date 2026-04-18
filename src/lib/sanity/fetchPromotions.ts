@@ -1,6 +1,8 @@
 import { createClient, type SanityClient } from '@sanity/client';
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
 import type { Promotion } from '../../data/promotion';
+import { portableBlocksToPlainText } from '../portableText';
+import { strapiBlocksToPlainText } from '../strapi/blocks';
 import { dedupePromotionDocuments } from './dedupePromotions';
 
 const API_VERSION = '2025-03-18';
@@ -53,9 +55,21 @@ type SanityPromotionDoc = {
   _id?: string;
   title?: string;
   slug?: string;
-  content?: string | null;
+  content?: unknown;
   promoImages?: unknown[] | null;
 };
+
+/** 與後台 `promotionContentToText` 對齊：純文字、Portable Text 或 Strapi blocks 皆轉成字串 */
+function normalizePromotionContent(raw: unknown): string {
+  if (raw == null) return '';
+  if (typeof raw === 'string') return raw;
+  if (Array.isArray(raw)) {
+    const pt = portableBlocksToPlainText(raw);
+    if (pt.trim()) return pt;
+    return strapiBlocksToPlainText(raw);
+  }
+  return String(raw);
+}
 
 const PROMOTION_PROJECTION = `
   _id,
@@ -85,7 +99,7 @@ function mapToPromotion(doc: SanityPromotionDoc): Promotion | null {
     _id: doc._id ? String(doc._id) : undefined,
     title,
     slug,
-    content: String(doc.content ?? ''),
+    content: normalizePromotionContent(doc.content),
     promoImages: imgs.slice(0, 25)
   };
 }
