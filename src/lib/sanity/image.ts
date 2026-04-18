@@ -4,25 +4,11 @@
 import imageUrlBuilder from '@sanity/image-url';
 import type { ImageUrlBuilder } from '@sanity/image-url/lib/types/builder';
 import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import { readSanityProjectDataset } from './env';
 
-/** 與 src/lib/sanity/fetchProducts.ts readSanityEnv 一致，避免列表有圖、詳情 SanityImage 卻缺 projectId 而空白 */
-const DEFAULT_PROJECT_ID = 'iz7fvprm';
-const DEFAULT_DATASET = 'production';
-
+/** 與 fetchProducts／fetchPromotions 共用 env，避免列表有圖、詳情 SanityImage 卻缺 projectId 而空白 */
 function readProject() {
-  const projectId =
-    import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
-    (typeof process !== 'undefined' ? process.env.PUBLIC_SANITY_PROJECT_ID?.trim() : undefined) ||
-    (typeof process !== 'undefined' ? process.env.SANITY_STUDIO_PROJECT_ID?.trim() : undefined) ||
-    DEFAULT_PROJECT_ID;
-
-  const dataset =
-    import.meta.env.PUBLIC_SANITY_DATASET ||
-    (typeof process !== 'undefined' ? process.env.PUBLIC_SANITY_DATASET : undefined) ||
-    (typeof process !== 'undefined' ? process.env.SANITY_STUDIO_DATASET : undefined) ||
-    DEFAULT_DATASET;
-
-  return { projectId, dataset };
+  return readSanityProjectDataset();
 }
 
 /** 單一建構器（與舊程式相容）；缺 asset 或格式錯誤時回傳 null */

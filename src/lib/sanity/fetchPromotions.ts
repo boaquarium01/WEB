@@ -4,11 +4,9 @@ import type { Promotion } from '../../data/promotion';
 import { portableBlocksToPlainText } from '../portableText';
 import { strapiBlocksToPlainText } from '../strapi/blocks';
 import { dedupePromotionDocuments } from './dedupePromotions';
+import { readSanityProjectDataset } from './env';
 
 const API_VERSION = '2025-03-18';
-
-const DEFAULT_PROJECT_ID = 'iz7fvprm';
-const DEFAULT_DATASET = 'production';
 
 const PROMO_TITLE_BY_SLUG: Record<string, string> = {
   'weekly-new': '每週新進魚隻🐠',
@@ -23,19 +21,7 @@ const PROMO_DOC_ID_BY_SLUG: Record<string, string> = {
 };
 
 function readSanityEnv() {
-  const projectId =
-    import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
-    process.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
-    process.env.SANITY_STUDIO_PROJECT_ID?.trim() ||
-    DEFAULT_PROJECT_ID;
-
-  const dataset =
-    import.meta.env.PUBLIC_SANITY_DATASET ||
-    process.env.PUBLIC_SANITY_DATASET ||
-    process.env.SANITY_STUDIO_DATASET ||
-    DEFAULT_DATASET;
-
-  return { projectId, dataset };
+  return readSanityProjectDataset();
 }
 
 function getClient(): SanityClient | null {

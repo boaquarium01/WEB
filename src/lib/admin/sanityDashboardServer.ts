@@ -8,37 +8,12 @@ import type { ImageUrlBuilder } from '@sanity/image-url/lib/types/builder';
 import { plainTextToPortableBlocks } from '../portableText';
 import { strapiBlocksToPlainText } from '../strapi/blocks';
 import { dedupePromotionDocuments } from '../sanity/dedupePromotions';
+import { readSanityProjectDataset } from '../sanity/env';
 
 const API_VERSION = '2025-03-18';
 
-/** 與 `src/lib/sanity/fetchProducts.ts` 一致：Vite 會內嵌 `import.meta.env.PUBLIC_*`，dev 時 `process.env` 未必有值 */
-const DEFAULT_PROJECT_ID = 'iz7fvprm';
-const DEFAULT_DATASET = 'production';
-
 export function readEnv(): { projectId: string; dataset: string } {
-	let fromMetaProject = '';
-	let fromMetaDataset = '';
-	try {
-		fromMetaProject =
-			String(import.meta.env?.PUBLIC_SANITY_PROJECT_ID ?? '').trim() ||
-			String(import.meta.env?.SANITY_STUDIO_PROJECT_ID ?? '').trim();
-		fromMetaDataset =
-			String(import.meta.env?.PUBLIC_SANITY_DATASET ?? '').trim() ||
-			String(import.meta.env?.SANITY_STUDIO_DATASET ?? '').trim();
-	} catch {
-		/* non-Vite */
-	}
-	const projectId =
-		fromMetaProject ||
-		(typeof process !== 'undefined' && process.env?.PUBLIC_SANITY_PROJECT_ID?.trim()) ||
-		(typeof process !== 'undefined' && process.env?.SANITY_STUDIO_PROJECT_ID?.trim()) ||
-		DEFAULT_PROJECT_ID;
-	const dataset =
-		fromMetaDataset ||
-		(typeof process !== 'undefined' && process.env?.PUBLIC_SANITY_DATASET?.trim()) ||
-		(typeof process !== 'undefined' && process.env?.SANITY_STUDIO_DATASET?.trim()) ||
-		DEFAULT_DATASET;
-	return { projectId, dataset };
+	return readSanityProjectDataset();
 }
 
 /** 與 `sanityWriteClient` 一致：伺服器 env 優先，其次 import.meta（本機／特殊整合） */
@@ -93,7 +68,8 @@ function getClientForDashboard(token: string, method: string): SanityClient | nu
 		return createClient({ projectId, dataset, apiVersion: API_VERSION, useCdn: false, token: t });
 	}
 	if (m === 'GET') {
-		return createClient({ projectId, dataset, apiVersion: API_VERSION, useCdn: true });
+		/** 與前台一致 useCdn:false，避免 CDN 延遲導致自製後台列表與 Studio／官網短暫不一致 */
+		return createClient({ projectId, dataset, apiVersion: API_VERSION, useCdn: false });
 	}
 	return null;
 }

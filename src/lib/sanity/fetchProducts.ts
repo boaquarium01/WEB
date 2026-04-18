@@ -3,8 +3,12 @@ import imageUrlBuilder from '@sanity/image-url';
 import type { Category, Product } from '../../data/catalog';
 import { PRODUCTS_PAGE_SIZE } from '../../data/catalog';
 import { portableBlocksToPlainText } from '../portableText';
+import { readSanityProjectDataset } from './env';
 
 const API_VERSION = '2025-03-18';
+
+/** 記憶體快取 TTL（預設 0：後台／Studio 變更後列表與首頁立即反映，避免短暫不同步） */
+const LIST_CACHE_TTL_MS = 0;
 
 /** 與 Studio schema 欄位對應（列表／首頁熱銷／單筆詳情共用投影） */
 const PRODUCT_PROJECTION = `
@@ -45,23 +49,8 @@ const CATEGORY_QUERY = `*[_type == "category"] | order(orderRank asc, sortOrder 
   "label": name
 }`;
 
-const DEFAULT_PROJECT_ID = 'iz7fvprm';
-const DEFAULT_DATASET = 'production';
-
 function readSanityEnv() {
-  const projectId =
-    import.meta.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
-    process.env.PUBLIC_SANITY_PROJECT_ID?.trim() ||
-    process.env.SANITY_STUDIO_PROJECT_ID?.trim() ||
-    DEFAULT_PROJECT_ID;
-
-  const dataset =
-    import.meta.env.PUBLIC_SANITY_DATASET ||
-    process.env.PUBLIC_SANITY_DATASET ||
-    process.env.SANITY_STUDIO_DATASET ||
-    DEFAULT_DATASET;
-
-  return { projectId, dataset };
+  return readSanityProjectDataset();
 }
 
 function getClient(): SanityClient | null {
@@ -227,7 +216,7 @@ let featuredCache: { at: number; limit: number; data: Product[] } | null = null;
 let heroSpotlightCache: { at: number; data: Product[] } | null = null;
 
 export async function getAllCategories(): Promise<Category[]> {
-  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  const ttlMs = LIST_CACHE_TTL_MS;
   if (categoryCache && ttlMs > 0 && Date.now() - categoryCache.at < ttlMs) return categoryCache.data;
   categoryCache = null;
 
@@ -261,7 +250,7 @@ export async function getAllCategories(): Promise<Category[]> {
 /** 建置／請求期間快取，避免同一 process 重複打 API */
 export async function getAllProducts(): Promise<Product[]> {
   // 開發環境希望能「新增後立刻看到」，因此不啟用快取（或 TTL 極短）。
-  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  const ttlMs = LIST_CACHE_TTL_MS;
   if (cache && ttlMs > 0 && Date.now() - cache.at < ttlMs) return cache.data;
   cache = null;
 
@@ -294,7 +283,7 @@ export async function getAllProducts(): Promise<Product[]> {
  */
 /** 首頁主打通區：0～3 筆，依開啟時間新→舊 */
 export async function getHeroSpotlightProducts(): Promise<Product[]> {
-  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  const ttlMs = LIST_CACHE_TTL_MS;
   if (heroSpotlightCache && ttlMs > 0 && Date.now() - heroSpotlightCache.at < ttlMs) {
     return heroSpotlightCache.data;
   }
@@ -322,7 +311,7 @@ export async function getHeroSpotlightProducts(): Promise<Product[]> {
 }
 
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {
-  const ttlMs = import.meta.env.DEV ? 0 : 60_000;
+  const ttlMs = LIST_CACHE_TTL_MS;
   const cap = Math.max(0, Math.floor(Number(limit)) || 0);
   if (cap === 0) return [];
 
