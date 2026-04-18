@@ -1,11 +1,10 @@
 import { defineMiddleware } from 'astro:middleware';
 
-/** 本機 dev 未設 `ADMIN_PATH_SLUG` 時使用（25 碼，符下方 20～48 規則）。 */
+/** Fallback slug when `ADMIN_PATH_SLUG` is unset in dev (20-48 chars). `/admin/{slug}/dashboard` still works. */
 const DEV_DEFAULT_ADMIN_PATH_SLUG = 'xK9m_pL2vNqR7wH4jF8YtZ3';
 
 /**
- * 讀取後台路徑 slug。Vercel 等環境請在專案設定 `ADMIN_PATH_SLUG`。
- * 須優先使用 `process.env`：Vite 對 `import.meta.env` 常在建置時內嵌，執行期讀不到 Vercel 後加的變數。
+ * Prefer `process.env.ADMIN_PATH_SLUG` so Vercel runtime env is visible (Vite may inline `import.meta.env` at build).
  */
 function readAdminPathSlugEnv(): string {
   const p =
@@ -16,7 +15,6 @@ function readAdminPathSlugEnv(): string {
   return p || m;
 }
 
-/** 英數與 _-，長度 20～48（過短易猜、與舊「恰好 25 碼」並存）。本機未設時使用 {@link DEV_DEFAULT_ADMIN_PATH_SLUG}。 */
 const ADMIN_PATH_SLUG_RE = /^[a-zA-Z0-9_-]{20,48}$/;
 
 function adminPathSlug(): string {
@@ -34,13 +32,19 @@ export const onRequest = defineMiddleware((context, next) => {
   const url = new URL(context.request.url);
   const pathname = url.pathname.replace(/\/+$/, '') || '/';
   const slug = adminPathSlug();
+  const isDev = import.meta.env.DEV;
+
+  // Dev: dashboard at `/admin` (see src/pages/admin/index.astro)
+  if (isDev && (pathname === '/admin' || pathname === '/admin/')) {
+    return next();
+  }
 
   if (!slug) {
     if (pathname === '/admin' || pathname.startsWith('/admin/')) return notFound();
     return next();
   }
 
-  if (pathname === '/admin' || pathname === '/admin/') {
+  if (!isDev && (pathname === '/admin' || pathname === '/admin/')) {
     return notFound();
   }
 
