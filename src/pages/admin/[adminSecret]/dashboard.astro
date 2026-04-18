@@ -3197,11 +3197,12 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     }
     .topbar {
       gap: 6px;
-      padding: 6px 8px 8px;
+      padding: 8px 8px 12px;
       border-radius: 12px;
       align-items: stretch;
       box-sizing: border-box;
       width: 100%;
+      overflow: visible;
     }
     /* 狀態已在 mobile-sanity-bar，避免空列影響分頁／按鈕對齊 */
     .center-nav__meta {
@@ -3451,14 +3452,12 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       flex-wrap: nowrap;
       align-items: stretch;
       justify-content: flex-start;
-      gap: 5px;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
+      gap: 6px;
+      overflow: visible;
+      padding-block: 4px;
+      padding-inline: 2px;
     }
-    .actions::-webkit-scrollbar {
-      display: none;
-    }
+    /** 勿用 overflow-x:auto／hidden，否則按鈕 box-shadow、hover 上移會被裁成「切邊」 */
     .actions > .action-btn:not(#saveBtn),
     .actions > .mode-btn {
       position: relative;
@@ -3482,7 +3481,18 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       font-size: 0.9rem;
       font-weight: 800;
       gap: 8px;
-      box-shadow: 0 3px 14px rgba(91, 108, 180, 0.22);
+      box-shadow:
+        0 2px 8px rgba(91, 108, 180, 0.14),
+        0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .actions .action-btn--solid:hover,
+    .actions .mode-btn:hover {
+      transform: none;
+      filter: brightness(1.03);
+    }
+    .actions .action-btn--solid:active,
+    .actions .mode-btn:active {
+      transform: scale(0.98);
     }
     .actions > #saveBtn > i {
       font-size: 1.08rem;
