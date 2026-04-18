@@ -27,11 +27,9 @@ const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
   imageUrl: p.image
 }));
 
-const heroSlugs = new Set(heroSpotlightProducts.map((p) => p.slug));
-/** 僅顯示 Sanity「首頁熱銷」已勾選之商品；未勾選任何筆時本區塊不顯示（勿 fallback 全列表）。 */
-const featuredProducts = (await getFeaturedProducts(10 + heroSlugs.size))
-  .filter((p) => !heroSlugs.has(p.slug))
-  .slice(0, 10);
+/** 僅顯示 Sanity「首頁熱銷」已勾選之商品；未勾選任何筆時本區塊不顯示。 */
+/** 勿因「主打」重複排除：同商品可同時在主打與熱銷，否則同時勾熱銷與主打的商品會從熱銷區被排除而看起來像沒顯示。 */
+const featuredProducts = (await getFeaturedProducts(10)).slice(0, 10);
 
 const featuredStaggerItems = featuredProducts.map((p) => ({
   slug: p.slug,
