@@ -309,6 +309,8 @@ const collectionJsonLd = {
     padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
       max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
     box-sizing: border-box;
+    opacity: 1;
+    transition: opacity 0.2s ease-out;
   }
 
   .promo-lightbox[hidden] {
@@ -317,6 +319,10 @@ const collectionJsonLd = {
 
   .promo-lightbox:not([hidden]) {
     animation: promo-lb-fade-in 0.22s ease-out;
+  }
+
+  .promo-lightbox.is-closing {
+    opacity: 0;
   }
 
   @keyframes promo-lb-fade-in {
@@ -337,6 +343,11 @@ const collectionJsonLd = {
     background: rgba(0, 0, 0, 0.82);
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.2s ease-out;
+  }
+
+  .promo-lightbox.is-closing .promo-lightbox__backdrop {
+    opacity: 0;
   }
 
   .promo-lightbox__close {
@@ -425,6 +436,17 @@ const collectionJsonLd = {
     margin: 0;
     touch-action: none;
     cursor: grab;
+    transform: translate3d(0, 0, 0) scale(1);
+    transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .promo-lightbox.is-closing .promo-lightbox__shell {
+    transform: translate3d(0, 10px, 0) scale(0.985);
+  }
+
+  /* iOS-like 下拉關閉：由圖片本身延續手勢向下滑出，外層不再額外位移 */
+  .promo-lightbox.is-closing.is-closing-swipe .promo-lightbox__shell {
+    transform: none;
   }
 
   .promo-lightbox__shell:active,

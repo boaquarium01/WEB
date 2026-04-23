@@ -109,14 +109,15 @@ export function setupGalleryLightbox(opts: Options): void {
     updateLbNavVisibility();
   };
 
-  const close = () => {
-    if (!open) return;
+  const finalizeClose = () => {
     open = false;
     navigating = false;
     wheelSum = 0;
     navToken += 1;
     clearNavTimer();
     clearLbImgVisualState();
+    lb.classList.remove('is-closing');
+    lb.classList.remove('is-closing-swipe');
     lb.hidden = true;
     lb.setAttribute('aria-hidden', 'true');
     releaseBodyScrollLock();
@@ -127,6 +128,46 @@ export function setupGalleryLightbox(opts: Options): void {
       counterEl.hidden = true;
     }
     updateLbNavVisibility();
+  };
+
+  const close = ({ animate = true, dismissSwipe = false, dismissDy = 0, dismissVy = 0 } = {}) => {
+    if (!open) return;
+    if (reducedMotion) animate = false;
+    if (lb.classList.contains('is-closing')) return;
+
+    if (!animate) {
+      finalizeClose();
+      return;
+    }
+
+    lb.classList.toggle('is-closing-swipe', Boolean(dismissSwipe));
+    lb.classList.add('is-closing');
+    navigating = true;
+    if (!dismissSwipe) {
+      clearLbImgVisualState();
+    } else {
+      shell.classList.remove('is-dragging');
+      const inertia = Math.max(0, Math.min(dismissVy * 220, 220));
+      const targetDy = Math.max(140, dismissDy * DRAG_FOLLOW + inertia);
+      lbImg.style.transition = 'transform 0.24s cubic-bezier(0.12, 0.82, 0.26, 1), opacity 0.22s ease-out';
+      lbImg.style.transform = `translate3d(0, ${targetDy}px, 0) scale(0.97)`;
+      lbImg.style.opacity = '0';
+    }
+
+    const token = ++navToken;
+    clearNavTimer();
+    navTimer = window.setTimeout(() => {
+      if (navToken !== token) return;
+      finalizeClose();
+    }, 260);
+
+    const onDone = (e: TransitionEvent) => {
+      if (e.target !== lb) return;
+      lb.removeEventListener('transitionend', onDone);
+      if (navToken !== token) return;
+      finalizeClose();
+    };
+    lb.addEventListener('transitionend', onDone);
   };
 
   const showNext = () => {
@@ -229,8 +270,8 @@ export function setupGalleryLightbox(opts: Options): void {
     openAt(i);
   });
 
-  backdrop.addEventListener('click', () => close());
-  closeBtn.addEventListener('click', () => close());
+  backdrop.addEventListener('click', () => close({ animate: true }));
+  closeBtn.addEventListener('click', () => close({ animate: true }));
 
   if (prevBtn) {
     prevBtn.addEventListener('click', (e) => {
@@ -249,7 +290,7 @@ export function setupGalleryLightbox(opts: Options): void {
     if (!open) return;
     if (e.key === 'Escape') {
       e.preventDefault();
-      close();
+      close({ animate: true });
     } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       playSwap('next');
@@ -268,6 +309,10 @@ export function setupGalleryLightbox(opts: Options): void {
   let swipePointerId: number | null = null;
   let swipeStartX = 0;
   let swipeStartY = 0;
+  let swipeLastX = 0;
+  let swipeLastY = 0;
+  let swipeLastT = 0;
+  let swipeVy = 0;
   let gesture: 'swipe' | 'dismiss' | null = null;
 
   const applyDragVisual = (dx: number, dy: number) => {
@@ -305,7 +350,10 @@ export function setupGalleryLightbox(opts: Options): void {
     const dx = e.clientX - swipeStartX;
     const dy = e.clientY - swipeStartY;
     if (opts.swipeDownDismiss !== false && gestureAtEnd === 'dismiss') {
-      if (dy > DISMISS_MIN_PX && Math.abs(dy) > Math.abs(dx) * DISMISS_DOMINANCE) close();
+      const speedDismiss = swipeVy > 0.55 && dy > 30;
+      if ((dy > DISMISS_MIN_PX && Math.abs(dy) > Math.abs(dx) * DISMISS_DOMINANCE) || speedDismiss) {
+        close({ animate: true, dismissSwipe: true, dismissDy: dy, dismissVy: swipeVy });
+      }
       else springBackLbImg();
       return;
     }
@@ -325,6 +373,10 @@ export function setupGalleryLightbox(opts: Options): void {
       swipePointerId = e.pointerId;
       swipeStartX = e.clientX;
       swipeStartY = e.clientY;
+      swipeLastX = e.clientX;
+      swipeLastY = e.clientY;
+      swipeLastT = e.timeStamp;
+      swipeVy = 0;
       gesture = null;
       shell.classList.remove('is-dragging');
       shell.setPointerCapture(e.pointerId);
@@ -339,6 +391,11 @@ export function setupGalleryLightbox(opts: Options): void {
       if (swipePointerId !== e.pointerId || !open || gallery.length < 2 || navigating) return;
       const dx = e.clientX - swipeStartX;
       const dy = e.clientY - swipeStartY;
+      const dt = Math.max(1, e.timeStamp - swipeLastT);
+      swipeVy = (e.clientY - swipeLastY) / dt;
+      swipeLastX = e.clientX;
+      swipeLastY = e.clientY;
+      swipeLastT = e.timeStamp;
       if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
       shell.classList.add('is-dragging');
       if (!gesture) {
@@ -369,7 +426,7 @@ export function setupGalleryLightbox(opts: Options): void {
         if (Math.abs(e.deltaY) < Math.abs(e.deltaX)) return;
         if (e.deltaY <= 0) return;
         wheelSum += e.deltaY;
-        if (wheelSum > (opts.wheelDismissThreshold ?? 140)) close();
+        if (wheelSum > (opts.wheelDismissThreshold ?? 140)) close({ animate: true });
       },
       { passive: true }
     );
