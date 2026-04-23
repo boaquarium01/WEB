@@ -57,6 +57,15 @@ export function setupGalleryLightbox(opts: Options): void {
   let open = false;
   let navigating = false;
   let wheelSum = 0;
+  let navToken = 0;
+  let navTimer: ReturnType<typeof window.setTimeout> | null = null;
+
+  const clearNavTimer = () => {
+    if (navTimer) {
+      window.clearTimeout(navTimer);
+      navTimer = null;
+    }
+  };
 
   const clearLbImgVisualState = () => {
     lbImg.style.transition = '';
@@ -105,6 +114,8 @@ export function setupGalleryLightbox(opts: Options): void {
     open = false;
     navigating = false;
     wheelSum = 0;
+    navToken += 1;
+    clearNavTimer();
     clearLbImgVisualState();
     lb.hidden = true;
     lb.setAttribute('aria-hidden', 'true');
@@ -139,6 +150,22 @@ export function setupGalleryLightbox(opts: Options): void {
     }
     if (navigating) return;
     navigating = true;
+    navToken += 1;
+    const token = navToken;
+    let swapped = false;
+    clearNavTimer();
+    // Fallback: if transitionend is lost (fast swipes / iOS), recover navigation state.
+    navTimer = window.setTimeout(() => {
+      if (!open) return;
+      if (navToken !== token) return;
+      // Ensure we still advance at least once (prevents "same image" on lost transitionend).
+      if (!swapped) {
+        if (direction === 'next') showNext();
+        else showPrev();
+      }
+      navigating = false;
+      clearLbImgVisualState();
+    }, 900);
     shell.classList.remove('is-dragging');
     const w = Math.min(window.innerWidth * 0.48, 480);
     const exitX = direction === 'next' ? -w : w;
@@ -149,6 +176,8 @@ export function setupGalleryLightbox(opts: Options): void {
     const onExitEnd = (e: TransitionEvent) => {
       if (e.target !== lbImg || e.propertyName !== 'transform') return;
       lbImg.removeEventListener('transitionend', onExitEnd);
+      if (!open || navToken !== token) return;
+      swapped = true;
       if (direction === 'next') showNext();
       else showPrev();
       lbImg.style.transition = 'none';
@@ -161,8 +190,10 @@ export function setupGalleryLightbox(opts: Options): void {
       const onEnterEnd = (e: TransitionEvent) => {
         if (e.target !== lbImg || e.propertyName !== 'transform') return;
         lbImg.removeEventListener('transitionend', onEnterEnd);
+        if (!open || navToken !== token) return;
         clearLbImgVisualState();
         navigating = false;
+        clearNavTimer();
       };
       lbImg.addEventListener('transitionend', onEnterEnd);
     };
@@ -176,6 +207,8 @@ export function setupGalleryLightbox(opts: Options): void {
     open = true;
     navigating = false;
     wheelSum = 0;
+    navToken += 1;
+    clearNavTimer();
     render();
     clearLbImgVisualState();
     lb.hidden = false;

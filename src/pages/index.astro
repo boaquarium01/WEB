@@ -232,9 +232,9 @@ const services = [
       <!-- 服務項目 -->
       <section id="services" class="section home-section wrap">
         <h2 class="home-section-title reveal-on-scroll">服務項目</h2>
-        <div class="services-grid reveal-stagger">
+        <div class="services-grid">
           {services.map((service) => (
-            <div class="service-card">
+            <div class="service-card reveal-on-scroll">
               <i class:list={[service.icon, 'service-icon']}></i>
               <h3>{service.title}</h3>
               <p>{service.desc}</p>
@@ -1322,49 +1322,45 @@ const services = [
     opacity: 0.85;
   }
 
-  /* 服務卡網格：僅用 opacity 進場，避免與漂浮動畫的 transform 衝突 */
-  .reveal-stagger .service-card {
-    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  /**
+   * 首頁捲動進場節奏（只作用於 #home）
+   * - 進場更快、更乾淨（仍保留層次）
+   * - 手機端更短，降低「看起來慢半拍」的感覺
+   */
+  #home .reveal-on-scroll {
+    transition-duration: 0.56s;
+  }
+  #home .reveal-on-scroll--delay-sm {
+    --reveal-delay: 60ms;
+  }
+  #home .reveal-on-scroll--delay-md {
+    --reveal-delay: 110ms;
+  }
+  #home .reveal-on-scroll--delay-lg {
+    --reveal-delay: 160ms;
+  }
+  @media (max-width: 900px) {
+    #home .reveal-on-scroll {
+      transition-duration: 0.34s !important;
+    }
+  }
+
+  /* 服務卡：改為每張卡片各自捲動進場（避免整組一起觸發） */
+  #services .service-card.reveal-on-scroll {
+    transition: opacity 0.46s cubic-bezier(0.22, 1, 0.36, 1) var(--reveal-delay);
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .reveal-stagger:not(.is-revealed) .service-card {
+    #services .service-card.reveal-on-scroll:not(.is-revealed) {
       opacity: 0;
+      transform: none; /* 避免與漂浮動畫 transform 衝突 */
       animation: none;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(1) {
-      transition-delay: 0ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(2) {
-      transition-delay: 55ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(3) {
-      transition-delay: 110ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(4) {
-      transition-delay: 165ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(5) {
-      transition-delay: 220ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(6) {
-      transition-delay: 275ms;
-    }
-
-    .reveal-stagger.is-revealed .service-card:nth-child(n + 7) {
-      transition-delay: 320ms;
     }
   }
 
   /* 主打區：與服務網格相同的 opacity 進場（:global：.reveal-stagger 在子元件內） */
   :global(.reveal-stagger .spotlight__hit) {
-    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.46s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   @media (prefers-reduced-motion: no-preference) {
@@ -1380,15 +1376,15 @@ const services = [
     }
 
     :global(.reveal-stagger.is-revealed .spotlight__duo .spotlight__hit:nth-child(2)) {
-      transition-delay: 55ms;
+      transition-delay: 40ms;
     }
 
     :global(.reveal-stagger.is-revealed .spotlight__rail .spotlight__hit:nth-child(1)) {
-      transition-delay: 55ms;
+      transition-delay: 40ms;
     }
 
     :global(.reveal-stagger.is-revealed .spotlight__rail .spotlight__hit:nth-child(2)) {
-      transition-delay: 110ms;
+      transition-delay: 80ms;
     }
   }
 
@@ -1438,31 +1434,31 @@ const services = [
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    .reveal-stagger.is-revealed .service-card {
+    #services .service-card.is-revealed {
       animation: service-card-drift 12s ease-in-out infinite;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 1) {
+    #services .service-card.is-revealed:nth-child(6n + 1) {
       animation-delay: 0s;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 2) {
+    #services .service-card.is-revealed:nth-child(6n + 2) {
       animation-delay: -2s;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 3) {
+    #services .service-card.is-revealed:nth-child(6n + 3) {
       animation-delay: -4s;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 4) {
+    #services .service-card.is-revealed:nth-child(6n + 4) {
       animation-delay: -1s;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 5) {
+    #services .service-card.is-revealed:nth-child(6n + 5) {
       animation-delay: -3s;
     }
 
-    .reveal-stagger.is-revealed .service-card:nth-child(6n + 6) {
+    #services .service-card.is-revealed:nth-child(6n + 6) {
       animation-delay: -5s;
     }
   }
