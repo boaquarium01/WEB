@@ -59,6 +59,7 @@ export function setupGalleryLightbox(opts: Options): void {
   let wheelSum = 0;
   let navToken = 0;
   let navTimer: ReturnType<typeof window.setTimeout> | null = null;
+  const preloaded = new Set<string>();
 
   const clearNavTimer = () => {
     if (navTimer) {
@@ -97,16 +98,39 @@ export function setupGalleryLightbox(opts: Options): void {
     if (nextBtn) nextBtn.hidden = !show;
   };
 
+  const preloadSrc = (src: string) => {
+    const s = String(src ?? '').trim();
+    if (!s) return;
+    if (preloaded.has(s)) return;
+    preloaded.add(s);
+    const img = new Image();
+    img.decoding = 'async';
+    img.loading = 'eager';
+    img.src = s;
+  };
+
+  const preloadIndex = (i: number) => {
+    const item = gallery[i];
+    if (!item) return;
+    preloadSrc(item.src);
+  };
+
   const render = () => {
     const item = gallery[index];
     if (!item) return;
     lbImg.alt = item.alt;
-    lbImg.src = item.src;
+    // Avoid forcing a reload/repaint when src is unchanged (can cause flicker on some WebViews).
+    if (lbImg.src !== item.src) lbImg.src = item.src;
     if (counterEl) {
       counterEl.textContent = `${index + 1} / ${gallery.length}`;
       counterEl.hidden = false;
     }
     updateLbNavVisibility();
+    // Warm cache for adjacent items to reduce flicker on fast swipes.
+    if (gallery.length >= 2) {
+      preloadIndex((index + 1) % gallery.length);
+      preloadIndex((index - 1 + gallery.length) % gallery.length);
+    }
   };
 
   const finalizeClose = () => {
@@ -208,6 +232,9 @@ export function setupGalleryLightbox(opts: Options): void {
       clearLbImgVisualState();
     }, 900);
     shell.classList.remove('is-dragging');
+    // Preload the target image early to reduce flash on swap.
+    const targetIndex = direction === 'next' ? (index + 1) % gallery.length : (index - 1 + gallery.length) % gallery.length;
+    preloadIndex(targetIndex);
     const w = Math.min(window.innerWidth * 0.48, 480);
     const exitX = direction === 'next' ? -w : w;
     lbImg.style.transition = 'transform 0.2s cubic-bezier(0.45, 0, 0.75, 1), opacity 0.16s ease-out';
