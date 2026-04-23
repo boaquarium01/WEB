@@ -53,10 +53,15 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       </div>
     </div>
 
+    <div class="desktop-sanity-bar" aria-label="後台標題列">
+      <span class="desktop-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
+      <span class="desktop-sanity-bar__title">水博館官網後台</span>
+      <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
+    </div>
+
     <header class="topbar">
       <div class="center-nav">
         <div class="center-nav__meta">
-          <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
           <span id="sectionLabelDesktop" class="section-label section-label--desktop" aria-live="polite">促銷分頁</span>
         </div>
         <div id="modelTabs" class="tabs"></div>
@@ -468,6 +473,9 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     const labelOf = (model, field) => {
       // 後台精簡：商品主圖欄位統一顯示「圖片」
       if (model === 'product' && field === 'image') return '圖片';
+      if (model === 'promotion' && field === 'promoImages') return '圖片（ 25 張）';
+      if (model === 'product' && field === 'seoTitle') return 'SEO標題(自動)';
+      if (model === 'product' && field === 'seoDescription') return 'SEO描述(自動)';
       return schemas[model]?.config?.metadatas?.[field]?.edit?.label ?? field;
     };
     const kOf = (row) => String(row.documentId ?? row.id ?? '');
@@ -820,11 +828,37 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         b.append(ic, lab);
         // 「分類管理」固定走排序模式，避免從不同入口看到不同內容
         b.onclick = () => {
+          if (isMobileNarrow() && state.model === k && (k === 'promotion' || k === 'product')) {
+            const panel = String(root.dataset.mobilePanel ?? '');
+            if (panel === 'editor') {
+              setMobilePanel('list');
+              return;
+            }
+            if (panel === 'list') {
+              return;
+            }
+          }
           if (k === 'category') return switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
           return switchModel(k);
         };
         modelTabs.appendChild(b);
       });
+      if (!isMobileNarrow()) {
+        const sortTab = document.createElement('button');
+        sortTab.type = 'button';
+        sortTab.className = `tab ${isProductSortMode() ? 'is-active' : ''}`;
+        sortTab.innerHTML = '<i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i><span>調整分類內順序</span>';
+        sortTab.onclick = () =>
+          switchModel('product', { productSortMode: true, mobilePanel: 'list' })
+            .then(() => {
+              if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
+              drawList();
+              setStatus('選分類→↑↓→頂部「儲存」');
+              queueMicrotask(() => categoryFilter.focus());
+            })
+            .catch((e) => setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`));
+        modelTabs.appendChild(sortTab);
+      }
     }
 
     function drawList() {
@@ -1187,10 +1221,11 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
     function fieldEl(field, cfg) {
       const wrap = document.createElement('section');
+      const allowMultiUpload = cfg.type === 'media' && (cfg.multiple || (state.model === 'product' && field === 'image'));
       wrap.className = 'card';
       wrap.dataset.field = field;
       wrap.dataset.type = cfg.type;
-      wrap.dataset.multiple = String(Boolean(cfg.multiple));
+      wrap.dataset.multiple = String(Boolean(allowMultiUpload));
       if (cfg.type === 'media' || field === 'content' || field === 'body') wrap.classList.add('span2');
       wrap.innerHTML = `<label>${labelOf(state.model, field)}</label>`;
 
@@ -1205,10 +1240,13 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       } else if (cfg.type === 'media') {
         wrap.insertAdjacentHTML(
           'beforeend',
-          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><input class="file-input" type="file" accept="image/*" ${cfg.multiple ? 'multiple' : ''}><span class="pick-info">未選擇檔案</span></div><div class="pick-files" aria-live="polite"></div></div>`
+          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><input class="file-input" type="file" accept="image/*" ${allowMultiUpload ? 'multiple' : ''}><span class="pick-info">未選擇檔案</span></div><div class="pick-files" aria-live="polite"></div></div>`
         );
       } else {
         wrap.insertAdjacentHTML('beforeend', `<input type="${cfg.type === 'datetime' ? 'datetime-local' : 'text'}">`);
+      }
+      if (state.model === 'product' && field === 'seoKeywords') {
+        wrap.insertAdjacentHTML('beforeend', `<p class="hint">提示：關鍵字請用 , 、 。 分隔</p>`);
       }
       wrap.insertAdjacentHTML('beforeend', `<p class="err"></p>`);
       return wrap;
@@ -1263,7 +1301,25 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         details.innerHTML = `<summary>進階設定（slug / SEO / 排序）</summary><div class="advanced-grid"></div>`;
         const grid = details.querySelector('.advanced-grid');
         if (grid) {
-          advancedKeys.forEach((f) => grid.appendChild(fieldEl(f, attrs[f])));
+          let orderedAdvancedKeys = [...advancedKeys];
+          if (state.model === 'product') {
+            const preferredOrder = [
+              'seoKeywords',
+              'featuredSortOrder',
+              'sortOrder',
+              'seoTitle',
+              'seoDescription',
+              'heroSpotlightActivatedAt'
+            ];
+            const rank = new Map(preferredOrder.map((k, i) => [k, i]));
+            orderedAdvancedKeys.sort((a, b) => {
+              const ra = rank.has(a) ? rank.get(a) : Number.MAX_SAFE_INTEGER;
+              const rb = rank.has(b) ? rank.get(b) : Number.MAX_SAFE_INTEGER;
+              if (ra !== rb) return ra - rb;
+              return String(a).localeCompare(String(b), 'zh-Hant');
+            });
+          }
+          orderedAdvancedKeys.forEach((f) => grid.appendChild(fieldEl(f, attrs[f])));
         }
         formRoot.appendChild(details);
       }
@@ -1319,14 +1375,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         }
       }
       const ids = await upload(files);
+      const fragment = document.createDocumentFragment();
       ids.forEach((id) => {
         const c = document.createElement('article');
         c.className = 'thumb pending';
         c.dataset.id = String(id);
         const label = String(id).length > 24 ? `${String(id).slice(0, 12)}…` : String(id);
         c.innerHTML = `<div class="ph">ID ${label}</div><div class="ops"><button type="button" class="op-btn op-left" data-a="l" aria-label="左移"><i class="fa-solid fa-arrow-left"></i></button><button type="button" class="op-btn op-right" data-a="r" aria-label="右移"><i class="fa-solid fa-arrow-right"></i></button><button type="button" class="op-btn op-del" data-a="d" aria-label="移除"><i class="fa-solid fa-trash"></i></button></div>`;
-        grid.appendChild(c);
+        fragment.appendChild(c);
       });
+      grid.insertBefore(fragment, grid.firstChild);
       state.pendingUploads[field] = [];
       info.textContent = '未選擇檔案';
       const pendingGrid = card.querySelector('.pending-grid');
@@ -1443,7 +1501,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       mediaBind(card);
     }
 
-    function fill(row) {
+    function fill(row, { redrawList = true } = {}) {
       state.selected = row ?? {};
       state.selectedId = kOf(state.selected);
       if (state.model === 'product') {
@@ -1487,6 +1545,10 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           if (!i) return;
           if (type === 'datetime') i.value = v ? String(v).slice(0, 16) : '';
           else if (type === 'json') i.value = v ? JSON.stringify(v) : '';
+          if (state.model === 'product' && field === 'seoKeywords' && type === 'json') {
+            const list = Array.isArray(v) ? v : [];
+            i.value = list.map((x) => String(x ?? '').trim()).filter(Boolean).join('、');
+          }
           else if (type === 'blocks') {
             if (Array.isArray(v)) {
               const fb = v[0];
@@ -1496,7 +1558,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           } else i.value = v == null ? '' : String(v);
         }
       });
-      drawList();
+      if (redrawList) drawList();
       updateSectionLabels();
       syncPublicSiteButtons();
     }
@@ -1533,7 +1595,17 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           const i = card.querySelector('input,textarea');
           const raw = i?.value ?? '';
           if (t === 'integer') out[f] = raw.trim() ? Number(raw) : null;
-          else if (t === 'json') out[f] = raw.trim() ? JSON.parse(raw) : null;
+          else if (t === 'json') {
+            if (state.model === 'product' && f === 'seoKeywords') {
+              const parts = String(raw)
+                .split(/[,\uFF0C\u3001\u3002.]+/g)
+                .map((x) => x.trim())
+                .filter(Boolean);
+              out[f] = parts.length ? parts : null;
+            } else {
+              out[f] = raw.trim() ? JSON.parse(raw) : null;
+            }
+          }
           else if (t === 'blocks') out[f] = plainTextToStrapiBlocks(raw);
           else out[f] = raw;
         }
@@ -1548,6 +1620,9 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         const slugValue =
           slugInput instanceof HTMLInputElement ? slugInput.value.trim() : String(state.selected.slug ?? '').trim();
         out.slug = slugValue;
+        // Product SEO is simplified: title/description auto-derived from name/excerpt.
+        out.seoTitle = String(out.name ?? '').trim();
+        out.seoDescription = String(out.excerpt ?? '').trim();
       }
       return { ok, out };
     }
@@ -1557,38 +1632,46 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
      */
     async function load(selectIdAfter) {
       setStatus('載入中...');
-      const j = await api(`${defs[state.model].api}?populate=*`);
-      state.entries = norm(j);
-      if (state.model === 'product' && state.entries.length) {
-        state.entries = applySortOrderWithinEachCategory(state.entries);
+      root.dataset.listLoading = '1';
+      listCount.textContent = '載入中...';
+      entryList.innerHTML = '';
+      try {
+        const j = await api(`${defs[state.model].api}?populate=*`);
+        state.entries = norm(j);
+        if (state.model === 'product' && state.entries.length) {
+          state.entries = applySortOrderWithinEachCategory(state.entries);
+        }
+        if (isCategorySortMode()) {
+          // 只在載入時依 orderRank 排序一次，後續調整以陣列順序為準
+          state.entries = [...state.entries].sort((a, b) => {
+            const ra = Number.isFinite(Number(a.orderRank)) ? Number(a.orderRank) : 999999;
+            const rb = Number.isFinite(Number(b.orderRank)) ? Number(b.orderRank) : 999999;
+            if (ra !== rb) return ra - rb;
+            return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'zh-Hant');
+          });
+        }
+        state.selected = {};
+        state.selectedId = '';
+        fill({}, { redrawList: false });
+        drawList();
+        state.dirty = false;
+        setLoadedStatus();
+        const sid = String(selectIdAfter ?? '').trim();
+        if (sid) {
+          const row = state.entries.find((e) => kOf(e) === sid);
+          if (row) select(row);
+        }
+        syncPublicSiteButtons();
+      } finally {
+        delete root.dataset.listLoading;
       }
-      if (isCategorySortMode()) {
-        // 只在載入時依 orderRank 排序一次，後續調整以陣列順序為準
-        state.entries = [...state.entries].sort((a, b) => {
-          const ra = Number.isFinite(Number(a.orderRank)) ? Number(a.orderRank) : 999999;
-          const rb = Number.isFinite(Number(b.orderRank)) ? Number(b.orderRank) : 999999;
-          if (ra !== rb) return ra - rb;
-          return String(a.name ?? '').localeCompare(String(b.name ?? ''), 'zh-Hant');
-        });
-      }
-      state.selected = {};
-      state.selectedId = '';
-      fill({});
-      drawList();
-      state.dirty = false;
-      setLoadedStatus();
-      const sid = String(selectIdAfter ?? '').trim();
-      if (sid) {
-        const row = state.entries.find((e) => kOf(e) === sid);
-        if (row) select(row);
-      }
-      syncPublicSiteButtons();
     }
 
     async function switchModel(model, options = {}) {
       const {
         selectPromotionSlug,
         mobilePanel,
+        selectFirstEntry = false,
         // 「分類管理」預設開排序模式：只調整順序、不顯示右側表單
         categorySortMode = model === 'category',
         productSortMode = false
@@ -1622,6 +1705,14 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           const row = state.entries.find((e) => String(e.slug ?? '').trim() === slug);
           if (row) select(row);
           else setStatus(`找不到促銷頁（slug）：${slug}`);
+        } else if (
+          selectFirstEntry &&
+          !state.categorySortMode &&
+          !state.productSortMode &&
+          (model === 'promotion' || model === 'product')
+        ) {
+          const firstRow = state.entries[0];
+          if (firstRow) select(firstRow);
         }
         updateSectionLabels();
       } catch (e) {
@@ -1660,7 +1751,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         else if (hubKey === 'promo-special') await switchModel('promotion', { selectPromotionSlug: 'special-offers' });
         else if (hubKey === 'promo-equipment') await switchModel('promotion', { selectPromotionSlug: 'equipment-sale' });
         else if (hubKey === 'products-all') {
-          await switchModel('product');
+          await switchModel('product', { selectFirstEntry: true });
           categoryFilter.value = '';
           drawList();
         } else if (hubKey === 'products-by-category') {
@@ -2039,6 +2130,40 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   .mobile-hub {
     display: none;
   }
+  .desktop-sanity-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbff 100%);
+    border: 1px solid #e8ecf4;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(91, 108, 180, 0.05);
+  }
+  .adminx[data-dirty='true'] .desktop-sanity-bar {
+    border-color: rgba(248, 113, 113, 0.42);
+    box-shadow:
+      0 2px 10px rgba(91, 108, 180, 0.05),
+      inset 0 -3px 0 #f87171;
+  }
+  .desktop-sanity-bar__logo {
+    color: #7b8fd4;
+    font-size: 1.1rem;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .desktop-sanity-bar__title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: #2a3148;
+    letter-spacing: 0.01em;
+    line-height: 1.2;
+  }
+  .desktop-sanity-bar .title-status--desktop {
+    margin-left: auto;
+    display: inline-flex;
+    max-width: min(42%, 420px);
+  }
   /* 勿在 main 上使用 overflow-x: hidden，否則子層 position:sticky 可能無法貼視窗頂 */
   .adminx {
     width: min(1500px, 100% - 16px);
@@ -2135,13 +2260,13 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   }
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    flex: 1 1 200px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    flex: 1 1 100%;
     min-width: 0;
     overflow: visible;
-    padding: 8px 2px 12px;
-    margin: -4px 0 -8px;
+    padding: 0;
+    margin: 0;
     align-items: stretch;
     scrollbar-width: thin;
     scrollbar-color: rgba(180, 130, 70, 0.4) transparent;
@@ -2208,16 +2333,14 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   .actions {
     flex: 1 1 100%;
     min-width: 0;
-    display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
     align-items: stretch;
     gap: 8px;
-    row-gap: 8px;
   }
   .actions > .action-btn,
   .actions > .mode-btn {
-    flex: 1 1 0;
+    width: 100%;
     min-width: 0;
   }
   .action-btn {
@@ -2244,6 +2367,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .action-btn:focus-visible {
     outline: 2px solid var(--tb-accent-soft);
@@ -2556,6 +2680,14 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     scrollbar-width: thin;
     scrollbar-color: rgba(91, 108, 180, 0.35) transparent;
   }
+  .adminx[data-list-loading='1'] .entry-list {
+    overflow: hidden;
+  }
+  .adminx[data-list-loading='1'] .entry-list .item,
+  .adminx[data-list-loading='1'] .entry-list .cat-manage-row {
+    transition: none !important;
+    animation: none !important;
+  }
   /* 桌面：清單卡片拉開間距，減少擁擠感 */
   @media (min-width: 861px) {
     .entry-list {
@@ -2619,11 +2751,12 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   .item--product.is-active {
     position: relative;
     border-color: #7aa2f7;
-    background: linear-gradient(180deg, #eef4ff 0%, #e3edff 100%);
+    background: linear-gradient(180deg, #f2f7ff 0%, #e6f0ff 100%);
     color: #1e3a8a;
     box-shadow:
       0 0 0 1px rgba(122, 162, 247, 0.35),
-      0 8px 22px rgba(59, 130, 246, 0.18);
+      0 0 0 4px rgba(59, 130, 246, 0.16),
+      0 10px 26px rgba(59, 130, 246, 0.22);
   }
   .item--product.is-active::before {
     content: '';
@@ -2631,10 +2764,26 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     left: 0;
     top: 8px;
     bottom: 8px;
-    width: 4px;
+    width: 5px;
     border-radius: 0 999px 999px 0;
     background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
     box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12);
+  }
+  .item--product.is-active::after {
+    content: '編輯中';
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #1d4ed8;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    border-radius: 999px;
+    padding: 2px 7px;
+    line-height: 1.15;
+    pointer-events: none;
   }
   .item--product.is-active .item__title {
     color: #0f2f7a;
@@ -2654,7 +2803,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     border-color: #5f8ef3;
     box-shadow:
       0 0 0 1px rgba(122, 162, 247, 0.4),
-      0 10px 26px rgba(59, 130, 246, 0.22);
+      0 0 0 4px rgba(59, 130, 246, 0.18),
+      0 12px 28px rgba(59, 130, 246, 0.24);
   }
   /* 一般清單卡（非商品卡）：與 .item 同為正常列高，勿縮小；高度由內容 + min-height 決定，不靠 grid 撐滿 */
   .entry-list > .item:not(.item--product) {
@@ -3442,6 +3592,9 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     }
   }
   @media (max-width: 860px) {
+    .desktop-sanity-bar {
+      display: none !important;
+    }
     .adminx {
       width: 100%;
       max-width: 100%;
@@ -3483,6 +3636,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       width: 100%;
       min-width: 0;
       box-sizing: border-box;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 6px;
       padding: 0;
       margin: 0;
@@ -3714,14 +3868,11 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       min-width: 0;
       align-self: stretch;
       box-sizing: border-box;
-      display: flex;
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: stretch;
-      justify-content: flex-start;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
       gap: 5px;
       overflow: visible;
-      padding: 0 3px 0;
+      padding: 0 1px 0;
     }
     /** 勿用 overflow-x:auto／hidden，否則按鈕 box-shadow、hover 上移會被裁成「切邊」 */
     .actions > .action-btn,
@@ -3731,14 +3882,14 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       align-items: stretch;
       justify-content: flex-start;
       gap: 0;
-      flex: 1 1 0;
-      width: auto;
+      flex: 0 0 auto;
+      width: 100%;
       min-width: 0;
-      min-height: 54px;
+      min-height: 50px;
       height: 100%;
       align-self: stretch;
-      padding: 3px 4px 4px;
-      font-size: 0.78rem;
+      padding: 2px 3px 3px;
+      font-size: 0.74rem;
       border-radius: 12px;
       box-sizing: border-box;
       -webkit-font-smoothing: antialiased;
@@ -3784,12 +3935,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       line-height: 1;
     }
     .actions > #saveBtn {
-      flex: 0 0 auto;
-      flex-shrink: 0;
-      flex-grow: 0;
-      align-self: stretch;
-      min-width: 64px;
-      min-height: 54px;
+      min-width: 0;
+      min-height: 50px;
       height: 100%;
       padding: 4px 6px 5px;
       font-size: 0.88rem;
