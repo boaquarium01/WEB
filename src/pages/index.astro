@@ -237,8 +237,10 @@ const MAP_EMBED_URL =
         <div class="services-grid">
           {services.map((service) => (
             <div class="service-card reveal-on-scroll">
-              <i class:list={[service.icon, 'service-icon']}></i>
-              <h3>{service.title}</h3>
+              <div class="service-head">
+                <i class:list={[service.icon, 'service-icon']}></i>
+                <h3>{service.title}</h3>
+              </div>
               <p>{service.desc}</p>
             </div>
           ))}
@@ -1065,6 +1067,13 @@ const MAP_EMBED_URL =
     }
   }
 
+  @media (max-width: 639px) {
+    .hero {
+      min-height: 42svh;
+      height: min(52svh, 420px);
+    }
+  }
+
   .hero-track {
     position: relative;
     width: 100%;
@@ -1490,8 +1499,15 @@ const MAP_EMBED_URL =
     color: var(--aq-primary);
   }
 
+  .service-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
   .service-card h3 {
-    margin: 16px 0 8px;
+    margin: 0;
     font-size: 1.125rem;
     font-weight: 700;
     color: var(--aq-ink);
