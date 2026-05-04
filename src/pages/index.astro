@@ -245,8 +245,8 @@ const MAP_EMBED_URL =
       <section id="services" class="section home-section wrap">
         <h2 class="home-section-title reveal-on-scroll">服務項目</h2>
         <div class="services-grid">
-          {services.map((service) => (
-            <div class="service-card reveal-on-scroll">
+          {services.map((service, idx) => (
+            <div class:list={['service-card', 'reveal-on-scroll', idx === 0 && 'service-card--lead']}>
               <div class="service-head">
                 <i class:list={[service.icon, 'service-icon']}></i>
                 <h3>{service.title}</h3>
@@ -1213,9 +1213,9 @@ const MAP_EMBED_URL =
       rgba(21, 106, 102, 0.05) 42%,
       transparent 59%
     );
-    /* 毛玻璃極輕，僅略柔化底圖 */
-    -webkit-backdrop-filter: blur(4px) saturate(1.05);
-    backdrop-filter: blur(4px) saturate(1.05);
+    /* 毛玻璃極輕；blur 略低以保留底圖細節 */
+    -webkit-backdrop-filter: blur(3px) saturate(1.05);
+    backdrop-filter: blur(3px) saturate(1.05);
     mask-image: linear-gradient(
       to top,
       #000 0px,
@@ -1416,8 +1416,9 @@ const MAP_EMBED_URL =
     word-break: break-word;
     line-break: anywhere;
     text-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.52),
-      0 3px 18px rgba(0, 0, 0, 0.28);
+      0 1px 2px rgba(0, 0, 0, 0.72),
+      0 2px 5px rgba(0, 0, 0, 0.48),
+      0 4px 22px rgba(0, 0, 0, 0.38);
   }
 
   @media (max-width: 639px) {
@@ -1440,7 +1441,9 @@ const MAP_EMBED_URL =
     word-break: break-word;
     line-break: anywhere;
     line-height: 1.45;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.48),
+      0 2px 6px rgba(0, 0, 0, 0.28);
   }
 
   /*

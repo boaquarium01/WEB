@@ -26,10 +26,20 @@ export function initScrollReveal(): void {
 		}
 	}, REVEAL_OPTS);
 
+	const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches;
+
 	document.querySelectorAll('.reveal-on-scroll').forEach((el) => {
 		if (el.classList.contains('is-revealed')) return;
 		if ((el as HTMLElement).dataset.revealBound === '1') return;
 		(el as HTMLElement).dataset.revealBound = '1';
+		/* 首頁手機：服務第一卡常在 IO 臨界下緣，延遲觸發會在標題下留空 — 直接進場 */
+		if (
+			isMobile &&
+			el.matches('#home #services .services-grid .service-card.service-card--lead.reveal-on-scroll')
+		) {
+			el.classList.add('is-revealed');
+			return;
+		}
 		io.observe(el);
 	});
 
