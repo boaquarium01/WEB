@@ -24,7 +24,7 @@
 /* 手機預設不預留捲軸槽（避免細微重排與 iOS 捲動顫動）；寬螢幕再 stable */
 html {
   scrollbar-gutter: auto;
-  overflow-x: clip;
+  overflow-x: hidden;
 }
 
 @media (min-width: 901px) {
@@ -35,6 +35,7 @@ html {
 
 /* 避免 iOS Safari 在部分頁面「捲到底」時與 contain 疊加產生跳動；必要時由元件自行限制 overscroll */
 body {
+  overflow-x: hidden;
   overscroll-behavior-y: auto;
 }
 

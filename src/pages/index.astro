@@ -182,20 +182,30 @@ const MAP_EMBED_URL =
             </article>
           ))}
         </div>
-        <div class="hero-dots" role="tablist" aria-label="輪播指示">
-          {heroSlides.map((_, idx) => (
-            <button
-              type="button"
-              class:list={['carousel-dot', idx === 0 && 'is-active']}
-              data-index={idx}
-              aria-label={`第 ${idx + 1} 張`}
-            ></button>
-          ))}
+        <div class="hero-scrub">
+          <div class="hero-scrub-inner" style={`--hero-n: ${heroSlides.length}; --hero-i: 0`}>
+            <div class="hero-scrub-rail-wrap">
+              <div class="hero-scrub-rail">
+                <span class="hero-scrub-thumb" aria-hidden="true"></span>
+              </div>
+              <div class="hero-scrub-hitstrip" aria-label="切換主視覺">
+                {heroSlides.map((_, i) => (
+                  <button
+                    type="button"
+                    class="hero-scrub-hit"
+                    aria-label={`第 ${i + 1} 張`}
+                    aria-current={i === 0 ? 'true' : 'false'}
+                    data-hero-index={i}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       <div class="home-below-hero">
-      <section id="home-promo-links" class="wrap section -mt-8 pb-8" aria-label="促銷分頁導覽">
+      <section id="home-promo-links" class="wrap section hero-tight-promo pb-5" aria-label="促銷分頁導覽">
         <div class="home-promo-links-grid mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3">
           <a
             href="/promo/weekly-new"
@@ -397,7 +407,7 @@ const MAP_EMBED_URL =
     mobileLinks.forEach((link) => link.addEventListener('click', closeMenu));
 
     const slides = Array.from(document.querySelectorAll('.hero-slide'));
-    const dots = Array.from(document.querySelectorAll('.carousel-dot'));
+    const scrubInner = document.querySelector('.hero-scrub-inner');
     let currentSlide = 0;
     let heroExitTimer: ReturnType<typeof setTimeout> | null = null;
     const HERO_CROSSFADE_MS = 780;
@@ -420,7 +430,14 @@ const MAP_EMBED_URL =
       }
 
       slides.forEach((slide, i) => slide.classList.toggle('is-active', i === next));
-      dots.forEach((dot, i) => dot.classList.toggle('is-active', i === next));
+      if (scrubInner instanceof HTMLElement) {
+        scrubInner.style.setProperty('--hero-i', String(next));
+      }
+      document.querySelectorAll('.hero-scrub-hit').forEach((btn, i) => {
+        if (btn instanceof HTMLButtonElement) {
+          btn.setAttribute('aria-current', i === next ? 'true' : 'false');
+        }
+      });
       currentSlide = next;
 
       if (prevEl) {
@@ -430,14 +447,6 @@ const MAP_EMBED_URL =
         }, HERO_CROSSFADE_MS);
       }
     };
-
-    dots.forEach((dot) => {
-      dot.addEventListener('click', () => {
-        const idx = Number(dot.getAttribute('data-index') ?? 0);
-        setSlide(idx);
-        restartAutoplay();
-      });
-    });
 
     const heroTrack = document.querySelector('[data-hero-swipe]');
     if (heroTrack instanceof HTMLElement && slides.length > 1) {
@@ -502,6 +511,16 @@ const MAP_EMBED_URL =
       else startAutoplay();
     });
     startAutoplay();
+
+    const scrubHitstrip = document.querySelector('.hero-scrub-hitstrip');
+    scrubHitstrip?.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!(t instanceof HTMLButtonElement) || !t.classList.contains('hero-scrub-hit')) return;
+      const idx = Number(t.dataset.heroIndex);
+      if (!Number.isFinite(idx)) return;
+      setSlide(idx);
+      restartAutoplay();
+    });
 
     const siteHeader = document.getElementById('siteHeader');
     const heroEl = document.querySelector('.hero');
@@ -569,8 +588,11 @@ const MAP_EMBED_URL =
   .site {
     min-height: 100vh;
     min-height: 100svh;
+    width: 100%;
+    max-width: 100vw;
     background: var(--aq-sand);
     color: var(--aq-ink);
+    overflow-x: hidden;
   }
 
   /**
@@ -1049,15 +1071,49 @@ const MAP_EMBED_URL =
     border-bottom-color: color-mix(in srgb, var(--aq-primary) 20%, var(--aq-line));
   }
 
-  /* Hero：底色與遮罩最底部一致，換圖時較不會透出「另一塊」青綠帶 */
+  /*
+   * Hero 疊在想負 margin 上移的區塊之上時會蓋住促銷按鈕；促銷區改為不向上疊，僅保留區塊內間距銜接。
+   */
   .hero {
     position: relative;
+    z-index: 1;
     width: 100%;
+    max-width: 100%;
     min-height: 56vh;
     height: min(75vh, 640px);
     overflow: hidden;
+    /* 將 Home 指示條區域留在 Hero 框內；安全區在 padding-bottom */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background-color: #0a2624;
     background-image: linear-gradient(180deg, #0f3a38 0%, #0a2624 100%);
+    box-sizing: border-box;
+    /* 副標底 ↔ 輪播底之垂直通道；軌道置中於此區間 */
+    --hero-scrub-channel: clamp(20px, 4.2vw, 30px);
+    --hero-rail-outer: 10px;
+  }
+
+  /*
+   * 最底微加深（與主遮罩同色），銜接下方淺沙；避免與軌道區沙色塊狀跳色。
+   * z-index 在 overlay 之上、文字／軌道之下。
+   */
+  .hero::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: clamp(40px, 9vw, 68px);
+    z-index: 2;
+    pointer-events: none;
+    /* 與主遮罩同色調，僅最底微接淺沙，避免與軌道區塊狀色差 */
+    background: linear-gradient(
+      to top,
+      rgb(10 36 34 / 0.55) 0%,
+      rgb(12 40 38 / 0.28) 45%,
+      rgb(13 42 39 / 0.08) 78%,
+      transparent 100%
+    );
+    opacity: 0.5;
   }
 
   @media (max-width: 900px) {
@@ -1071,16 +1127,19 @@ const MAP_EMBED_URL =
     .hero {
       min-height: 42svh;
       height: min(52svh, 420px);
+      --hero-scrub-channel: clamp(18px, 4vw, 26px);
     }
   }
 
   .hero-track {
     position: relative;
     width: 100%;
+    max-width: 100%;
     height: 100%;
     isolation: isolate;
     touch-action: pan-y;
     cursor: grab;
+    background-color: #0a2624;
   }
 
   .hero-track:active {
@@ -1091,6 +1150,7 @@ const MAP_EMBED_URL =
     position: absolute;
     inset: 0;
     z-index: 0;
+    max-width: 100%;
     overflow: hidden;
     opacity: 0;
     visibility: hidden;
@@ -1126,34 +1186,199 @@ const MAP_EMBED_URL =
     transform-origin: center center;
   }
 
+  /* 手機：構圖再略偏下，主體多留在中上，底部留給讀字帶與漸層 */
+  @media (max-width: 639px) {
+    .hero-slide-bg {
+      background-position: center 84%;
+      transform-origin: center 94%;
+    }
+  }
+
+  /*
+   * 僅蓋在輪播底圖上：mask 限定毛玻璃／色罩的垂直高度，上方多保留原圖。
+   *（blur 與底色同在 .hero-overlay，遮罩一縮，模糊帶就跟著變矮。）
+   * mask 以底緣錨定：毛玻璃從圖片最底往上的漸層，避免看起來從畫面中段才起漸層。
+   */
   .hero-overlay {
     position: absolute;
     inset: 0;
-    background:
-      linear-gradient(
-        to top,
-        rgba(10, 38, 36, 0.88) 0%,
-        rgba(14, 58, 55, 0.42) 38%,
-        rgba(8, 24, 23, 0.35) 72%,
-        rgba(0, 0, 0, 0.2) 100%
-      ),
-      radial-gradient(ellipse 90% 55% at 50% 100%, rgba(21, 106, 102, 0.35) 0%, transparent 58%);
     z-index: 1;
+    pointer-events: none;
+    background-color: rgb(14, 48, 45 / 0.93);
+    /* 中心貼底（非 100% 以下），與圖片下緣一致 */
+    background-image: radial-gradient(
+      ellipse 126% 64% at 50% 100%,
+      rgba(21, 106, 102, 0.32) 0%,
+      rgba(21, 106, 102, 0.13) 24%,
+      rgba(21, 106, 102, 0.05) 42%,
+      transparent 59%
+    );
+    /* 毛玻璃極輕，僅略柔化底圖 */
+    -webkit-backdrop-filter: blur(4px) saturate(1.05);
+    backdrop-filter: blur(4px) saturate(1.05);
+    mask-image: linear-gradient(
+      to top,
+      #000 0px,
+      #000 6%,
+      rgba(0, 0, 0, 0.94) 10%,
+      rgba(0, 0, 0, 0.68) 14%,
+      rgba(0, 0, 0, 0.36) 18%,
+      rgba(0, 0, 0, 0.16) 22%,
+      rgba(0, 0, 0, 0.06) 25%,
+      rgba(0, 0, 0, 0.02) 27%,
+      rgba(0, 0, 0, 0.01) 30%,
+      transparent 37%
+    );
+    mask-clip: border-box;
+    mask-origin: border-box;
+    mask-position: center bottom;
+    mask-repeat: no-repeat;
+    mask-size: 100% 100%;
+    -webkit-mask-image: linear-gradient(
+      to top,
+      #000 0px,
+      #000 6%,
+      rgba(0, 0, 0, 0.94) 10%,
+      rgba(0, 0, 0, 0.68) 14%,
+      rgba(0, 0, 0, 0.36) 18%,
+      rgba(0, 0, 0, 0.16) 22%,
+      rgba(0, 0, 0, 0.06) 25%,
+      rgba(0, 0, 0, 0.02) 27%,
+      rgba(0, 0, 0, 0.01) 30%,
+      transparent 37%
+    );
+    -webkit-mask-clip: border-box;
+    -webkit-mask-origin: border-box;
+    -webkit-mask-position: center bottom;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
   }
 
+  @supports (mask-image: linear-gradient(#000, transparent)) or (-webkit-mask-image: linear-gradient(#000, transparent)) {
+    @media (max-width: 639px) {
+      .hero-overlay {
+        mask-image: linear-gradient(
+          to top,
+          #000 0px,
+          #000 6%,
+          rgba(0, 0, 0, 0.95) 12%,
+          rgba(0, 0, 0, 0.7) 16%,
+          rgba(0, 0, 0, 0.38) 20%,
+          rgba(0, 0, 0, 0.17) 23%,
+          rgba(0, 0, 0, 0.07) 26%,
+          rgba(0, 0, 0, 0.02) 29%,
+          rgba(0, 0, 0, 0.01) 31%,
+          transparent 38%
+        );
+        -webkit-mask-image: linear-gradient(
+          to top,
+          #000 0px,
+          #000 6%,
+          rgba(0, 0, 0, 0.95) 12%,
+          rgba(0, 0, 0, 0.7) 16%,
+          rgba(0, 0, 0, 0.38) 20%,
+          rgba(0, 0, 0, 0.17) 23%,
+          rgba(0, 0, 0, 0.07) 26%,
+          rgba(0, 0, 0, 0.02) 29%,
+          rgba(0, 0, 0, 0.01) 31%,
+          transparent 38%
+        );
+      }
+    }
+  }
+
+  @supports not ((mask-image: linear-gradient(#000, transparent)) or (-webkit-mask-image: linear-gradient(#000, transparent))) {
+    .hero-overlay {
+      background-color: transparent;
+      background-image:
+        linear-gradient(
+          to top,
+          rgba(12, 43, 41, 0.86) 0%,
+          rgba(13, 48, 46, 0.64) 11%,
+          rgba(13, 50, 47, 0.38) 21%,
+          rgba(14, 52, 49, 0.17) 29%,
+          rgba(14, 48, 45, 0.06) 34%,
+          transparent 40%
+        ),
+        radial-gradient(ellipse 124% 64% at 50% 100%, rgba(21, 106, 102, 0.2) 0%, rgba(21, 106, 102, 0.06) 32%, transparent 54%);
+      mask-image: none;
+      -webkit-mask-image: none;
+    }
+
+    @media (max-width: 639px) {
+      .hero-overlay {
+        background-image:
+          linear-gradient(
+            to top,
+            rgba(12, 43, 41, 0.88) 0%,
+            rgba(13, 48, 46, 0.66) 12%,
+            rgba(13, 50, 47, 0.4) 22%,
+            rgba(14, 52, 49, 0.18) 30%,
+            rgba(14, 48, 45, 0.07) 34%,
+            transparent 42%
+          ),
+          radial-gradient(ellipse 122% 60% at 50% 100%, rgba(21, 106, 102, 0.22) 0%, rgba(21, 106, 102, 0.07) 30%, transparent 53%);
+      }
+    }
+  }
+
+  /*
+   * Hero 內覆寫 .wrap：與主視覺同寬、左右對稱（含 safe-area），
+   * 避免 max-width + margin:auto 在部分裝置上造成「整塊偏右／右側裁切」。
+   */
+  .hero .hero-content.wrap {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    /* max + clamp：DevTools iPhone／實機 safe-area 與窄螢幕皆保留足夠內縮，避免視覺貼邊與裁切 */
+    padding-left: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-right, 0px));
+  }
+
+  .hero-drift-layer {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: clamp(0px, 0.35vw, 3px);
+    /* 覆寫 zh-Hant 在 Chrome 等瀏覽器偏嚴格的 CJK 斷行，避免長標／長句單行撐破後被 .hero-slide 裁切 */
+    line-break: anywhere;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* 底留白＝副標底到輪播底之通道，供軌道垂直置中 */
   .hero-content {
     position: relative;
     z-index: 3;
     height: 100%;
+    min-width: 0;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    padding-bottom: clamp(58px, 11vw, 68px);
-    padding-top: 24px;
+    align-items: stretch;
+    padding-bottom: var(--hero-scrub-channel);
+    padding-top: 6px;
+  }
+
+  @media (max-width: 639px) {
+    .hero-content {
+      padding-top: 2px;
+      /* 副標略下移，貼近軌道讀字帶（仍保留最低間距避免與拇指塊重疊過頭） */
+      padding-bottom: max(12px, calc(var(--hero-scrub-channel) - 10px));
+    }
   }
 
   .hero-content-inner {
+    width: 100%;
     max-width: 100%;
+    flex: 0 1 auto;
+    min-width: 0;
   }
 
   .hero-slide .hero-content-inner {
@@ -1181,71 +1406,215 @@ const MAP_EMBED_URL =
     font-size: clamp(1.75rem, 4vw, 2.75rem);
     font-weight: 800;
     color: #faf8f4;
-    line-height: 1.2;
-    max-width: 22ch;
-    text-shadow: 0 1px 24px rgba(0, 0, 0, 0.25);
+    line-height: 1.22;
+    letter-spacing: -0.01em;
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-break: anywhere;
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.52),
+      0 3px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  @media (max-width: 639px) {
+    .hero-content h1 {
+      /* 略降 vw 係數，避免「一行標題」實際寬度仍大於 320～390px 內容區 */
+      font-size: clamp(1.28rem, 4.2vw, 1.95rem);
+      line-height: 1.22;
+    }
   }
 
   .hero-content p {
-    margin: 12px 0 0;
-    font-size: 1rem;
-    color: rgba(250, 248, 244, 0.9);
-    max-width: 36ch;
-    line-height: 1.65;
-    text-shadow: 0 1px 16px rgba(0, 0, 0, 0.2);
+    margin: 0;
+    font-size: clamp(0.9375rem, 2vw, 1rem);
+    color: rgba(253, 252, 248, 0.9);
+    width: fit-content;
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-break: anywhere;
+    line-height: 1.45;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
   }
 
-  /* 貼在圖片可視下緣：促銷區 -mt-8 會疊上 hero 底部，圓點需在其上方才不會被擋 */
-  .hero-dots {
+  /*
+   * 與 .hero-content.wrap 同源寬／padding（1200 × 16）。
+   * 軌道垂直置中於「輪播底」與「副標底」之間（與 .hero-content padding-bottom 通道對齊）。
+   */
+  .hero-scrub {
     position: absolute;
-    bottom: calc(2rem + max(8px, env(safe-area-inset-bottom, 0px) + 4px));
-    left: 50%;
-    transform: translateX(-50%);
+    /* 以「輪播內容底」（含 safe-area 之上緣）為基準，通道半高 − 軌道半高 → 軌道垂直置中 */
+    bottom: calc(
+      env(safe-area-inset-bottom, 0px) + var(--hero-scrub-channel) / 2 - var(--hero-rail-outer) / 2
+    );
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-left, 0px));
+    padding-right: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
     z-index: 4;
+    pointer-events: auto;
     display: flex;
-    gap: 8px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .hero-scrub-inner {
+    --hero-i: 0;
+    --hero-n: 5;
+    /* 依父層（含 safe-area padding）實際寬度限制，避免 vw 與 flex-shrink:0 導致裁切 */
+    width: 100%;
+    max-width: min(180px, 100%);
+    flex-shrink: 1;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  @media (max-width: 639px) {
+    /* 軌道貼齊螢幕左右緣，僅瀏海／Home 指示區保留 safe-area */
+    .hero-scrub {
+      padding-left: env(safe-area-inset-left, 0px);
+      padding-right: env(safe-area-inset-right, 0px);
+    }
+    .hero-scrub-inner {
+      max-width: 100%;
+    }
+  }
+
+  .hero-scrub-rail-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: 0;
+    /* 供加高點擊區向上／下延伸，不推擠軌道垂直對齊計算 */
+    padding-top: 18px;
+    padding-bottom: 18px;
+    margin-top: -18px;
+    margin-bottom: -18px;
+  }
+
+  .hero-scrub-rail {
+    position: relative;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    overflow: hidden;
+    /* 刻意低對比：不干擾標題層級 */
+    background: rgba(6, 22, 21, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* 加高觸控／點擊區（視覺仍為細軌道），分段對應各張 */
+  .hero-scrub-hitstrip {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    height: 44px;
     pointer-events: auto;
   }
 
-  .carousel-dot {
-    width: 8px;
-    height: 8px;
+  .hero-scrub-hit {
+    flex: 1 1 calc(100% / var(--hero-n));
+    min-width: 0;
+    height: 100%;
+    margin: 0;
     padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: rgba(250, 248, 244, 0.35);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
     cursor: pointer;
-    transition:
-      background 0.25s ease,
-      transform 0.25s ease,
-      box-shadow 0.25s ease;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .carousel-dot:hover {
-    background: rgba(250, 248, 244, 0.55);
-    transform: scale(1.08);
+  .hero-scrub-hit:focus-visible {
+    outline: 2px solid rgba(250, 248, 244, 0.45);
+    outline-offset: 3px;
   }
 
-  .carousel-dot.is-active {
-    background: #faf8f4;
-    box-shadow: 0 0 0 1px rgba(21, 106, 102, 0.45);
-    transform: scale(1.12);
+  .hero-scrub-thumb {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(100% / var(--hero-n));
+    border-radius: inherit;
+    background: rgba(250, 248, 244, 0.34);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transform: translateX(calc(var(--hero-i) * 100%));
+    transition: transform 0.44s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
-  /* 區塊通用：大留白，展缸間走道感 */
+  @media (hover: hover) and (pointer: fine) {
+    .hero-scrub-inner:hover .hero-scrub-rail {
+      border-color: rgba(255, 255, 255, 0.09);
+      background: rgba(6, 22, 21, 0.18);
+    }
+
+    .hero-scrub-inner:hover .hero-scrub-thumb {
+      background: rgba(250, 248, 244, 0.44);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .hero-scrub-thumb {
+      transition-duration: 0.08s;
+      transition-timing-function: ease-out;
+    }
+  }
+
+  /* 區塊通用：展缸間走道感（首頁下方另有微調以降低段落分界感） */
   .section {
-    padding: clamp(3rem, 6vw, 4.5rem) 0;
+    padding: clamp(2.625rem, 5.5vw, 4rem) 0;
+  }
+
+  /*
+   * 銜接主視覺：勿用負 margin 上移（會疊進 .hero stacking 底下，輪播底漸層／::after 會遮到促銷按鈕）。
+   */
+  #home-promo-links.hero-tight-promo.section {
+    margin-top: 0;
+    padding-top: clamp(0.6rem, 2.2vw, 1.05rem);
+    padding-bottom: clamp(0.9rem, 2.4vw, 1.5rem);
+  }
+
+  @media (max-width: 639px) {
+    #home-promo-links.hero-tight-promo.section {
+      padding-top: clamp(0.65rem, 3.2vw, 1rem);
+    }
+  }
+
+  #home-promo-links.section:not(.hero-tight-promo) {
+    padding-top: clamp(0.75rem, 2vw, 1.35rem);
+    padding-bottom: clamp(1.1rem, 2.8vw, 1.9rem);
   }
 
   /**
-   * 服務／關於／熱銷：淺沙底 + 極淡微粒質感（面積小）
+   * 服務／關於／熱銷：淺沙底較平直、對比弱化，區塊不那麼一塊一塊切開
    */
   .home-below-hero {
     position: relative;
+    z-index: 0;
     background: linear-gradient(
       180deg,
-      var(--aq-sand) 0%,
-      color-mix(in srgb, var(--aq-sand-2) 55%, var(--aq-sand)) 48%,
+      color-mix(in srgb, var(--aq-sand) 92%, white) 0%,
+      var(--aq-sand) 22%,
+      color-mix(in srgb, var(--aq-sand-2) 45%, var(--aq-sand)) 50%,
       var(--aq-sand) 100%
     );
   }
@@ -1298,19 +1667,57 @@ const MAP_EMBED_URL =
     }
   }
 
+  /*
+   * 促銷三格：Tailwind grid-cols 在部分情況等同 minmax(auto,1fr)，flex 子層 h2 又 min-width:auto，
+   * 會把欄寬撐破 390px 視窗；改 minmax(0,1fr) + 內層 min-width:0 與右側留給 chevron。
+   */
+  #home-promo-links .home-promo-links-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    #home-promo-links .home-promo-links-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  #home-promo-links .home-promo-link {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  #home-promo-links .home-promo-link > div.relative.flex {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 1.35rem;
+  }
+
+  #home-promo-links .home-promo-link h2 {
+    min-width: 0;
+    max-width: 100%;
+    line-break: anywhere;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .home-below-hero .home-section {
     position: relative;
     z-index: 1;
-    padding-bottom: clamp(2.75rem, 5vw, 4rem);
+    padding-bottom: clamp(2.4rem, 4.75vw, 3.65rem);
   }
 
   .home-below-hero .home-section:first-child {
-    padding-top: clamp(3rem, 6.5vw, 4.5rem);
+    padding-top: clamp(2.5rem, 5.5vw, 3.75rem);
   }
 
   .home-below-hero .home-section:not(:first-child) {
-    padding-top: clamp(2.25rem, 5vw, 3.5rem);
-    border-top: 1px solid color-mix(in srgb, var(--aq-ink) 6%, transparent);
+    padding-top: clamp(2rem, 4.25vw, 3.25rem);
+    border-top: 1px solid color-mix(in srgb, var(--aq-ink) 4%, transparent);
   }
 
   /* 服務項目／關於／熱銷／主打：統一標題層級（:global 讓子元件內 h2 也能套用） */
@@ -1404,12 +1811,21 @@ const MAP_EMBED_URL =
 
   /* 手機：服務／熱銷左右留白加寬，避免貼邊（含瀏海機安全區） */
   @media (max-width: 639px) {
-    #home-promo-links.wrap,
     #services.wrap,
     #products.home-section,
     #hero-spotlight.wrap {
       padding-left: calc(24px + env(safe-area-inset-left, 0px));
       padding-right: calc(24px + env(safe-area-inset-right, 0px));
+    }
+  }
+
+  /*
+   * 促銷列：與主視覺文案／底部軌道同一水平內距，RWD 內容寬與視窗可用寬一致對齊（非額外縮窄）。
+   */
+  @media (max-width: 639px) {
+    #home-promo-links.wrap {
+      padding-left: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-left, 0px));
+      padding-right: max(clamp(16px, 4.5vw, 22px), env(safe-area-inset-right, 0px));
     }
   }
 
