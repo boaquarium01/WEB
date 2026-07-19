@@ -409,6 +409,15 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
         qrModalImg.removeAttribute('src');
         qrModalImg.alt = '';
       }
+      if (qrModalCopyImg instanceof HTMLButtonElement) {
+        if (copyQrSuccessTimer) {
+          window.clearTimeout(copyQrSuccessTimer);
+          copyQrSuccessTimer = 0;
+        }
+        qrModalCopyImg.classList.remove('is-success');
+        qrModalCopyImg.textContent = '複製照片';
+        qrModalCopyImg.setAttribute('aria-label', '複製照片');
+      }
       try {
         releaseBodyScrollLock();
       } catch {}
@@ -469,6 +478,21 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
       setStatus('已觸發下載（若未儲存請在新分頁長按圖片另存）');
     }
 
+    let copyQrSuccessTimer = 0;
+    function markCopyQrPhotoSuccess() {
+      if (!(qrModalCopyImg instanceof HTMLButtonElement)) return;
+      qrModalCopyImg.classList.add('is-success');
+      qrModalCopyImg.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i><span>已複製</span>';
+      qrModalCopyImg.setAttribute('aria-label', '已複製照片');
+      if (copyQrSuccessTimer) window.clearTimeout(copyQrSuccessTimer);
+      copyQrSuccessTimer = window.setTimeout(() => {
+        qrModalCopyImg.classList.remove('is-success');
+        qrModalCopyImg.textContent = '複製照片';
+        qrModalCopyImg.setAttribute('aria-label', '複製照片');
+        copyQrSuccessTimer = 0;
+      }, 2000);
+    }
+
     async function copyQrPhoto() {
       const blob = await getQrImageBlob();
       if (!blob || blob.size <= 0) {
@@ -504,6 +528,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
             [pngBlob.type || 'image/png']: pngBlob
           })
         ]);
+        markCopyQrPhotoSuccess();
         setStatus('已複製 QR 照片到剪貼簿');
       } catch {
         try {
@@ -3675,7 +3700,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
   }
   .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
   .product-remove-btn {
-    justify-self: start;
+    justify-self: end;
     margin-top: 4px;
     padding: 8px 14px;
     border-radius: 8px;
@@ -3897,6 +3922,15 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
   .qr-modal__btn--secondary:hover {
     background: #f8fafc;
     transform: translateY(-1px);
+  }
+  #qrModalCopyImg.is-success {
+    border-color: rgba(16, 185, 129, 0.45);
+    color: #065f46;
+    background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.16);
+  }
+  #qrModalCopyImg.is-success > i {
+    margin-right: 6px;
   }
 
   .img-modal {
