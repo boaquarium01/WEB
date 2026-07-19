@@ -10,6 +10,8 @@ import {
   type Product
 } from '../../data/products';
 import { SITE_TITLE_SHORT } from '../../config/site';
+import { portableBlocksToPlainText } from '../../lib/portableText';
+import { isPortableTextBlocks, strapiBlocksToPlainText } from '../../lib/strapi/blocks';
 
 function buildCatalogQs(categoryId: string, q: string): string {
   const p = new URLSearchParams();
@@ -19,10 +21,17 @@ function buildCatalogQs(categoryId: string, q: string): string {
   return s ? `?${s}` : '';
 }
 
+function productBodyPlain(product: Product): string {
+  const body = product.body;
+  if (!Array.isArray(body) || body.length === 0) return '';
+  if (isPortableTextBlocks(body)) return portableBlocksToPlainText(body);
+  return strapiBlocksToPlainText(body);
+}
+
 function productMatchesQuery(product: Product, q: string): boolean {
   const needle = q.trim().toLowerCase();
   if (!needle) return true;
-  const hay = [product.name, product.excerpt, product.categoryLabel ?? '']
+  const hay = [product.name, product.excerpt, product.categoryLabel ?? '', productBodyPlain(product)]
     .join(' ')
     .toLowerCase();
   return hay.includes(needle);
@@ -79,16 +88,6 @@ const items = filtered.slice(
   currentPage * pageSize
 ) as Product[];
 
-/** 本頁在清單中的序號範圍（供頁首統計顯示） */
-const rangeStart = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-const rangeEnd = totalItems === 0 ? 0 : Math.min(currentPage * pageSize, totalItems);
-const rangeLabel =
-  totalItems === 0
-    ? null
-    : rangeStart === rangeEnd
-      ? `第 ${rangeStart} 項`
-      : `第 ${rangeStart}–${rangeEnd} 項`;
-
 const staggerItems = items.map((p) => ({
   slug: p.slug,
   name: p.name,
@@ -137,7 +136,11 @@ Astro.response.headers.set(
       class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
     >
       <div class="header-inner">
-        <a href="/" class="back-link" aria-label="返回首頁">
+        <a
+          href={activeCategory ? '/products/1' : '/'}
+          class="back-link"
+          aria-label={activeCategory ? '返回全部商品' : '返回首頁'}
+        >
           <i class="fa-solid fa-arrow-left"></i>
         </a>
         <a href="/" class="brand">水博館水族</a>
@@ -173,49 +176,11 @@ Astro.response.headers.set(
       <h1 class="page-title reveal-on-scroll reveal-on-scroll--delay-sm">
         {activeCategory && !activeQ && activeCategoryLabel ? activeCategoryLabel : '全部商品'}
       </h1>
-      {activeCategory && !activeQ && activeCategoryLabel ? (
-        <p class="page-subtitle">
-          由「全部商品」依分類篩選 ·{' '}
-          <a href="/products/1">瀏覽全部品項</a>
-        </p>
-      ) : null}
-      <p class="catalog-stats reveal-on-scroll reveal-on-scroll--delay-sm" role="status" aria-live="polite">
-        {activeCategory || activeQ ? (
-          <>
-            篩選 <span class="catalog-stats__num">{totalItems}</span> 項
-            <span class="catalog-stats__sep" aria-hidden="true">
-              ·
-            </span>
-            全站 <span class="catalog-stats__num">{sorted.length}</span> 項
-            <span class="catalog-stats__sep" aria-hidden="true">
-              ·
-            </span>
-          </>
-        ) : (
-          <>
-            共 <span class="catalog-stats__num">{totalItems}</span> 項
-            <span class="catalog-stats__sep" aria-hidden="true">
-              ·
-            </span>
-          </>
-        )}
-        {totalItems > 0 && rangeLabel ? (
-          <>
-            本頁 {rangeLabel}
-            {totalPages > 1 ? (
-              <span class="catalog-stats__sep" aria-hidden="true">
-                ·
-              </span>
-            ) : null}
-          </>
-        ) : null}
-        {totalPages > 1 ? <>第 {currentPage}/{totalPages} 頁</> : null}
-      </p>
 
       <div class="catalog-toolbar reveal-on-scroll reveal-on-scroll--delay-md" role="search" aria-label="商品篩選與搜尋">
         <form class="catalog-filter-form" method="get" action="/products/1">
-          <div class="catalog-field">
-            <label class="catalog-label" for="catalog-category">分類</label>
+          <div class="catalog-category-row">
+            <label class="visually-hidden" for="catalog-category">分類</label>
             <div class="catalog-select-wrap">
               <select
                 id="catalog-category"
@@ -235,8 +200,7 @@ Astro.response.headers.set(
               <i class="fa-solid fa-chevron-down catalog-select-chevron" aria-hidden="true"></i>
             </div>
           </div>
-          <div class="catalog-field catalog-field--search">
-            <label class="catalog-label" for="catalog-q">關鍵字</label>
+          <div class="catalog-search-row">
             <div class="catalog-input-wrap">
               <i class="fa-solid fa-magnifying-glass catalog-input-icon" aria-hidden="true"></i>
               <input
@@ -245,28 +209,20 @@ Astro.response.headers.set(
                 type="search"
                 name="q"
                 value={activeQ}
-                placeholder="名稱、簡述或分類…"
+                placeholder="搜尋…"
+                aria-label="搜尋商品"
                 enterkeyhint="search"
                 autocomplete="off"
               />
             </div>
-          </div>
-          <div class="catalog-actions">
-            <button type="submit" class="catalog-btn catalog-btn--primary">
-              <i class="fa-solid fa-magnifying-glass catalog-btn-icon" aria-hidden="true"></i>
-              搜尋
-            </button>
-            {activeCategory || activeQ ? (
-              <a class="catalog-btn catalog-btn--ghost" href="/products/1">
-                清除條件
-              </a>
-            ) : null}
+            <button type="submit" class="catalog-btn catalog-btn--primary">搜尋</button>
+            <a class="catalog-btn catalog-btn--ghost" href="/products/1">清除</a>
           </div>
         </form>
       </div>
 
       {staggerItems.length === 0 ? (
-        <p class="catalog-empty">沒有符合條件的商品，請調整分類或搜尋關鍵字。</p>
+        <p class="catalog-empty">沒有符合條件的商品，請調整搜尋關鍵字。</p>
       ) : (
         <ProductGridStagger items={staggerItems} />
       )}
@@ -400,20 +356,6 @@ Astro.response.headers.set(
     text-underline-offset: 3px;
   }
 
-  .page-subtitle {
-    margin: -4px 0 12px;
-    text-align: center;
-    font-size: 0.875rem;
-    color: #666;
-  }
-
-  .page-subtitle a {
-    color: #111;
-    font-weight: 600;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
   .sep {
     margin: 0 6px;
     color: #bbb;
@@ -426,71 +368,36 @@ Astro.response.headers.set(
     text-align: center;
   }
 
-  .catalog-stats {
-    margin: 0 0 1rem;
-    padding: 0 4px;
-    text-align: center;
-    font-size: 0.75rem;
-    line-height: 1.45;
-    letter-spacing: 0.06em;
-    color: color-mix(in srgb, var(--aq-muted, #5c6563) 92%, var(--aq-ink, #1a2221));
-  }
-
-  .catalog-stats__num {
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-    color: var(--aq-ink, #1a2221);
-  }
-
-  .catalog-stats__sep {
-    margin: 0 0.35em;
-    opacity: 0.45;
-    user-select: none;
-  }
-
   .catalog-toolbar {
-    margin: 0 0 clamp(1.25rem, 4vw, 1.75rem);
-    padding: clamp(14px, 3vw, 20px);
-    border-radius: var(--aq-radius, 14px);
-    border: 1px solid var(--aq-line, rgba(26, 34, 33, 0.08));
-    background: linear-gradient(
-      165deg,
-      color-mix(in srgb, var(--aq-sand, #faf8f4) 92%, white) 0%,
-      #fff 48%
-    );
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 28px rgba(26, 34, 33, 0.06);
+    margin: 0 auto clamp(1rem, 3vw, 1.5rem);
+    padding: 0;
+    border: none;
+    background: none;
+    box-shadow: none;
+    width: 100%;
+    max-width: 32rem;
   }
 
   .catalog-filter-form {
-    display: grid;
-    gap: 14px;
-    align-items: end;
-  }
-
-  @media (min-width: 768px) {
-    .catalog-filter-form {
-      grid-template-columns: minmax(168px, 220px) minmax(0, 1fr) auto;
-      gap: 16px;
-    }
-  }
-
-  .catalog-field {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-width: 0;
+    gap: 8px;
   }
 
-  .catalog-field--search {
-    min-width: 0;
+  .catalog-category-row {
+    display: block;
   }
 
-  .catalog-label {
-    font-size: 0.6875rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--aq-muted, #5c6563);
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
   .catalog-select-wrap {
@@ -500,8 +407,8 @@ Astro.response.headers.set(
 
   .catalog-select {
     width: 100%;
-    min-height: 44px;
-    padding: 10px 40px 10px 12px;
+    min-height: 40px;
+    padding: 8px 36px 8px 12px;
     font-size: 0.9375rem;
     line-height: 1.3;
     border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 14%, transparent);
@@ -536,16 +443,25 @@ Astro.response.headers.set(
     opacity: 0.75;
   }
 
+  .catalog-search-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+  }
+
   .catalog-input-wrap {
     position: relative;
     display: flex;
     align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .catalog-input-icon {
     position: absolute;
-    left: 14px;
-    font-size: 0.85rem;
+    left: 12px;
+    font-size: 0.8rem;
     color: var(--aq-muted, #5c6563);
     opacity: 0.75;
     pointer-events: none;
@@ -553,8 +469,8 @@ Astro.response.headers.set(
 
   .catalog-input {
     width: 100%;
-    min-height: 44px;
-    padding: 10px 12px;
+    min-height: 40px;
+    padding: 8px 12px;
     font-size: 0.9375rem;
     border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 14%, transparent);
     border-radius: var(--aq-radius-sm, 10px);
@@ -566,7 +482,7 @@ Astro.response.headers.set(
   }
 
   .catalog-input--search {
-    padding-left: 40px;
+    padding-left: 36px;
   }
 
   .catalog-input:hover {
@@ -579,42 +495,14 @@ Astro.response.headers.set(
     box-shadow: 0 0 0 3px var(--aq-primary-soft, rgba(21, 106, 102, 0.12));
   }
 
-  .catalog-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: stretch;
-  }
-
-  @media (min-width: 768px) {
-    .catalog-actions {
-      flex-direction: row;
-      flex-wrap: nowrap;
-      align-items: flex-end;
-      justify-content: flex-end;
-    }
-  }
-
-  @media (max-width: 767.98px) {
-    .catalog-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      width: 100%;
-    }
-
-    .catalog-actions:not(:has(.catalog-btn--ghost)) {
-      grid-template-columns: 1fr;
-    }
-  }
-
   .catalog-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    min-height: 44px;
-    padding: 10px 18px;
-    font-size: 0.9375rem;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 8px 14px;
+    font-size: 0.875rem;
     font-weight: 600;
     border-radius: var(--aq-radius-sm, 10px);
     border: 1px solid color-mix(in srgb, var(--aq-ink, #1a2221) 18%, transparent);
@@ -622,51 +510,23 @@ Astro.response.headers.set(
     color: var(--aq-ink, #1a2221);
     cursor: pointer;
     text-decoration: none;
+    white-space: nowrap;
     transition:
-      transform 0.2s ease,
-      box-shadow 0.2s ease,
       background 0.15s ease,
       border-color 0.15s ease,
       color 0.15s ease;
     -webkit-tap-highlight-color: transparent;
   }
 
-  @media (hover: hover) and (pointer: fine) {
-    .catalog-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(26, 34, 33, 0.08);
-    }
-
-    .catalog-btn--primary:hover {
-      box-shadow: 0 8px 22px rgba(21, 106, 102, 0.22);
-    }
-  }
-
-  .catalog-btn-icon {
-    font-size: 0.85em;
-    opacity: 0.9;
-  }
-
   .catalog-btn--primary {
     background: var(--aq-primary, #156a66);
     color: #fff;
     border-color: var(--aq-primary-dark, #0f4d4a);
-    box-shadow: 0 1px 2px rgba(21, 106, 102, 0.2);
   }
 
   .catalog-btn--primary:hover {
     background: var(--aq-primary-dark, #0f4d4a);
     border-color: var(--aq-primary-dark, #0f4d4a);
-  }
-
-  .catalog-btn--primary:active {
-    transform: scale(0.98);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .catalog-btn--primary:active {
-      transform: none;
-    }
   }
 
   .catalog-btn--ghost {

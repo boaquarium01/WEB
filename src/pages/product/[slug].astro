@@ -21,6 +21,7 @@ if (!product) {
 }
 
 const categoryLabel = product.categoryLabel;
+const categoryHref = `/products/1?category=${encodeURIComponent(product.category)}`;
 function truncateForMeta(input: string, maxLen: number) {
   const s = String(input ?? '').trim();
   if (!s) return '';
@@ -129,7 +130,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
       class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
     >
       <div class="header-inner">
-        <a href="/" class="back-link" aria-label="返回首頁">
+        <a href={categoryHref} class="back-link" aria-label={`返回${categoryLabel}`}>
           <i class="fa-solid fa-arrow-left"></i>
         </a>
         <a href="/" class="brand">水博館水族</a>
@@ -145,15 +146,17 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
           { label: '全部商品', href: '/products/1' },
           {
             label: categoryLabel,
-            href: `/products/1?category=${encodeURIComponent(product.category)}`
+            href: categoryHref
           },
           { label: product.name }
         ]}
       />
 
-      <article class="detail reveal-on-scroll reveal-on-scroll--delay-sm">
-        <div class="detail-media">
-          {product.images.length > 0 ? (
+      <article
+        class:list={['detail', 'reveal-on-scroll', 'reveal-on-scroll--delay-sm', { 'detail--no-media': product.images.length === 0 }]}
+      >
+        {product.images.length > 0 && (
+          <div class="detail-media">
             <div
               class="product-carousel"
               data-product-carousel
@@ -233,22 +236,11 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
                 )}
               </div>
             </div>
-          ) : (
-            <div
-              class="product-detail-no-image"
-              role="img"
-              aria-label={`${product.name} 尚無照片`}
-            >
-              <i class="fa-solid fa-fish-fins" aria-hidden="true"></i>
-              <span class="product-detail-no-image-title">照片準備中</span>
-              <span class="product-detail-no-image-hint">上架後可於後台補上圖片</span>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
         <div class="detail-body">
           <p class="category-pill">{categoryLabel}</p>
           <h1>{product.name}</h1>
-          <p class="excerpt">{product.excerpt}</p>
           {usePortableBody ? (
             <div
               class="prose prose-slate max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed"
@@ -258,7 +250,20 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
             <p class="product-body-empty">尚未填寫商品介紹。</p>
           )}
           <p class="note">網站僅供參考請以現場為準，歡迎來店參觀選購。</p>
-          <a href="/products/1" class="btn-secondary">返回全部商品</a>
+          <div class="detail-back-actions">
+            <a href="/" class="btn-secondary">
+              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+              首頁
+            </a>
+            <a href="/products/1" class="btn-secondary">
+              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+              全部
+            </a>
+            <a href={categoryHref} class="btn-secondary">
+              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+              {categoryLabel}
+            </a>
+          </div>
         </div>
       </article>
     </main>
@@ -385,7 +390,7 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
   }
 
   @media (min-width: 900px) {
-    .detail {
+    .detail:not(.detail--no-media) {
       grid-template-columns: 1fr 1fr;
       align-items: start;
     }
@@ -397,39 +402,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     border: 1px solid #eee;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     background: #f5f5f5;
-  }
-
-  .product-detail-no-image {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    min-height: 200px;
-    aspect-ratio: 4 / 3;
-    padding: 1.5rem 1.25rem;
-    text-align: center;
-    background: linear-gradient(145deg, #ecfeff 0%, #f1f5f9 50%, #e8f4f8 100%);
-    color: #64748b;
-  }
-
-  .product-detail-no-image .fa-fish-fins {
-    font-size: 2.25rem;
-    color: rgba(14, 116, 144, 0.38);
-  }
-
-  .product-detail-no-image-title {
-    font-size: 0.9375rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: #475569;
-  }
-
-  .product-detail-no-image-hint {
-    font-size: 0.75rem;
-    color: #94a3b8;
-    max-width: 15rem;
-    line-height: 1.45;
   }
 
   .category-pill {
@@ -448,13 +420,6 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     font-size: clamp(1.5rem, 3vw, 2rem);
     font-weight: 800;
     line-height: 1.25;
-  }
-
-  .excerpt {
-    margin: 0 0 20px;
-    font-size: 1rem;
-    color: #444;
-    line-height: 1.6;
   }
 
   .product-body-empty {
@@ -486,8 +451,17 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     line-height: 1.6;
   }
 
+  .detail-back-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
   .btn-secondary {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45em;
     padding: 10px 20px;
     font-size: 0.9375rem;
     font-weight: 600;
@@ -495,6 +469,11 @@ Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-r
     border: 1px solid #ccc;
     border-radius: 8px;
     background: #fff;
+  }
+
+  .btn-secondary .fa-arrow-left {
+    font-size: 0.75em;
+    opacity: 0.7;
   }
 
   .btn-secondary:hover {
