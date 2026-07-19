@@ -26,8 +26,8 @@ const defs = {
 
 const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
 const adminBackend = readAdminBackend();
-/** 官網前台 origin（供「官網預覽／QR」）；可用 PUBLIC_SITE_URL 覆寫 */
-const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaquarium.vercel.app').replace(/\/+$/, '');
+/** 官網前台 origin（供「官網預覽／QR」）；可用 PUBLIC_SITE_URL 覆寫；未設則由瀏覽器用目前網站 origin */
+const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
 ---
 
 <Layout title={`後台管理｜${SITE_TITLE_SHORT}`} description="員工後台">
@@ -180,6 +180,25 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         </footer>
       </section>
     </div>
+
+    <!-- 商品移除確認（避免 prompt 在手機被阻擋） -->
+    <div id="productRemoveModal" class="cat-modal" hidden role="dialog" aria-modal="true" aria-label="移除此品項">
+      <button id="productRemoveBackdrop" class="cat-modal__backdrop" type="button" aria-label="關閉"></button>
+      <section class="cat-modal__panel" role="document">
+        <header class="cat-modal__head">
+          <h3 id="productRemoveTitle" class="cat-modal__title">移除此品項</h3>
+          <button id="productRemoveClose" class="cat-modal__close" type="button" aria-label="關閉">✕</button>
+        </header>
+        <div class="cat-modal__body">
+          <p id="productRemoveMsg" class="cat-modal__hint" style="margin:0;font-size:.95rem;line-height:1.5;color:#334155;white-space:pre-line;"></p>
+        </div>
+        <footer class="cat-modal__foot">
+          <div class="cat-modal__spacer"></div>
+          <button id="productRemoveCancel" type="button" class="cat-modal__btn">取消</button>
+          <button id="productRemoveConfirm" type="button" class="cat-modal__btn cat-modal__btn--danger">確認移除</button>
+        </footer>
+      </section>
+    </div>
   </main>
 
   <!-- 置於 main 外：全螢幕 fixed 不受 .adminx overflow／寬度影響（RWD 預覽） -->
@@ -197,6 +216,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           </div>
           <div class="qr-modal__actions">
             <button type="button" id="qrModalSaveImg" class="qr-modal__btn qr-modal__btn--primary">儲存照片</button>
+            <button type="button" id="qrModalCopyImg" class="qr-modal__btn qr-modal__btn--secondary">複製照片</button>
             <button type="button" id="qrModalShare" class="qr-modal__btn qr-modal__btn--secondary">分享</button>
           </div>
         </div>
@@ -228,6 +248,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     const qrModalUrl = document.getElementById('qrModalUrl');
     const qrModalImg = document.getElementById('qrModalImg');
     const qrModalSaveImg = document.getElementById('qrModalSaveImg');
+    const qrModalCopyImg = document.getElementById('qrModalCopyImg');
     const qrModalShare = document.getElementById('qrModalShare');
 
     const modelTabs = document.getElementById('modelTabs');
@@ -262,8 +283,18 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     const catModalCancel = document.getElementById('catModalCancel');
     const catModalSave = document.getElementById('catModalSave');
     const catModalDelete = document.getElementById('catModalDelete');
+    const productRemoveModal = document.getElementById('productRemoveModal');
+    const productRemoveBackdrop = document.getElementById('productRemoveBackdrop');
+    const productRemoveClose = document.getElementById('productRemoveClose');
+    const productRemoveTitle = document.getElementById('productRemoveTitle');
+    const productRemoveMsg = document.getElementById('productRemoveMsg');
+    const productRemoveCancel = document.getElementById('productRemoveCancel');
+    const productRemoveConfirm = document.getElementById('productRemoveConfirm');
     if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !listCount || !formRoot || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl || !mobileSanityMenuBtn || !mobileHub) {
       throw new Error('missing ui');
+    }
+    if (!productRemoveModal || !productRemoveBackdrop || !productRemoveClose || !productRemoveTitle || !productRemoveMsg || !productRemoveCancel || !productRemoveConfirm) {
+      throw new Error('missing product remove modal');
     }
 
     // Save progress bar (avoid pseudo-element layering issues).
@@ -283,25 +314,36 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
     function getPublicSiteOrigin() {
       const raw = root.dataset.publicSiteBase ?? '';
-      const s = String(raw).trim().replace(/\/+$/, '');
-      return s || 'https://boaquarium.vercel.app';
+      const configured = String(raw).trim().replace(/\/+$/, '');
+      if (configured && /^https?:\/\//i.test(configured)) return configured;
+      // 外網同站部署（Vercel／自訂網域）未設 PUBLIC_SITE_URL 時，用目前網站 origin
+      try {
+        const origin = String(window.location?.origin ?? '').replace(/\/+$/, '');
+        if (origin && /^https?:\/\//i.test(origin)) return origin;
+      } catch {}
+      return 'https://boaquarium.vercel.app';
     }
     /** 對應官網前台路徑：促銷 /promo/:slug、商品 /product/:slug、分類 /products/1?category=:slug */
     function buildPublicFrontendUrl() {
       if (isCategorySortMode() || isProductSortMode()) return '';
       const m = state.model;
+      const slugOf = (row) => {
+        const raw = row?.slug ?? row?.attributes?.slug ?? '';
+        if (raw && typeof raw === 'object') return String(raw.current ?? '').trim();
+        return String(raw ?? '').trim();
+      };
       if (m === 'promotion') {
-        const s = String(state.selected?.slug ?? '').trim();
+        const s = slugOf(state.selected);
         if (!s) return '';
         return `${getPublicSiteOrigin()}/promo/${encodeURIComponent(s)}`;
       }
       if (m === 'product') {
-        const s = String(state.selected?.slug ?? '').trim();
+        const s = slugOf(state.selected);
         if (!s) return '';
         return `${getPublicSiteOrigin()}/product/${encodeURIComponent(s)}`;
       }
       if (m === 'category' && !isCategorySortMode()) {
-        const s = String(state.selected?.slug ?? state.selected?.attributes?.slug ?? '').trim();
+        const s = slugOf(state.selected);
         if (!s) return '';
         return `${getPublicSiteOrigin()}/products/1?category=${encodeURIComponent(s)}`;
       }
@@ -313,11 +355,39 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       if (openFrontendBtn instanceof HTMLButtonElement) {
         openFrontendBtn.hidden = !has;
         openFrontendBtn.disabled = !has;
+        if (has) openFrontendBtn.title = `預覽：${url}`;
+        else openFrontendBtn.removeAttribute('title');
       }
       if (showQrBtn instanceof HTMLButtonElement) {
         showQrBtn.hidden = !has;
         showQrBtn.disabled = !has;
         showQrBtn.dataset.frontendUrl = url;
+      }
+    }
+    /** 外網勿用 window.open(..., features)：會被當成彈出視窗擋下而「沒反應」 */
+    function openPublicFrontendPreview() {
+      const url = buildPublicFrontendUrl();
+      if (!url) {
+        setStatus('無法預覽：請先選取有 slug 的項目');
+        return;
+      }
+      try {
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setStatus(`已開啟預覽`);
+      } catch (e) {
+        const opened = window.open(url, '_blank');
+        if (!opened) {
+          setStatus(`無法開啟預覽（可能被瀏覽器阻擋）。網址：${url}`);
+          return;
+        }
+        setStatus('已開啟預覽');
       }
     }
     function openQrModal(url) {
@@ -399,6 +469,55 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       setStatus('已觸發下載（若未儲存請在新分頁長按圖片另存）');
     }
 
+    async function copyQrPhoto() {
+      const blob = await getQrImageBlob();
+      if (!blob || blob.size <= 0) {
+        setStatus('無 QR 圖可複製');
+        return;
+      }
+      const mime = blob.type && blob.type.startsWith('image/') ? blob.type : 'image/png';
+      const pngBlob =
+        mime === 'image/png'
+          ? blob
+          : await (async () => {
+              try {
+                const bmp = await createImageBitmap(blob);
+                const canvas = document.createElement('canvas');
+                canvas.width = bmp.width;
+                canvas.height = bmp.height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return blob;
+                ctx.drawImage(bmp, 0, 0);
+                bmp.close?.();
+                const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                return out || blob;
+              } catch {
+                return blob;
+              }
+            })();
+      try {
+        if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+          throw new Error('clipboard-image-unsupported');
+        }
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [pngBlob.type || 'image/png']: pngBlob
+          })
+        ]);
+        setStatus('已複製 QR 照片到剪貼簿');
+      } catch {
+        try {
+          const url = qrModalUrl?.textContent?.trim() ?? '';
+          if (url) {
+            await navigator.clipboard.writeText(url);
+            setStatus('此瀏覽器不支援複製圖片，已改為複製網址');
+            return;
+          }
+        } catch {}
+        setStatus('無法複製照片（請改用儲存照片或手動截圖）');
+      }
+    }
+
     function isAbortError(err) {
       return (
         (err instanceof DOMException && err.name === 'AbortError') ||
@@ -472,6 +591,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
     const labelOf = (model, field) => {
       // 後台精簡：商品主圖欄位統一顯示「圖片」
+      if (model === 'product' && field === 'name') return '品項全名';
       if (model === 'product' && field === 'image') return '圖片';
       if (model === 'promotion' && field === 'promoImages') return '圖片（ 25 張）';
       if (model === 'product' && field === 'seoTitle') return 'SEO標題(自動)';
@@ -853,7 +973,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
             .then(() => {
               if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
               drawList();
-              setStatus('選分類→↑↓→頂部「儲存」');
+              setStatus('選分類→拖曳或置頂／置底→頂部「儲存」');
               queueMicrotask(() => categoryFilter.focus());
             })
             .catch((e) => setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`));
@@ -879,15 +999,128 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       if (isCategorySortMode()) {
         // 分類管理模式：只在載入時排序一次；之後以 state.entries 的順序為準（避免上下移後又被 orderRank 排回去）
         const items = [...state.entries];
-        listCount.textContent = `共 ${items.length} 個分類`;
+        listCount.textContent = `共 ${items.length} 個分類（可拖曳排序）`;
         entryList.innerHTML = '';
+        entryList.classList.add('entry-list--cat-sort');
+        entryList.classList.remove('entry-list--product-sort');
+
+        const reorderCategories = (fromIdx, toIdx) => {
+          if (fromIdx === toIdx) return;
+          if (fromIdx < 0 || toIdx < 0 || fromIdx >= items.length || toIdx >= items.length) return;
+          const next = [...state.entries];
+          const [moved] = next.splice(fromIdx, 1);
+          next.splice(toIdx, 0, moved);
+          state.entries = next;
+          markDirty();
+          drawList();
+          setStatus('已調整分類順序，請按儲存');
+        };
+
+        const dragState = { active: false, fromIdx: -1, overIdx: -1, pointerId: null };
+        const clearDragUi = () => {
+          entryList.querySelectorAll('.cat-manage-row.is-dragging, .cat-manage-row.is-drag-over').forEach((el) => {
+            el.classList.remove('is-dragging', 'is-drag-over');
+          });
+        };
+
         items.forEach((row, idx) => {
           const wrap = document.createElement('div');
           wrap.className = 'cat-manage-row';
+          wrap.dataset.sortIndex = String(idx);
           const rank = idx + 1;
+          const name = String(row.name ?? `分類 #${idx + 1}`);
           const slugText = String(row.slug ?? row?.attributes?.slug ?? '').trim();
-          wrap.innerHTML = `<span class="cat-manage-row__name">${String(row.name ?? `分類 #${idx + 1}`)}</span><span class="cat-manage-row__meta">排序：${rank}${slugText ? `　｜　slug：${slugText}` : ''}</span><span class="cat-manage-row__ops"><button type="button" class="cat-manage-row__btn" data-dir="up" ${idx === 0 ? 'disabled' : ''} aria-label="上移"><i class="fa-solid fa-arrow-up"></i></button><button type="button" class="cat-manage-row__btn" data-dir="down" ${idx === items.length - 1 ? 'disabled' : ''} aria-label="下移"><i class="fa-solid fa-arrow-down"></i></button><button type="button" class="cat-manage-row__btn cat-manage-row__btn--edit" data-act="edit" aria-label="編輯"><i class="fa-solid fa-pen"></i></button><button type="button" class="cat-manage-row__btn cat-manage-row__btn--del" data-act="del" aria-label="刪除"><i class="fa-solid fa-trash"></i></button></span>`;
-          wrap.querySelectorAll('.cat-manage-row__btn').forEach((btn) => {
+          wrap.setAttribute('role', 'listitem');
+          wrap.setAttribute('aria-label', `${name}，排序第 ${rank} 位`);
+
+          const dragHandle = document.createElement('button');
+          dragHandle.type = 'button';
+          dragHandle.className = 'cat-manage-row__drag';
+          dragHandle.setAttribute('aria-label', '拖曳調整順序');
+          dragHandle.setAttribute('title', '拖曳排序');
+          dragHandle.innerHTML = '<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>';
+
+          const main = document.createElement('div');
+          main.className = 'cat-manage-row__main';
+          const nameEl = document.createElement('span');
+          nameEl.className = 'cat-manage-row__name';
+          nameEl.textContent = name;
+          const metaEl = document.createElement('span');
+          metaEl.className = 'cat-manage-row__meta';
+          metaEl.textContent = `排序：${rank}${slugText ? `　｜　slug：${slugText}` : ''}`;
+          main.append(nameEl, metaEl);
+
+          const ops = document.createElement('span');
+          ops.className = 'cat-manage-row__ops';
+
+          const mkBtn = (attrs) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = attrs.className;
+            if (attrs.dir) b.dataset.dir = attrs.dir;
+            if (attrs.act) b.dataset.act = attrs.act;
+            b.setAttribute('aria-label', attrs.label);
+            b.setAttribute('title', attrs.label);
+            b.innerHTML = `<i class="fa-solid ${attrs.icon}" aria-hidden="true"></i>`;
+            if (attrs.disabled) b.disabled = true;
+            return b;
+          };
+
+          ops.append(
+            mkBtn({ className: 'cat-manage-row__btn', dir: 'top', label: '置頂', icon: 'fa-angles-up', disabled: idx === 0 }),
+            mkBtn({ className: 'cat-manage-row__btn', dir: 'up', label: '上移', icon: 'fa-arrow-up', disabled: idx === 0 }),
+            mkBtn({ className: 'cat-manage-row__btn', dir: 'down', label: '下移', icon: 'fa-arrow-down', disabled: idx === items.length - 1 }),
+            mkBtn({ className: 'cat-manage-row__btn', dir: 'bottom', label: '置底', icon: 'fa-angles-down', disabled: idx === items.length - 1 }),
+            mkBtn({ className: 'cat-manage-row__btn cat-manage-row__btn--edit', act: 'edit', label: '編輯', icon: 'fa-pen' }),
+            mkBtn({ className: 'cat-manage-row__btn cat-manage-row__btn--del', act: 'del', label: '刪除', icon: 'fa-trash' })
+          );
+
+          wrap.append(dragHandle, main, ops);
+
+          dragHandle.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragState.active = true;
+            dragState.fromIdx = idx;
+            dragState.overIdx = idx;
+            dragState.pointerId = e.pointerId;
+            wrap.classList.add('is-dragging');
+            try {
+              dragHandle.setPointerCapture(e.pointerId);
+            } catch {}
+          });
+          dragHandle.addEventListener('pointermove', (e) => {
+            if (!dragState.active || dragState.pointerId !== e.pointerId) return;
+            const under = document.elementFromPoint(e.clientX, e.clientY);
+            const target = under instanceof Element ? under.closest('.cat-manage-row') : null;
+            entryList.querySelectorAll('.cat-manage-row.is-drag-over').forEach((n) => n.classList.remove('is-drag-over'));
+            if (target instanceof HTMLElement) {
+              const kids = Array.from(entryList.querySelectorAll('.cat-manage-row'));
+              const overIdx = kids.indexOf(target);
+              if (overIdx >= 0) {
+                dragState.overIdx = overIdx;
+                if (overIdx !== dragState.fromIdx) target.classList.add('is-drag-over');
+              }
+            }
+          });
+          const endDrag = (e) => {
+            if (!dragState.active || (e && dragState.pointerId !== e.pointerId)) return;
+            const from = dragState.fromIdx;
+            const to = dragState.overIdx;
+            dragState.active = false;
+            dragState.pointerId = null;
+            clearDragUi();
+            if (from >= 0 && to >= 0 && from !== to) reorderCategories(from, to);
+          };
+          dragHandle.addEventListener('pointerup', endDrag);
+          dragHandle.addEventListener('pointercancel', () => {
+            dragState.active = false;
+            dragState.pointerId = null;
+            clearDragUi();
+          });
+
+          ops.querySelectorAll('.cat-manage-row__btn').forEach((btn) => {
             btn.addEventListener('click', (ev) => {
               ev.stopPropagation();
               const t = ev.currentTarget;
@@ -902,21 +1135,22 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
                 return;
               }
               const dir = t.dataset.dir;
-              const to = dir === 'up' ? idx - 1 : idx + 1;
-              if (to < 0 || to >= state.entries.length) return;
-              const next = [...state.entries];
-              const [moved] = next.splice(idx, 1);
-              next.splice(to, 0, moved);
-              state.entries = next;
-              markDirty();
-              drawList();
-              setStatus('已調整分類順序，請按儲存');
+              let to = idx;
+              if (dir === 'up') to = idx - 1;
+              else if (dir === 'down') to = idx + 1;
+              else if (dir === 'top') to = 0;
+              else if (dir === 'bottom') to = items.length - 1;
+              else return;
+              reorderCategories(idx, to);
             });
           });
+
           entryList.appendChild(wrap);
         });
         return;
       }
+
+      entryList.classList.remove('entry-list--cat-sort');
       if (isProductSortMode()) {
         const titleKey = defs.product.title;
         const selectedCategory = String(categoryFilter.value ?? '').trim();
@@ -929,10 +1163,43 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         if (!selectedCategory) {
           listCount.textContent = '請先選擇分類';
           entryList.innerHTML = '';
+          entryList.classList.add('entry-list--product-sort');
           return;
         }
-        listCount.textContent = `共 ${items.length} 個商品`;
+        listCount.textContent = `共 ${items.length} 個商品（可拖曳排序）`;
         entryList.innerHTML = '';
+        entryList.classList.add('entry-list--product-sort');
+
+        const applyCategoryOrder = (movedItems) => {
+          let mi = 0;
+          const next = state.entries.map((r) => (productCategoryId(r) === selectedCategory ? movedItems[mi++] : r));
+          if (mi !== movedItems.length) {
+            setStatus('排序合併異常：請刷新頁面');
+            return false;
+          }
+          state.entries = next;
+          return true;
+        };
+
+        const reorderInCategory = (fromIdx, toIdx) => {
+          if (fromIdx === toIdx) return;
+          if (fromIdx < 0 || toIdx < 0 || fromIdx >= items.length || toIdx >= items.length) return;
+          const movedItems = [...items];
+          const [moved] = movedItems.splice(fromIdx, 1);
+          movedItems.splice(toIdx, 0, moved);
+          if (!applyCategoryOrder(movedItems)) return;
+          markDirty();
+          drawList();
+          setStatus('順序已改，請儲存');
+        };
+
+        const dragState = { active: false, fromIdx: -1, overIdx: -1, pointerId: null };
+        const clearDragUi = () => {
+          entryList.querySelectorAll('.item--product-sort.is-dragging, .item--product-sort.is-drag-over').forEach((el) => {
+            el.classList.remove('is-dragging', 'is-drag-over');
+          });
+        };
+
         items.forEach((row, idx) => {
           const rank = idx + 1;
           const enabled = Boolean(row.enabled);
@@ -944,8 +1211,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
           const wrap = document.createElement('div');
           wrap.className = `item item--product item--product-sort ${enabled ? 'item--enabled' : 'item--disabled'}`;
-          wrap.setAttribute('role', 'group');
+          wrap.dataset.sortIndex = String(idx);
+          wrap.setAttribute('role', 'listitem');
           wrap.setAttribute('aria-label', `${title}，排序第 ${rank} 位`);
+
+          const dragHandle = document.createElement('button');
+          dragHandle.type = 'button';
+          dragHandle.className = 'item__dragHandle';
+          dragHandle.setAttribute('aria-label', '拖曳調整順序');
+          dragHandle.setAttribute('title', '拖曳排序');
+          dragHandle.innerHTML = '<i class="fa-solid fa-grip-vertical" aria-hidden="true"></i>';
 
           const thumbWrap = document.createElement('span');
           thumbWrap.className = 'item__thumbWrap';
@@ -955,6 +1230,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
             img.src = thumbSrc;
             img.alt = '首圖';
             img.loading = 'lazy';
+            img.draggable = false;
             thumbWrap.appendChild(img);
           } else {
             const ph = document.createElement('span');
@@ -1005,27 +1281,29 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           const btnRow = document.createElement('div');
           btnRow.className = 'item__sortBtnRow';
 
-          const btnUp = document.createElement('button');
-          btnUp.type = 'button';
-          btnUp.className = 'item__sortBtn';
-          btnUp.dataset.dir = 'up';
-          btnUp.setAttribute('aria-label', '上移');
-          btnUp.innerHTML = '<i class="fa-solid fa-arrow-up" aria-hidden="true"></i>';
-          if (idx === 0) btnUp.disabled = true;
+          const mkSortBtn = (dir, label, icon, disabled) => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'item__sortBtn';
+            b.dataset.dir = dir;
+            b.setAttribute('aria-label', label);
+            b.setAttribute('title', label);
+            b.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
+            if (disabled) b.disabled = true;
+            return b;
+          };
 
-          const btnDown = document.createElement('button');
-          btnDown.type = 'button';
-          btnDown.className = 'item__sortBtn';
-          btnDown.dataset.dir = 'down';
-          btnDown.setAttribute('aria-label', '下移');
-          btnDown.innerHTML = '<i class="fa-solid fa-arrow-down" aria-hidden="true"></i>';
-          if (idx === items.length - 1) btnDown.disabled = true;
+          const btnTop = mkSortBtn('top', '置頂', 'fa-angles-up', idx === 0);
+          const btnUp = mkSortBtn('up', '上移', 'fa-arrow-up', idx === 0);
+          const btnDown = mkSortBtn('down', '下移', 'fa-arrow-down', idx === items.length - 1);
+          const btnBottom = mkSortBtn('bottom', '置底', 'fa-angles-down', idx === items.length - 1);
 
           const btnEdit = document.createElement('button');
           btnEdit.type = 'button';
           btnEdit.className = 'item__sortBtn item__sortBtn--edit';
           btnEdit.dataset.act = 'edit';
           btnEdit.setAttribute('aria-label', '編輯');
+          btnEdit.setAttribute('title', '編輯');
           btnEdit.innerHTML = '<i class="fa-solid fa-pen" aria-hidden="true"></i>';
 
           const btnDel = document.createElement('button');
@@ -1033,12 +1311,56 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           btnDel.className = 'item__sortBtn item__sortBtn--del';
           btnDel.dataset.act = 'del';
           btnDel.setAttribute('aria-label', '刪除');
+          btnDel.setAttribute('title', '刪除');
           btnDel.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
 
-          btnRow.append(btnUp, btnDown, btnEdit, btnDel);
+          btnRow.append(btnTop, btnUp, btnDown, btnBottom, btnEdit, btnDel);
           rail.appendChild(btnRow);
 
-          wrap.append(thumbWrap, main, rail);
+          wrap.append(dragHandle, thumbWrap, main, rail);
+
+          dragHandle.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragState.active = true;
+            dragState.fromIdx = idx;
+            dragState.overIdx = idx;
+            dragState.pointerId = e.pointerId;
+            wrap.classList.add('is-dragging');
+            try {
+              dragHandle.setPointerCapture(e.pointerId);
+            } catch {}
+          });
+          dragHandle.addEventListener('pointermove', (e) => {
+            if (!dragState.active || dragState.pointerId !== e.pointerId) return;
+            const under = document.elementFromPoint(e.clientX, e.clientY);
+            const target = under instanceof Element ? under.closest('.item--product-sort') : null;
+            entryList.querySelectorAll('.item--product-sort.is-drag-over').forEach((n) => n.classList.remove('is-drag-over'));
+            if (target instanceof HTMLElement) {
+              const kids = Array.from(entryList.querySelectorAll('.item--product-sort'));
+              const overIdx = kids.indexOf(target);
+              if (overIdx >= 0) {
+                dragState.overIdx = overIdx;
+                if (overIdx !== dragState.fromIdx) target.classList.add('is-drag-over');
+              }
+            }
+          });
+          const endDrag = (e) => {
+            if (!dragState.active || (e && dragState.pointerId !== e.pointerId)) return;
+            const from = dragState.fromIdx;
+            const to = dragState.overIdx;
+            dragState.active = false;
+            dragState.pointerId = null;
+            clearDragUi();
+            if (from >= 0 && to >= 0 && from !== to) reorderInCategory(from, to);
+          };
+          dragHandle.addEventListener('pointerup', endDrag);
+          dragHandle.addEventListener('pointercancel', () => {
+            dragState.active = false;
+            dragState.pointerId = null;
+            clearDragUi();
+          });
 
           btnRow.querySelectorAll('button').forEach((btn) => {
             btn.addEventListener('click', (ev) => {
@@ -1074,22 +1396,13 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
                 return;
               }
               const dir = t.dataset.dir;
-              const to = dir === 'up' ? idx - 1 : idx + 1;
-              if (to < 0 || to >= items.length) return;
-              const movedItems = [...items];
-              const [moved] = movedItems.splice(idx, 1);
-              movedItems.splice(to, 0, moved);
-              const cat = selectedCategory;
-              let mi = 0;
-              const next = state.entries.map((r) => (productCategoryId(r) === cat ? movedItems[mi++] : r));
-              if (mi !== movedItems.length) {
-                setStatus('排序合併異常：請刷新頁面');
-                return;
-              }
-              state.entries = next;
-              markDirty();
-              drawList();
-              setStatus('順序已改，請儲存');
+              let to = idx;
+              if (dir === 'up') to = idx - 1;
+              else if (dir === 'down') to = idx + 1;
+              else if (dir === 'top') to = 0;
+              else if (dir === 'bottom') to = items.length - 1;
+              else return;
+              reorderInCategory(idx, to);
             });
           });
 
@@ -1097,6 +1410,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         });
         return;
       }
+
+      entryList.classList.remove('entry-list--product-sort');
 
       const q = String(searchInput.value ?? '').trim().toLowerCase();
       const titleKey = defs[state.model].title;
@@ -1274,7 +1589,18 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       formRoot.innerHTML = '';
       const attrs = schemas[state.model]?.attributes ?? {};
       const advancedKeys = [];
-      Object.keys(attrs).forEach((f) => {
+      let fieldKeys = Object.keys(attrs);
+      // 商品表單：短述在分類之前
+      if (state.model === 'product') {
+        const ci = fieldKeys.indexOf('category');
+        const ei = fieldKeys.indexOf('excerpt');
+        if (ci >= 0 && ei >= 0 && ci < ei) {
+          fieldKeys = [...fieldKeys];
+          fieldKeys[ci] = 'excerpt';
+          fieldKeys[ei] = 'category';
+        }
+      }
+      fieldKeys.forEach((f) => {
         if (state.model === 'product' && f === 'slug') return;
         if (state.model === 'product' && f === 'gallery') return;
         // Strapi 只保留 orderRank，避免出現第二個舊排序欄位
@@ -1328,8 +1654,12 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         const slugCard = document.createElement('section');
         slugCard.className = 'card span2 slug-card';
         slugCard.innerHTML =
-          '<label>商品 slug (自動生成)</label><input id="productSlugReadonly" type="text" readonly />';
+          '<label>商品 slug (自動生成)</label><input id="productSlugReadonly" type="text" readonly /><button id="productRemoveBtn" type="button" class="product-remove-btn" disabled>移除此品項</button>';
         formRoot.appendChild(slugCard);
+        const removeBtn = slugCard.querySelector('#productRemoveBtn');
+        if (removeBtn instanceof HTMLButtonElement) {
+          removeBtn.onclick = () => openProductRemoveModal();
+        }
       }
       if (state.model === 'product') {
         if (!state.categoryOptions.length) {
@@ -1510,6 +1840,10 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
           const value = String(state.selected.slug ?? '').trim();
           slugInput.value = value;
         }
+        const removeBtn = document.getElementById('productRemoveBtn');
+        if (removeBtn instanceof HTMLButtonElement) {
+          removeBtn.disabled = !String(state.selectedId ?? '').trim();
+        }
       }
       formRoot.querySelectorAll('.card').forEach((card) => {
         const field = card.dataset.field;
@@ -1601,7 +1935,8 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
                 .split(/[,\uFF0C\u3001\u3002.]+/g)
                 .map((x) => x.trim())
                 .filter(Boolean);
-              out[f] = parts.length ? parts : null;
+              // Sanity 為 array；不可送 null（Studio 會報 Invalid property value）
+              out[f] = parts;
             } else {
               out[f] = raw.trim() ? JSON.parse(raw) : null;
             }
@@ -1751,18 +2086,19 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
         else if (hubKey === 'promo-special') await switchModel('promotion', { selectPromotionSlug: 'special-offers' });
         else if (hubKey === 'promo-equipment') await switchModel('promotion', { selectPromotionSlug: 'equipment-sale' });
         else if (hubKey === 'products-all') {
-          await switchModel('product', { selectFirstEntry: true });
+          await switchModel('product', { mobilePanel: 'list' });
           categoryFilter.value = '';
           drawList();
+          setStatus('全部商品');
         } else if (hubKey === 'products-by-category') {
           await switchModel('product', { productSortMode: true, mobilePanel: 'list' });
           if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
           drawList();
-          setStatus('選分類→↑↓→頂部「儲存」');
+          setStatus('選分類→拖曳或置頂／置底→頂部「儲存」');
           queueMicrotask(() => categoryFilter.focus());
         } else if (hubKey === 'categories-sort') {
           await switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
-          setStatus('分類管理：可用 ↑↓ 調整');
+          setStatus('拖曳或置頂／置底→頂部「儲存」');
         }
       } catch (e) {
         setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`);
@@ -1870,6 +2206,60 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       catManageModal.hidden = true;
       catManageModal.setAttribute('aria-hidden', 'true');
       try { releaseBodyScrollLock(); } catch {}
+    }
+
+    const productRemoveState = { id: '', name: '' };
+
+    function closeProductRemoveModal() {
+      productRemoveModal.hidden = true;
+      productRemoveModal.setAttribute('aria-hidden', 'true');
+      productRemoveState.id = '';
+      productRemoveState.name = '';
+      productRemoveConfirm.disabled = false;
+      productRemoveCancel.disabled = false;
+      try { releaseBodyScrollLock(); } catch {}
+    }
+
+    function openProductRemoveModal() {
+      const id = String(state.selectedId ?? '').trim();
+      if (!id) {
+        setStatus('尚未儲存的新品項無需移除');
+        return;
+      }
+      productRemoveState.id = id;
+      productRemoveState.name = String(state.selected?.name ?? '').trim() || '此商品';
+      productRemoveTitle.textContent = '移除此品項';
+      productRemoveMsg.textContent = `確定要移除「${productRemoveState.name}」？\n移除後無法復原。`;
+      productRemoveModal.hidden = false;
+      productRemoveModal.setAttribute('aria-hidden', 'false');
+      try { applyBodyScrollLock(); } catch {}
+      queueMicrotask(() => productRemoveConfirm.focus());
+    }
+
+    async function confirmProductRemove() {
+      const id = String(productRemoveState.id ?? '').trim();
+      if (!id) return;
+      productRemoveConfirm.disabled = true;
+      productRemoveCancel.disabled = true;
+      setStatus('移除商品中…');
+      try {
+        await api(`${defs.product.api}/${id}`, { method: 'DELETE' });
+        const keepCat = String(categoryFilter.value ?? '').trim();
+        closeProductRemoveModal();
+        state.selected = {};
+        state.selectedId = '';
+        state.dirty = false;
+        await load();
+        categoryFilter.value = keepCat;
+        drawList();
+        fill({});
+        setStatus('已移除此品項');
+        if (isMobileNarrow()) setMobilePanel('list');
+      } catch (e) {
+        productRemoveConfirm.disabled = false;
+        productRemoveCancel.disabled = false;
+        setStatus(`移除失敗：${e instanceof Error ? e.message : String(e)}`);
+      }
     }
 
     async function deleteCategory(row) {
@@ -2032,12 +2422,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     });
     catModalDelete.addEventListener('click', () => {
       if (catModalState.mode !== 'edit') return;
-      const row = state.entries.find((x) => kOf(x) === catModalState.id) ?? null;
-      if (!row) {
-        setStatus('找不到分類');
-        return;
-      }
+      const row = state.entries.find((r) => kOf(r) === catModalState.id) ?? { name: catModalName.value, documentId: catModalState.id, id: catModalState.id };
       void deleteCategory(row).then(() => closeCategoryModal()).catch((e) => setStatus(`刪除失敗：${e instanceof Error ? e.message : String(e)}`));
+    });
+
+    // 商品移除確認
+    productRemoveBackdrop.addEventListener('click', closeProductRemoveModal);
+    productRemoveClose.addEventListener('click', closeProductRemoveModal);
+    productRemoveCancel.addEventListener('click', closeProductRemoveModal);
+    productRemoveConfirm.addEventListener('click', () => {
+      void confirmProductRemove();
     });
     catModalName.addEventListener('input', () => {
       if (catModalState.manualSlug) return;
@@ -2073,21 +2467,23 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
 
     if (openFrontendBtn) {
       openFrontendBtn.addEventListener('click', () => {
-        const url = buildPublicFrontendUrl();
-        if (!url) return;
-        window.open(url, '_blank', 'noopener,noreferrer');
+        openPublicFrontendPreview();
       });
     }
     if (showQrBtn) {
       showQrBtn.addEventListener('click', () => {
         const url = buildPublicFrontendUrl();
-        if (!url) return;
+        if (!url) {
+          setStatus('無法產生 QR：請先選取有 slug 的項目');
+          return;
+        }
         openQrModal(url);
       });
     }
     if (qrModalBackdrop) qrModalBackdrop.addEventListener('click', closeQrModal);
     if (qrModalClose) qrModalClose.addEventListener('click', closeQrModal);
     if (qrModalSaveImg) qrModalSaveImg.addEventListener('click', () => void saveQrPhoto());
+    if (qrModalCopyImg) qrModalCopyImg.addEventListener('click', () => void copyQrPhoto());
     if (qrModalShare) qrModalShare.addEventListener('click', () => void shareQrContent());
 
     // 若後端沒有設 STRAPI_API_TOKEN，通常會得到 401/403；提供一次性輸入 token 的 fallback。
@@ -2610,25 +3006,127 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   }
   .adminx[data-category-sort-mode="1"] .workspace { grid-template-columns: 1fr; }
   .adminx[data-category-sort-mode="1"] .formpane { display: none; }
-  .adminx[data-category-sort-mode="1"] .listpane { display: grid; }
+  .adminx[data-category-sort-mode="1"] .listpane {
+    display: grid;
+    width: 100%;
+    max-width: 1000px;
+    margin-inline: auto;
+    gap: 12px;
+    padding: 14px 16px;
+    box-sizing: border-box;
+  }
   .adminx[data-category-sort-mode="1"] .listpane__filters { display: none; }
+  .adminx[data-category-sort-mode="1"] .count {
+    display: block;
+    margin: 0;
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: #64748b;
+  }
   .adminx[data-category-sort-mode="1"] .entry-list {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
+    max-height: calc(100vh - 250px);
+    overflow: auto;
+    gap: 8px;
+    padding: 2px 0;
   }
   .adminx[data-category-sort-mode="1"] #searchInput,
   .adminx[data-category-sort-mode="1"] #categoryFilter { display: none !important; }
   .adminx[data-product-sort-mode="1"] .workspace { grid-template-columns: 1fr; }
   .adminx[data-product-sort-mode="1"] .formpane { display: none; }
-  .adminx[data-product-sort-mode="1"] .listpane { display: grid; }
+  .adminx[data-product-sort-mode="1"] .listpane {
+    display: grid;
+    width: 100%;
+    max-width: 1000px;
+    margin-inline: auto;
+    gap: 12px;
+    padding: 14px 16px;
+    box-sizing: border-box;
+  }
   .adminx[data-product-sort-mode="1"] #searchInput { display: none !important; }
   .adminx[data-product-sort-mode="1"] #categoryFilter { display: block !important; }
   .adminx[data-product-sort-mode="1"] .listpane__filters {
     display: flex;
-    justify-content: flex-start;
+    justify-content: stretch;
+    align-items: center;
+    gap: 10px;
   }
   .adminx[data-product-sort-mode="1"] .search-wrap { display: none; }
+  .adminx[data-product-sort-mode="1"] .search--category {
+    flex: 1 1 auto;
+    max-width: none;
+    width: 100%;
+    min-height: 44px;
+    font-weight: 800;
+  }
+  .adminx[data-product-sort-mode="1"] .count {
+    display: block;
+    margin: 0;
+    font-size: 0.86rem;
+    font-weight: 800;
+    color: #64748b;
+  }
+  .adminx[data-product-sort-mode="1"] .entry-list {
+    max-height: calc(100vh - 250px);
+    gap: 8px;
+    padding: 2px 0;
+  }
+  .adminx[data-product-sort-mode="1"] .item--product-sort {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 12px;
+    padding: 10px 12px;
+    min-height: 64px;
+    user-select: none;
+  }
+  .adminx[data-product-sort-mode="1"] .item--product-sort.is-dragging {
+    opacity: 0.55;
+    border-color: #93c5fd;
+    box-shadow: 0 8px 22px rgba(59, 130, 246, 0.18);
+    transform: scale(0.99);
+  }
+  .adminx[data-product-sort-mode="1"] .item--product-sort.is-drag-over {
+    border-color: #3b82f6;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
+  .adminx[data-product-sort-mode="1"] .item__dragHandle {
+    width: 34px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #dbe4ea;
+    background: #f8fafc;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+  .adminx[data-product-sort-mode="1"] .item__dragHandle:active {
+    cursor: grabbing;
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #3730a3;
+  }
+  .adminx[data-product-sort-mode="1"] .item__sortBtnRow {
+    grid-template-columns: repeat(6, 34px);
+    gap: 6px;
+  }
+  .adminx[data-product-sort-mode="1"] .item__sortBtn {
+    width: 34px;
+    height: 32px;
+  }
+  .adminx[data-product-sort-mode="1"] .item__thumb,
+  .adminx[data-product-sort-mode="1"] .item__thumb--empty {
+    width: 64px;
+    height: 48px;
+  }
+  .adminx[data-product-sort-mode="1"] .item__sortRank {
+    font-size: 0.78rem;
+    color: #475569;
+  }
   .listpane, .formpane { background: #fff; border: 1px solid #dbe4ea; border-radius: 12px; padding: 12px; }
   .listpane {
     display: grid;
@@ -3014,7 +3512,7 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     border-color: rgba(249, 115, 22, 0.55);
     box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
   }
-  /* 分類管理清單：獨立樣式（避免沿用 .item 造成裁切） */
+  /* 分類管理清單：對齊商品排序列（拖曳把手 + 主文 + 操作） */
   .cat-manage-row {
     width: 100%;
     border: 1px solid #e6edf5;
@@ -3024,29 +3522,72 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     padding: 10px 12px;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
     display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-    gap: 4px;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 12px;
+    min-height: 64px;
     overflow: visible;
     box-sizing: border-box;
+    user-select: none;
+  }
+  .cat-manage-row.is-dragging {
+    opacity: 0.55;
+    border-color: #93c5fd;
+    box-shadow: 0 8px 22px rgba(59, 130, 246, 0.18);
+    transform: scale(0.99);
+  }
+  .cat-manage-row.is-drag-over {
+    border-color: #3b82f6;
+    box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.35);
+  }
+  .cat-manage-row__drag {
+    width: 34px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px solid #dbe4ea;
+    background: #f8fafc;
+    color: #64748b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    cursor: grab;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+  .cat-manage-row__drag:active {
+    cursor: grabbing;
+    background: #eef2ff;
+    border-color: #c7d2fe;
+    color: #3730a3;
+  }
+  .cat-manage-row__main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
   .cat-manage-row__name {
     font-weight: 900;
     color: #1f2937;
     min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .cat-manage-row__meta {
     font-size: 0.78rem;
     color: #64748b;
   }
   .cat-manage-row__ops {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(6, 34px);
     gap: 6px;
-    justify-content: flex-end;
+    justify-content: end;
   }
   .cat-manage-row__btn {
-    width: 32px;
-    height: 30px;
+    width: 34px;
+    height: 32px;
     border-radius: 8px;
     border: 1px solid #c5d4f0;
     background: linear-gradient(180deg, #e8eeff 0%, #dce4fb 100%);
@@ -3055,10 +3596,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     align-items: center;
     justify-content: center;
     padding: 0;
+    cursor: pointer;
   }
   .cat-manage-row__btn[disabled] {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+  .cat-manage-row__btn--del {
+    border-color: rgba(248, 113, 113, 0.55);
+    color: #991b1b;
+    background: linear-gradient(180deg, #fef2f2 0%, #fee2e2 100%);
   }
 
   .status { margin: 0 0 8px; font-weight: 700; color: #334155; }
@@ -3127,6 +3674,26 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     min-height: calc(110px * 1.1);
   }
   .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
+  .product-remove-btn {
+    justify-self: start;
+    margin-top: 4px;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
+    color: #991b1b;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .product-remove-btn:hover:not(:disabled) {
+    border-color: rgba(185, 28, 28, 0.45);
+    background: linear-gradient(180deg, #ffe4e6 0%, #fecdd3 100%);
+  }
+  .product-remove-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
   .hint { margin: 0; font-size: .82rem; color: #64748b; }
   /* 預設不預留錯誤訊息空白；有內容時才顯示 */
   .err { margin: 0; color: #be123c; font-size: .82rem; }
@@ -3539,6 +4106,44 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
   }
   .adminx[data-model="product"] .ops button,
   .adminx[data-model="product"] .mini { padding: 4px; font-size: .72rem; }
+
+  /* 桌面商品編輯：單欄 + 表單最寬 1000px、置中（排序模式除外） */
+  @media (min-width: 861px) {
+    .formpane {
+      min-width: 0;
+      align-content: start;
+      overflow-x: hidden;
+    }
+    .adminx[data-model="product"]:not([data-product-sort-mode="1"]) .workspace {
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+    }
+    .adminx[data-model="product"] .form-grid {
+      grid-template-columns: 1fr;
+      width: 100%;
+      max-width: 1000px;
+      margin-inline: auto;
+    }
+    .adminx[data-model="product"] .form-grid > .card,
+    .adminx[data-model="product"] .form-grid > .card.span2,
+    .adminx[data-model="product"] .form-grid > .advanced,
+    .adminx[data-model="product"] .form-grid > .slug-card {
+      grid-column: 1 / -1;
+    }
+    .adminx[data-product-sort-mode="1"] .workspace {
+      grid-template-columns: 1fr;
+    }
+    .adminx[data-product-sort-mode="1"] .listpane {
+      width: 100%;
+      max-width: 1000px;
+      margin-inline: auto;
+    }
+  }
+
+  @media (min-width: 1200px) {
+    .adminx[data-model="product"]:not([data-product-sort-mode="1"]) .workspace {
+      grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+    }
+  }
 
   @media (max-width: 1080px) {
     .workspace { grid-template-columns: 280px 1fr; }
@@ -4031,6 +4636,10 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     }
     .adminx[data-category-sort-mode="1"] .listpane {
       display: grid !important;
+      width: 100%;
+      max-width: none;
+      margin-inline: 0;
+      padding: 10px;
     }
     .adminx[data-category-sort-mode="1"] .listpane__filters {
       display: none !important;
@@ -4044,6 +4653,23 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     .adminx[data-category-sort-mode="1"] #categoryFilter {
       display: none !important;
     }
+    .adminx[data-category-sort-mode="1"] .cat-manage-row {
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      gap: 8px 10px;
+    }
+    .adminx[data-category-sort-mode="1"] .cat-manage-row__ops {
+      grid-column: 1 / -1;
+      width: 100%;
+      grid-template-columns: repeat(6, 1fr);
+    }
+    .adminx[data-category-sort-mode="1"] .cat-manage-row__btn {
+      width: 100%;
+    }
+    .adminx[data-category-sort-mode="1"] .cat-manage-row__drag {
+      width: 32px;
+      height: 44px;
+    }
     .adminx[data-product-sort-mode="1"] .workspace {
       grid-template-columns: 1fr;
     }
@@ -4052,6 +4678,10 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
     }
     .adminx[data-product-sort-mode="1"] .listpane {
       display: grid !important;
+      width: 100%;
+      max-width: none;
+      margin-inline: 0;
+      padding: 10px;
     }
     .adminx[data-product-sort-mode="1"] .search-wrap {
       display: none !important;
@@ -4060,6 +4690,30 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? 'https://boaqua
       display: block !important;
       flex: 1 1 auto;
       max-width: 100%;
+    }
+    .adminx[data-product-sort-mode="1"] .entry-list {
+      max-height: none;
+    }
+    .adminx[data-product-sort-mode="1"] .item--product-sort {
+      grid-template-columns: auto auto minmax(0, 1fr);
+      grid-template-rows: auto auto;
+      gap: 8px 10px;
+    }
+    .adminx[data-product-sort-mode="1"] .item__sortRail {
+      grid-column: 1 / -1;
+      padding-left: 0;
+      align-items: stretch;
+    }
+    .adminx[data-product-sort-mode="1"] .item__sortBtnRow {
+      width: 100%;
+      grid-template-columns: repeat(6, 1fr);
+    }
+    .adminx[data-product-sort-mode="1"] .item__sortBtn {
+      width: 100%;
+    }
+    .adminx[data-product-sort-mode="1"] .item__dragHandle {
+      width: 32px;
+      height: 44px;
     }
   }
 

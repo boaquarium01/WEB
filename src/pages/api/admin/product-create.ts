@@ -184,14 +184,15 @@ export const POST: APIRoute = async ({ request }) => {
 
     const gallery =
       galleryAssets.length > 0
-        ? galleryAssets.map((a) => ({
+        ? galleryAssets.map((a, i) => ({
             _type: 'image',
+            _key: `gal_${i}_${String(a._id).replace(/^image-/, '').slice(0, 24)}`,
             asset: {
               _type: 'reference',
               _ref: a._id
             }
           }))
-        : undefined;
+        : [];
 
     const created = await client.create({
       _type: 'product',
@@ -206,10 +207,11 @@ export const POST: APIRoute = async ({ request }) => {
         _ref: categoryDocId
       },
       image: mainImage,
-      ...(gallery ? { gallery } : {}),
+      gallery,
       excerpt,
       body,
       featured,
+      seoKeywords: [],
       // slug / placeholder 由 schema 控制；這裡不再寫入 isPlaceholder
     });
 

@@ -202,6 +202,20 @@ function bodyToPortable(input: unknown): unknown[] {
 	return plainTextToPortableBlocks('');
 }
 
+/** Sanity `seoKeywords` 為 string[]；不可寫入 null（Studio 會報 Invalid property value） */
+function normalizeSeoKeywords(input: unknown): string[] {
+	if (Array.isArray(input)) {
+		return input.map((x) => String(x ?? '').trim()).filter(Boolean);
+	}
+	if (typeof input === 'string') {
+		return input
+			.split(/[,\uFF0C\u3001\u3002.]+/g)
+			.map((x) => x.trim())
+			.filter(Boolean);
+	}
+	return [];
+}
+
 function refImageFromId(id: string | number | null | undefined) {
 	if (id == null || id === '') return undefined;
 	const s = typeof id === 'number' ? String(id) : String(id).trim();
@@ -376,7 +390,9 @@ export async function runSanityDashboardRequest(opts: {
 				}
 			}
 			if (data.seoTitle != null) patch.seoTitle = data.seoTitle;
-			if (data.seoKeywords != null) patch.seoKeywords = data.seoKeywords;
+			if (Object.prototype.hasOwnProperty.call(data, 'seoKeywords')) {
+				patch.seoKeywords = normalizeSeoKeywords(data.seoKeywords);
+			}
 			if (data.seoDescription != null) patch.seoDescription = data.seoDescription;
 			const catRef = data.category as string | number | null | undefined;
 			if (catRef != null && String(catRef).trim()) {
@@ -429,14 +445,13 @@ export async function runSanityDashboardRequest(opts: {
 			featured: Boolean(data.featured),
 			featuredSortOrder: data.featuredSortOrder != null ? Number(data.featuredSortOrder) : undefined,
 			heroSpotlight: Boolean(data.heroSpotlight),
-			seoTitle: data.seoTitle,
-			seoKeywords: data.seoKeywords,
-			seoDescription: data.seoDescription
+			seoTitle: data.seoTitle != null ? String(data.seoTitle) : '',
+			seoKeywords: normalizeSeoKeywords(data.seoKeywords),
+			seoDescription: data.seoDescription != null ? String(data.seoDescription) : '',
+			gallery: mixedImageRefs(Array.isArray(data.gallery) ? data.gallery : [])
 		};
 		const imgId = data.image as string | number | undefined;
-		const galRaw = Array.isArray(data.gallery) ? data.gallery : [];
 		if (imgId != null && String(imgId).trim()) doc.image = refImageFromId(imgId);
-		if (galRaw.length) doc.gallery = mixedImageRefs(galRaw);
 
 		const created = await client.create(doc);
 		const row = await client.fetch(

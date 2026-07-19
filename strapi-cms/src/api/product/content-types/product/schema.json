@@ -13,8 +13,8 @@
   "config": {
     "metadatas": {
       "name": {
-        "edit": { "label": "名稱" },
-        "list": { "label": "名稱" }
+        "edit": { "label": "品項全名" },
+        "list": { "label": "品項全名" }
       },
       "slug": {
         "edit": {
