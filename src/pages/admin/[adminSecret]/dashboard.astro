@@ -96,6 +96,11 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
 
     <section id="mobileHub" class="mobile-hub" aria-label="管理選單首頁">
       <nav class="mobile-hub__list">
+        <button type="button" class="mobile-hub__row mobile-hub__row--primary" data-hub="products-all">
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-box-open"></i></span>
+          <span class="mobile-hub__label">全部商品</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </button>
         <button type="button" class="mobile-hub__row" data-hub="promo-weekly">
           <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
           <span class="mobile-hub__label">每週新進魚隻 🐠</span>
@@ -109,11 +114,6 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
         <button type="button" class="mobile-hub__row" data-hub="promo-equipment">
           <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-screwdriver-wrench"></i></span>
           <span class="mobile-hub__label">器材促銷</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="products-all">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-box-open"></i></span>
-          <span class="mobile-hub__label">全部商品</span>
           <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
         </button>
         <button type="button" class="mobile-hub__row" data-hub="products-by-category">
@@ -4462,6 +4462,23 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
     }
     .mobile-hub__row:active {
       background: #f1f5f9;
+    }
+    .mobile-hub__row--primary {
+      min-height: 58px;
+      background: #f0f7ff;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #0c4a6e;
+    }
+    .mobile-hub__row--primary:active {
+      background: #e0effe;
+    }
+    .mobile-hub__row--primary .mobile-hub__icon {
+      color: #0284c7;
+      font-size: 1.15rem;
+    }
+    .mobile-hub__row--primary .mobile-hub__chev {
+      color: #38bdf8;
     }
     .mobile-hub__icon {
       color: #64748b;
