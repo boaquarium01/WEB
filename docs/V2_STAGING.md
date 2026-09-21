@@ -31,6 +31,7 @@
 | `SANITY_STUDIO_DATASET` | `v2` |
 | `SANITY_STUDIO_TOKEN` | （與正式站同一 token 即可） |
 | `PUBLIC_SITE_URL` | `https://boaquarium-v2-test.vercel.app` |
+| `ADMIN_PATH_SLUG` | V2 專用（與 V1 不同；20–48 字元） |
 
 6. Deploy 後到 [Sanity Manage](https://www.sanity.io/manage/project/iz7fvprm) → **API → CORS origins**，加入：
    - `https://boaquarium-v2-test.vercel.app`
