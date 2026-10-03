@@ -1,0 +1,228 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { formatTwd } from '../../lib/services/catalog';
+import {
+	getCartView,
+	removeCartItem,
+	updateCartItemQuantity,
+} from '../../lib/services/cart';
+import { getShippingFee, listShippingMethods } from '../../lib/services/shipping';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+let error: string | null = null;
+let message: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const action = String(form.get('_action') ?? '');
+	const cartItemId = String(form.get('cartItemId') ?? '');
+
+	try {
+		if (action === 'update') {
+			const quantity = Number(form.get('quantity'));
+			await updateCartItemQuantity(user.id, cartItemId, quantity);
+			message = '已更新數量';
+		} else if (action === 'remove') {
+			await removeCartItem(user.id, cartItemId);
+			message = '已移除商品';
+		}
+	} catch (e) {
+		error = e instanceof Error ? e.message : '操作失敗';
+	}
+}
+
+const [cart, shippingMethods] = await Promise.all([getCartView(user.id), listShippingMethods(true)]);
+const estimatedShippingFee = shippingMethods[0] ? getShippingFee(shippingMethods[0], cart.subtotal) : 0;
+---
+
+<SiteLayout title="購物車｜桃園中壢水博館水族" description="購物車" wide legacyFooter productBack={{ href: '/products/1', label: '上一頁' }}>
+	<div class="cart-page">
+	<header class="head">
+		<div class="title-row"><div><h1>購物車</h1><p class="subhead">確認商品與數量，準備完成訂單。</p></div><span class="item-count"><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>{cart.itemCount} 件商品</span></div>
+		<div class="steps" aria-label="結帳流程"><span class="step active"><b>1</b>購物車</span><i></i><span class="step"><b>2</b>配送與付款</span><i></i><span class="step"><b>3</b>完成訂單</span></div>
+	</header>
+
+	{message && <p class="banner ok">{message}</p>}
+	{error && <p class="banner error">{error}</p>}
+
+	{
+		cart.items.length === 0 ? (
+			<div class="empty">
+				<span class="empty-icon"><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i></span>
+				<h2>購物車目前是空的</h2>
+				<p>發現喜歡的商品，加入購物車後就會出現在這裡。</p>
+				<a class="btn-primary" href="/products/1">開始逛逛<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+			</div>
+		) : (
+			<>
+				<div class="cart-layout"><section class="cart-items-panel"><div class="panel-heading"><h2>商品明細</h2><span>{cart.itemCount} 件</span></div><ul class="lines">
+					{cart.items.map((item) => (
+						<li class="line">
+							<div class="product-visual" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></div>
+							<div class="product-info">
+								<a href={`/product/${item.slug}`} class="name">
+									{item.productName}
+								</a>
+								<p class="sku">{item.skuName} · {item.sku}</p>
+								<p class="avail">{item.available < 0 ? '庫存充足' : `可售庫存 ${item.available}`}</p>
+							</div>
+							<div class="actions">
+								<form method="post" class="qty">
+									<input type="hidden" name="_action" value="update" />
+									<input type="hidden" name="cartItemId" value={item.cartItemId} />
+									<input
+										type="number"
+										name="quantity"
+										min="1"
+										{...(item.available >= 0 ? { max: Math.max(item.available, item.quantity) } : {})}
+									value={item.quantity}
+								/>
+									<button type="submit" class="qty-update" aria-label={`更新${item.productName}數量`}><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+								</form>
+								<form method="post">
+									<input type="hidden" name="_action" value="remove" />
+									<input type="hidden" name="cartItemId" value={item.cartItemId} />
+									<button type="submit" class="danger"><i class="fa-regular fa-trash-can" aria-hidden="true"></i>移除</button>
+								</form>
+							</div>
+							<strong class="line-total">{formatTwd(item.lineTotal)}</strong>
+						</li>
+					))}
+				</ul><a href="/products/1" class="continue"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>繼續選購</a></section>
+
+				<aside class="summary"><p class="summary-title">訂單摘要</p><div class="summary-row"><span>商品小計 · {cart.itemCount} 件</span><strong>{formatTwd(cart.subtotal)}</strong></div><div class="summary-row muted"><span>預估運費{shippingMethods[0] ? ` · ${shippingMethods[0].name}` : ''}</span><span>{formatTwd(estimatedShippingFee)}</span></div><div class="summary-total"><span>預估總計</span><strong>{formatTwd(cart.subtotal + estimatedShippingFee)}</strong></div><a class="checkout-btn" href="/checkout">前往結帳<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a><p class="secure"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>庫存與價格將於結帳時再次確認</p><div class="payment-note"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i><span>下單後可於訂單頁查看付款與配送資訊</span></div></aside></div>
+			</>
+		)
+	}
+	</div>
+</SiteLayout>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+
+	.crumb {
+		margin: 0 0 0.35rem;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.crumb a {
+		text-decoration: none;
+	}
+
+	h1 {
+		margin: 0;
+	}
+
+	.banner {
+		padding: 0.7rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		margin-bottom: 1rem;
+	}
+
+	.banner.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
+
+	.banner.error {
+		background: rgba(180, 35, 24, 0.08);
+		color: var(--aq-danger);
+	}
+
+	.empty {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 2rem 1.25rem;
+		text-align: center;
+	}
+
+	.lines {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.line {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		flex-wrap: wrap;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 1rem 1.1rem;
+	}
+
+	.name {
+		font-weight: 700;
+		text-decoration: none;
+		color: var(--aq-ink);
+	}
+
+	.sku,
+	.avail,
+	.hint {
+		margin: 0.25rem 0 0;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.price {
+		margin: 0.35rem 0 0;
+	}
+
+	.actions {
+		display: grid;
+		gap: 0.5rem;
+		align-content: start;
+	}
+
+	.qty {
+		display: flex;
+		gap: 0.4rem;
+		align-items: center;
+	}
+
+	.qty input {
+		width: 4.5rem;
+		padding: 0.45rem 0.5rem;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-sm);
+	}
+
+	.danger {
+		background: transparent;
+		border: 1px solid rgba(180, 35, 24, 0.35);
+		color: var(--aq-danger);
+		border-radius: var(--aq-radius-sm);
+		padding: 0.45rem 0.7rem;
+		cursor: pointer;
+	}
+
+	.summary {
+		margin-top: 1.25rem;
+		padding: 1.1rem 1.2rem;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+	}
+
+	.summary-actions {
+		margin-top: 0.85rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+	}
+
+	.cart-page{color:var(--aq-ink)}.head{margin-bottom:1.5rem}.crumb{display:flex;gap:.55rem;align-items:center;color:#8a9590;font-size:.84rem}.crumb a{color:#66716d}.crumb strong{color:var(--aq-primary-dark)}.title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:1.5rem 0 1.35rem}.eyebrow{margin:0 0 .45rem;color:var(--aq-primary);font-size:.69rem;font-weight:800;letter-spacing:.16em}.title-row h1{font-size:clamp(2rem,4vw,2.7rem);letter-spacing:-.045em;font-weight:800}.subhead{margin:.45rem 0 0;color:var(--aq-muted)}.item-count{display:flex;align-items:center;gap:.55rem;padding:.65rem .9rem;border:1px solid #e7ebe6;border-radius:999px;background:#fff;color:#57635e;font-size:.85rem;font-weight:700}.item-count i{color:var(--aq-primary)}.steps{display:flex;align-items:center;gap:.8rem;max-width:560px;padding:.8rem 0}.steps>i{height:1px;flex:1;background:#e5e8e4}.step{display:flex;align-items:center;gap:.45rem;white-space:nowrap;color:#9aa39f;font-size:.8rem;font-weight:650}.step b{display:grid;place-items:center;width:25px;height:25px;border:1px solid #dfe4df;border-radius:50%;font-size:.7rem}.step.active{color:var(--aq-primary-dark)}.step.active b{border-color:var(--aq-primary);background:var(--aq-primary);color:white}.banner{border:1px solid #cfe8d7}.banner.error{border-color:#f0ccca}.cart-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;align-items:start;gap:1.25rem}.cart-items-panel,.summary{border:1px solid #e8ebe6;border-radius:20px;background:#fff;box-shadow:0 10px 30px rgba(35,49,42,.045)}.cart-items-panel{padding:1.2rem 1.3rem}.panel-heading{display:flex;align-items:center;justify-content:space-between;padding:0 0 1rem;border-bottom:1px solid #edf0ec}.panel-heading h2{margin:0;font-size:1.05rem;font-weight:800}.panel-heading span{color:var(--aq-muted);font-size:.8rem}.lines{gap:0}.line{display:grid;grid-template-columns:76px minmax(0,1fr) auto auto;align-items:center;gap:1rem;padding:1.15rem 0;border:0;border-bottom:1px solid #edf0ec;border-radius:0;background:transparent}.product-visual{display:grid;place-items:center;width:76px;height:76px;border-radius:16px;background:linear-gradient(145deg,#eff7f3,#dcece5);color:#438577;font-size:1.5rem}.product-info{min-width:0}.name{display:block;color:#24312d;font-size:.98rem;font-weight:750}.sku{margin:.35rem 0 0;color:#828d87;font-size:.8rem}.avail{margin:.25rem 0 0;color:#56836f;font-size:.76rem}.line .price{margin:.35rem 0 0;color:#65716c;font-size:.83rem}.actions{display:flex;align-items:center;gap:.5rem}.qty{display:flex;align-items:center;gap:.3rem;padding:.22rem;border:1px solid #e1e6e1;border-radius:11px}.qty input{width:44px;padding:.35rem .2rem;border:0;background:transparent;text-align:center;font:inherit;font-weight:700;color:var(--aq-ink)}.qty-update{width:30px;height:30px;border:0;border-radius:8px;background:#eef5f1;color:var(--aq-primary-dark);cursor:pointer}.danger{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .55rem;border:0!important;background:transparent!important;color:#a56a65!important;font-size:.78rem;cursor:pointer}.line-total{white-space:nowrap;font-size:.92rem;font-weight:800;color:#34423c}.continue{display:inline-flex;align-items:center;gap:.5rem;margin-top:1rem;color:var(--aq-primary-dark);font-size:.85rem;font-weight:700}.summary{position:sticky;top:100px;padding:1.35rem}.summary-title{margin:0 0 1.1rem;font-size:1.05rem;font-weight:800}.summary-row,.summary-total{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem}.summary-row{margin:.8rem 0;color:#58645f}.summary-row.muted{padding-bottom:1rem;border-bottom:1px solid #edf0ec;color:#909994}.summary-total{align-items:center;padding-top:.25rem;font-weight:700}.summary-total strong{font-size:1.22rem;color:var(--aq-ink)}.checkout-btn{display:flex;align-items:center;justify-content:space-between;margin-top:1.2rem;padding:.9rem 1rem;border-radius:13px;background:var(--aq-primary);color:white!important;font-weight:750;text-decoration:none;box-shadow:0 8px 18px rgba(21,106,102,.18);transition:transform .15s,background .15s}.checkout-btn:hover{transform:translateY(-1px);background:var(--aq-primary-dark)}.secure{display:flex;align-items:center;justify-content:center;gap:.45rem;margin:.85rem 0 0;color:#8b9690;font-size:.72rem}.secure i{color:#5b9a78}.payment-note{display:flex;align-items:center;gap:.7rem;margin-top:1.2rem;padding:.8rem;border-radius:12px;background:#f7f9f6;color:#77827c;font-size:.73rem;line-height:1.45}.payment-note i{color:var(--aq-primary);font-size:1rem}.empty{padding:4rem 1.5rem;border:1px solid #e8ebe6;border-radius:22px;box-shadow:0 10px 30px rgba(35,49,42,.045)}.empty-icon{display:grid;place-items:center;width:66px;height:66px;margin:0 auto 1.2rem;border-radius:22px;background:#edf5f1;color:var(--aq-primary);font-size:1.45rem}.empty h2{margin:0 0 .4rem;font-size:1.25rem}.empty p{margin:0 0 1.3rem;color:var(--aq-muted)}.empty .btn-primary{gap:.6rem;border-radius:12px;padding:.8rem 1.1rem}
+	@media(max-width:850px){.cart-layout{grid-template-columns:1fr}.summary{position:static}.line{grid-template-columns:64px minmax(0,1fr) auto}.product-visual{width:64px;height:64px}.line-total{grid-column:2;grid-row:2}.actions{grid-column:3;grid-row:1/3;flex-direction:column;align-items:flex-end}}
+	@media(max-width:520px){.title-row{align-items:flex-start;flex-direction:column}.steps{gap:.45rem}.step{font-size:.7rem}.step b{width:22px;height:22px}.cart-items-panel{padding:.9rem}.line{grid-template-columns:52px minmax(0,1fr) auto;gap:.65rem}.product-visual{width:52px;height:52px;border-radius:13px;font-size:1.15rem}.name{font-size:.86rem}.sku{font-size:.72rem}.actions{grid-column:2/4;grid-row:2;flex-direction:row;justify-content:space-between;align-self:start}.line-total{grid-column:3;grid-row:1;font-size:.85rem}.line{align-items:start}.danger{padding:.35rem}.summary{padding:1.05rem}}
+</style>

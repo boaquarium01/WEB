@@ -1,8 +1,15 @@
 ---
 /**
- * Local dev entry: `/admin`. Production still uses `/admin/{ADMIN_PATH_SLUG}/dashboard`.
+ * Dev shortcut: `/admin` → CMS dashboard
+ * Production: bare `/admin` is 404 (middleware).
  */
-import AdminDashboard from './[adminSecret]/dashboard.astro';
----
+import { getAdminBasePath } from '../../lib/admin/path';
 
-<AdminDashboard />
+export const prerender = false;
+
+const base = getAdminBasePath();
+if (!base) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+return Astro.redirect(`${base}/dashboard`);
+---

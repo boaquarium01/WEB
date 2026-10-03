@@ -1,0 +1,11 @@
+---
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../../lib/admin/path';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+return Astro.redirect(`${getAdminBasePath()}/shop/products#inventory-movements`, 302);
+---

@@ -1,0 +1,144 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+import { formatTwd } from '../../../lib/services/catalog';
+import {
+	listOrdersForUser,
+	shippingStatusLabel,
+} from '../../../lib/services/order-management';
+import {
+	orderStatusLabel,
+	paymentStatusLabel,
+} from '../../../lib/services/order';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+const rows = await listOrdersForUser(user.id);
+---
+
+<AccountLayout title="我的訂單｜水博館水族">
+	<header class="head">
+		<p class="crumb"><a href="/account/orders">會員中心</a> / 訂單</p>
+		<h1>我的訂單</h1>
+	</header>
+
+	{
+		rows.length === 0 ? (
+			<div class="empty">
+				<p>尚無訂單。</p>
+				<a class="btn-primary" href="/products">
+					去選購商品
+				</a>
+			</div>
+		) : (
+			<ul class="list">
+				{rows.map((row) => (
+					<li>
+						<a
+							class="card"
+							href={`/account/orders/${encodeURIComponent(row.orderNumber)}`}
+						>
+							<div class="top">
+								<strong class="mono">{row.orderNumber}</strong>
+								<span class="status">{orderStatusLabel(row.status)}</span>
+							</div>
+							<p class="meta">
+								{row.createdAt.toLocaleString('zh-TW', {
+									timeZone: 'Asia/Taipei',
+								})}
+								· {row.itemCount} 件 · {formatTwd(row.total)}
+							</p>
+							<p class="meta">
+								付款 {paymentStatusLabel(row.paymentStatus)} · 出貨{' '}
+								{shippingStatusLabel(row.shippingStatus)}
+							</p>
+						</a>
+					</li>
+				))}
+			</ul>
+		)
+	}
+</AccountLayout>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+
+	.crumb {
+		margin: 0 0 0.35rem;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.crumb a {
+		text-decoration: none;
+		color: var(--aq-primary);
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.6rem;
+	}
+
+	.lead {
+		margin: 0.4rem 0 0;
+		color: var(--aq-muted);
+	}
+
+	.empty {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 2rem 1.25rem;
+		text-align: center;
+	}
+
+	.list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.card {
+		display: block;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 1rem 1.1rem;
+		text-decoration: none;
+		color: inherit;
+		transition: border-color 0.15s ease;
+	}
+
+	.card:hover {
+		border-color: var(--aq-primary);
+	}
+
+	.top {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.75rem;
+		align-items: baseline;
+		flex-wrap: wrap;
+	}
+
+	.mono {
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.02em;
+	}
+
+	.status {
+		font-size: 0.88rem;
+		font-weight: 650;
+		color: var(--aq-primary-dark);
+	}
+
+	.meta {
+		margin: 0.35rem 0 0;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+</style>

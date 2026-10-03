@@ -1,0 +1,159 @@
+---
+import AccountLayout from '../../layouts/AccountLayout.astro';
+import { safeLocalRedirect } from '../../lib/auth/policies.js';
+import { getServerEnv } from '../../lib/env';
+
+export const prerender = false;
+
+const next = safeLocalRedirect(Astro.url.searchParams.get('next'), Astro.url.origin);
+const rawError = Astro.url.searchParams.get('error');
+const error = rawError ? (['access_denied', 'OAuthCallbackError', 'oauth_error'].includes(rawError) ? '授權已取消或失敗，請再試一次。' : rawError) : null;
+const authEnv = getServerEnv();
+const googleEnabled = Boolean(authEnv.GOOGLE_CLIENT_ID && authEnv.GOOGLE_CLIENT_SECRET);
+const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECRET);
+---
+
+<AccountLayout title="登入｜水博館 V2">
+	<h1>會員登入</h1>
+	<p class="lead">登入後可管理收件地址、查看訂單與付款進度。</p>
+
+	{error && <p class="error">{error}</p>}
+	<div class="social-login">
+		{lineEnabled ? <button type="button" class="social line" data-provider="line">使用 LINE 繼續</button> : <p class="social-unavailable">LINE 登入尚未設定</p>}
+		{googleEnabled ? <button type="button" class="social" data-provider="google">使用 Google 繼續</button> : <p class="social-unavailable">Google 登入尚未設定</p>}
+	</div>
+	<div class="divider"><span>或使用電子郵件</span></div>
+
+	<form id="login-form" class="form" method="post" action="/api/account/login">
+		<input type="hidden" name="next" value={next} />
+		<label>
+			Email
+			<input type="email" name="email" required autocomplete="email" />
+		</label>
+		<label>
+			密碼
+			<input
+				id="login-password"
+				type="password"
+				name="password"
+				required
+				minlength="8"
+				autocomplete="current-password"
+			/>
+			<button class="password-toggle" type="button" id="toggle-password" aria-controls="login-password" aria-pressed="false">顯示密碼</button>
+		</label>
+		<button type="submit" id="login-submit">登入</button>
+	</form>
+	<p id="login-status" class="status" role="status" aria-live="polite"></p>
+
+	<p class="meta">
+		還沒有帳號？<a href="/account/register">註冊</a>
+	</p>
+	<p class="meta"><a href="/account/forgot-password">忘記密碼？重設密碼</a></p>
+	<p class="meta"><a href="/account/verify-email">重新寄送驗證信</a></p>
+</AccountLayout>
+
+<script>
+	const form = document.getElementById('login-form');
+	const status = document.getElementById('login-status');
+	const next = (document.querySelector<HTMLInputElement>('[name="next"]')?.value || '/account');
+	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
+		button.addEventListener('click', async () => {
+			button.disabled = true;
+			status.textContent = '正在前往授權…';
+			try {
+				const { authClient } = await import('../../lib/auth/client');
+				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: `/account/complete-profile?next=${encodeURIComponent(next)}` });
+				if (result.error) throw new Error('授權失敗或已取消，請再試一次。');
+			} catch {
+				status.textContent = '授權失敗或已取消，請再試一次。';
+				button.disabled = false;
+			}
+		});
+	}
+	const passwordInput = document.getElementById('login-password') as HTMLInputElement;
+	const togglePassword = document.getElementById('toggle-password');
+	togglePassword?.addEventListener('click', () => {
+		const showing = passwordInput.type === 'text';
+		passwordInput.type = showing ? 'password' : 'text';
+		togglePassword.textContent = showing ? '顯示密碼' : '隱藏密碼';
+		togglePassword.setAttribute('aria-pressed', String(!showing));
+	});
+	form?.addEventListener('submit', async (event) => {
+		event.preventDefault();
+		const submit = document.getElementById('login-submit') as HTMLButtonElement;
+		submit.disabled = true;
+		status.textContent = '正在登入…';
+		const data = new FormData(form);
+		try {
+			const res = await fetch('/api/account/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: data.get('email'), password: data.get('password') }),
+			});
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(payload.error || '登入失敗，請確認 Email 與密碼。');
+			}
+			window.location.href = next;
+		} catch (error) {
+			status.textContent = error instanceof Error ? error.message : '目前無法登入，請稍後再試。';
+			submit.disabled = false;
+		}
+	});
+</script>
+
+<style>
+	h1 {
+		margin: 0 0 0.5rem;
+		font-size: 1.8rem;
+	}
+
+	.lead,
+	.meta {
+		color: var(--muted);
+	}
+
+	.error {
+		color: #ff8f8f;
+		background: rgba(120, 20, 20, 0.25);
+		border: 1px solid rgba(255, 140, 140, 0.35);
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+	}
+
+	.status { min-height: 1.5rem; color: #ffb2a7; }
+	.password-toggle { padding: 0; background: transparent; color: var(--muted); text-align: left; font-weight: 500; }
+	button:disabled { opacity: .65; cursor: wait; }
+
+	.form {
+		display: grid;
+		gap: 1rem;
+		margin: 1.5rem 0;
+	}
+	.social-login{display:grid;gap:.65rem}.social{width:100%;padding:.8rem 1rem;border:1px solid #d8e1dc;border-radius:12px;background:#fff;color:#203a34;font-weight:700;cursor:pointer}.social-unavailable{margin:0;padding:.8rem 1rem;border:1px solid #e6e8e4;border-radius:12px;color:var(--aq-muted);text-align:center;font-size:.88rem}.social.line{background:#06c755;color:#fff;border-color:#06c755}.divider{display:flex;align-items:center;gap:.8rem;margin:1.1rem 0;color:var(--aq-muted);font-size:.85rem}.divider:before,.divider:after{content:'';height:1px;flex:1;background:#e5e8e4}
+
+	label {
+		display: grid;
+		gap: 0.4rem;
+		font-size: 0.95rem;
+	}
+
+	input {
+		padding: 0.7rem 0.8rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--line);
+		background: rgba(8, 20, 28, 0.55);
+		color: var(--ink);
+	}
+
+	button {
+		padding: 0.75rem 1rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: var(--accent);
+		color: #062018;
+		font-weight: 650;
+		cursor: pointer;
+	}
+</style>

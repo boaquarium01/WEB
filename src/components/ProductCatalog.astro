@@ -1,0 +1,125 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import ProductGridStagger from './ProductGridStagger.astro';
+import {
+	formatTwd,
+	listCatalogCategories,
+	listCatalogProducts,
+} from '../lib/services/catalog';
+
+const { page } = Astro.props as { page: number };
+const pageSize = 12;
+const rawCategory = Astro.url.searchParams.get('category')?.trim() ?? '';
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const [categories, allProducts] = await Promise.all([
+	listCatalogCategories(),
+	listCatalogProducts(),
+]);
+const activeCategory = categories.some((category) => category.slug === rawCategory)
+	? rawCategory
+	: '';
+if (rawCategory && !activeCategory) {
+	const params = new URLSearchParams();
+	if (query) params.set('q', query);
+	return Astro.redirect(`/products/${page}${params.size ? `?${params}` : ''}`);
+}
+const activeCategoryLabel = categories.find((category) => category.slug === activeCategory)?.label ?? '';
+const filtered = allProducts.filter((product) => {
+	if (activeCategory && product.categorySlug !== activeCategory) return false;
+	if (!query) return true;
+	return [product.name, product.excerpt ?? '', product.categoryLabel ?? '', product.searchText ?? '']
+		.join(' ')
+		.toLocaleLowerCase('zh-TW')
+		.includes(query.toLocaleLowerCase('zh-TW'));
+});
+const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+if (page > pageCount) {
+	const params = new URLSearchParams();
+	if (activeCategory) params.set('category', activeCategory);
+	if (query) params.set('q', query);
+	return Astro.redirect(`/products/${pageCount}${params.size ? `?${params}` : ''}`);
+}
+const params = new URLSearchParams();
+if (activeCategory) params.set('category', activeCategory);
+if (query) params.set('q', query);
+const qs = params.size ? `?${params}` : '';
+const products = filtered.slice((page - 1) * pageSize, page * pageSize);
+const title = activeCategoryLabel ? `${activeCategoryLabel}｜全部商品` : '全部商品';
+const backUrl = activeCategory
+	? `/products/1${query ? `?q=${encodeURIComponent(query)}` : ''}`
+	: '/';
+const cardItems = products.map((product) => ({
+	slug: product.slug,
+	name: product.name,
+	excerpt: product.excerpt ?? '',
+	categoryLabel: product.categoryLabel ?? undefined,
+	imageUrl: product.imageUrl,
+	priceLabel: product.sellingPrice > 0 ? formatTwd(product.sellingPrice) : '價格洽詢',
+	stockLabel: product.inStock ? (product.available < 0 ? '庫存充足' : `庫存 ${product.available}`) : '暫無庫存',
+	inStock: product.inStock,
+}));
+Astro.response.headers.set(
+	'Cache-Control',
+	'public, max-age=0, s-maxage=30, stale-while-revalidate=120, must-revalidate',
+);
+---
+
+<SiteLayout
+	title={`${title}${page > 1 ? `（第 ${page} 頁）` : ''}｜桃園中壢水博館水族`}
+	description={`桃園中壢水博館水族商品列表，每頁 ${pageSize} 項。`}
+	wide
+	legacyFooter
+	productBack={{ href: backUrl, label: activeCategory ? '全部商品' : '首頁' }}
+>
+	<nav class="crumb" aria-label="麵包屑">
+		<a href="/">首頁</a><span>/</span><a href="/products/1">全部商品</a>
+		{activeCategoryLabel && <><span>/</span><span>{activeCategoryLabel}</span></>}
+		{query && <><span>/</span><span>關鍵字「{query}」</span></>}
+		{pageCount > 1 && <><span>/</span><span>第 {page} 頁</span></>}
+	</nav>
+	<h1 class="page-title">{activeCategoryLabel && !query ? activeCategoryLabel : '全部商品'}</h1>
+	<p class="count">
+		{activeCategory || query ? `篩選後 ${filtered.length} 項` : `共 ${filtered.length} 項展示`}
+		{pageCount > 1 && `・第 ${page} / ${pageCount} 頁`}
+	</p>
+	<form class="catalog-toolbar" method="get" action="/products/1" role="search" aria-label="商品篩選與搜尋">
+		<div class="catalog-filter-form">
+			<div class="catalog-category-row">
+				<label class="visually-hidden" for="catalog-category">商品分類</label>
+				<div class="catalog-select-wrap">
+					<select id="catalog-category" class="catalog-select" name="category" onchange="this.form.requestSubmit()">
+						<option value="">全部分類</option>
+						{categories.map((category) => <option value={category.slug} selected={category.slug === activeCategory}>{category.label}</option>)}
+					</select>
+					<i class="fa-solid fa-chevron-down catalog-select-chevron" aria-hidden="true"></i>
+				</div>
+			</div>
+			<div class="catalog-search-row">
+				<div class="catalog-input-wrap">
+					<i class="fa-solid fa-magnifying-glass catalog-input-icon" aria-hidden="true"></i>
+					<label class="visually-hidden" for="catalog-q">搜尋商品</label>
+					<input id="catalog-q" class="catalog-input catalog-input--search" type="search" name="q" value={query} placeholder="搜尋…" aria-label="搜尋商品" enterkeyhint="search" autocomplete="off" />
+				</div>
+				<button type="submit" class="catalog-btn catalog-btn--primary">搜尋</button>
+				<a class="catalog-btn catalog-btn--ghost" href="/products/1">清除</a>
+			</div>
+		</div>
+	</form>
+	{products.length === 0 ? <p class="catalog-empty">沒有符合條件的商品，請調整搜尋條件。</p> : <ProductGridStagger items={cardItems} />}
+	{pageCount > 1 && (
+		<nav class="pagination" aria-label="商品列表分頁">
+			{page > 1 ? <a class="page-btn" href={`/products/${page - 1}${qs}`} rel="prev">上一頁</a> : <span class="page-btn is-disabled">上一頁</span>}
+			<ul class="page-numbers">{Array.from({ length: pageCount }, (_, i) => i + 1).map((number) => (
+				<li>{number === page ? <span class="page-num is-current" aria-current="page">{number}</span> : <a class="page-num" href={`/products/${number}${qs}`}>{number}</a>}</li>
+			))}</ul>
+			{page < pageCount ? <a class="page-btn" href={`/products/${page + 1}${qs}`} rel="next">下一頁</a> : <span class="page-btn is-disabled">下一頁</span>}
+		</nav>
+	)}
+</SiteLayout>
+
+<style>
+	.crumb{margin:0 0 1.25rem;color:#666;font-size:.875rem}.crumb a{color:#111;text-decoration:underline;text-underline-offset:3px}.crumb span{margin:0 6px;color:#bbb}.page-title{margin:0 0 8px;font-size:clamp(1.5rem,3vw,1.875rem);font-weight:800;text-align:center}.count{margin:0 0 1rem;color:#666;text-align:center;font-size:.9rem}
+	.catalog-toolbar{width:100%;max-width:32rem;margin:0 auto clamp(1rem,3vw,1.5rem)}.catalog-filter-form{display:flex;flex-direction:column;gap:8px}.catalog-select-wrap{position:relative;display:block}.catalog-select,.catalog-input{width:100%;min-height:40px;padding:8px 12px;border:1px solid color-mix(in srgb,var(--aq-ink) 14%,transparent);border-radius:var(--aq-radius-sm);background:#fff;color:var(--aq-ink);font-size:.9375rem;transition:border-color .15s ease,box-shadow .15s ease}.catalog-select{padding-right:36px;appearance:none;cursor:pointer}.catalog-select-chevron{position:absolute;right:14px;top:50%;transform:translateY(-50%);pointer-events:none;font-size:.65rem;color:var(--aq-muted);opacity:.75}.catalog-search-row{display:flex;flex-wrap:nowrap;align-items:stretch;gap:8px}.catalog-input-wrap{position:relative;display:flex;align-items:center;flex:1 1 auto;min-width:0}.catalog-input-icon{position:absolute;left:12px;color:var(--aq-muted);font-size:.8rem;opacity:.75;pointer-events:none}.catalog-input--search{padding-left:36px}.catalog-select:hover,.catalog-input:hover{border-color:color-mix(in srgb,var(--aq-primary) 35%,transparent)}.catalog-select:focus,.catalog-input:focus{outline:none;border-color:var(--aq-primary);box-shadow:0 0 0 3px var(--aq-primary-soft)}.catalog-btn{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;min-height:40px;padding:8px 14px;border:1px solid color-mix(in srgb,var(--aq-ink) 18%,transparent);border-radius:var(--aq-radius-sm);background:#fff;color:var(--aq-ink);font-size:.875rem;font-weight:600;text-decoration:none;white-space:nowrap;cursor:pointer;transition:background .15s,border-color .15s,color .15s}.catalog-btn--primary{border-color:var(--aq-primary-dark);background:var(--aq-primary);color:#fff}.catalog-btn--primary:hover{border-color:var(--aq-primary-dark);background:var(--aq-primary-dark)}.catalog-btn--ghost{border-color:color-mix(in srgb,var(--aq-ink) 12%,transparent)}.catalog-btn--ghost:hover{background:var(--aq-sand-2);border-color:color-mix(in srgb,var(--aq-primary) 25%,transparent)}.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.catalog-empty{margin:2rem 0;text-align:center;color:#666;font-size:.9375rem}
+	.pagination{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:16px;margin-top:40px;padding-top:28px;border-top:1px solid #eee}.page-btn{padding:10px 18px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#111;font-size:.9375rem;font-weight:600;text-decoration:none;transition:transform .2s,box-shadow .2s,background .15s,border-color .15s}.page-btn:hover:not(.is-disabled){background:#f5f5f5}.page-btn.is-disabled{border-color:#e5e5e5;color:#bbb;cursor:not-allowed}.page-numbers{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:0;padding:0;list-style:none}.page-num{display:inline-flex;align-items:center;justify-content:center;min-width:40px;height:40px;padding:0 10px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#111;font-size:.9375rem;font-weight:600;text-decoration:none}.page-num:hover{background:#f5f5f5}.page-num.is-current{border-color:#111;background:#111;color:#fff}
+	@media(hover:hover) and (pointer:fine){.page-btn:hover:not(.is-disabled){transform:translateY(-2px);box-shadow:0 4px 12px rgba(26,34,33,.08)}}
+</style>

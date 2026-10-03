@@ -1,0 +1,280 @@
+---
+/**
+ * Shop / account / cart shell: V1 Layout + V1-style header with ecommerce links.
+ */
+import Layout from './Layout.astro';
+import { getAllCategories } from '../data/products';
+import { getCartItemCount } from '../lib/services/cart';
+
+interface Props {
+	title: string;
+	description?: string;
+	wide?: boolean;
+	productBack?: { href: string; label: string };
+	legacyFooter?: boolean;
+}
+
+const { title, description, wide = false, productBack, legacyFooter = false } = Astro.props;
+const user = Astro.locals.user;
+let cartCount = 0;
+if (user) {
+	try {
+		cartCount = await getCartItemCount(user.id);
+	} catch {
+		cartCount = 0;
+	}
+}
+
+const categories = await getAllCategories();
+---
+
+<Layout title={title} description={description}>
+	<header
+		id="siteHeader"
+		class="site-header sticky top-0 z-[100] border-b border-[var(--aq-line)] bg-[color-mix(in_srgb,var(--aq-sand)_88%,white)] shadow-[0_6px_24px_rgba(26,34,33,0.05)] backdrop-blur-[14px]"
+	>
+		{productBack ? (
+			<div class="header-inner product-header-inner">
+				<a class="product-back" href={productBack.href} aria-label={`返回${productBack.href === '/' ? '首頁' : productBack.label}`} title={productBack.href === '/' ? '返回首頁' : '返回上一頁'} onclick={productBack.href === '/' ? undefined : "if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) { event.preventDefault(); history.back(); }"}>
+					<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
+				</a>
+				<a href="/" class="product-brand">水博館水族</a>
+				<span class="product-header-spacer" aria-hidden="true"></span>
+			</div>
+		) : (
+		<div class="header-inner">
+			<a href="/" class="brand">水博館水族</a>
+			<nav class="nav-desktop" aria-label="主要導覽">
+				<a href="/">首頁</a>
+				<a href="/promo/weekly-new">每週新進</a>
+				<a href="/promo/special-offers">預定優惠</a>
+				<a href="/promo/equipment-sale">器材促銷</a>
+				<details class="nav-cat">
+					<summary>本店商品</summary>
+					<ul>
+						<li><a href="/products/1">全部商品</a></li>
+						{
+							categories.map((c) => (
+								<li>
+									<a href={`/products/1?category=${encodeURIComponent(c.id)}`}>
+										{c.label}
+									</a>
+								</li>
+							))
+						}
+					</ul>
+				</details>
+				<a href="/cart">購物車{cartCount > 0 ? `（${cartCount}）` : ''}</a>
+				{
+					user ? (
+						<a href="/account">會員中心</a>
+					) : (
+						<a href="/account/login">登入</a>
+					)
+				}
+			</nav>
+			<nav class="nav-mobile">
+					<a href="/products/1">商品</a>
+				<a href="/cart">購物車{cartCount > 0 ? `（${cartCount}）` : ''}</a>
+				{user ? <a href="/account">會員</a> : <a href="/account/login">登入</a>}
+			</nav>
+		</div>
+		)}
+	</header>
+
+	<main class:list={['page-main', { wide }]}>
+		<slot />
+	</main>
+
+	<footer class:list={['site-footer', { 'legacy-footer': legacyFooter }]}>
+		{legacyFooter ? (
+			<div class="legacy-footer-inner">
+				<a href="/#about">聯絡資訊</a>
+				<p>© 2026 水博館水族</p>
+			</div>
+		) : (
+			<>
+				<p><a href="/#about">聯絡我們</a> · 桃園市中壢區環西路二段69號</p>
+				<p>© {new Date().getFullYear()} 水博館水族 · V2 測試站</p>
+			</>
+		)}
+	</footer>
+</Layout>
+
+<style>
+	.header-inner {
+		max-width: 72rem;
+		margin: 0 auto;
+		padding: 0.75rem 1.1rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.brand {
+		font-weight: 750;
+		font-size: 1.15rem;
+		color: var(--aq-ink);
+		text-decoration: none;
+	}
+
+	.product-header-inner {
+		display: grid;
+		grid-template-columns: 40px 1fr 40px;
+		max-width: 75rem;
+		min-height: 56px;
+		padding: 0.75rem 1rem;
+	}
+
+	.product-back,
+	.product-header-spacer {
+		width: 40px;
+		height: 40px;
+	}
+
+	.product-back {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		color: #111;
+		transition: transform 0.2s ease, background 0.15s ease, box-shadow 0.2s ease;
+	}
+
+	.product-back:hover {
+		background: #f5f5f5;
+		transform: translateY(-2px);
+		box-shadow: 0 4px 10px rgba(26, 34, 33, 0.06);
+	}
+
+	.product-brand {
+		justify-self: center;
+		font-weight: 800;
+		font-size: 1.0625rem;
+		letter-spacing: 0.04em;
+		color: #111;
+		text-decoration: none;
+	}
+
+	.nav-desktop {
+		display: none;
+		align-items: center;
+		gap: 0.85rem;
+		flex-wrap: wrap;
+	}
+
+	.nav-desktop a,
+	.nav-desktop summary {
+		color: var(--aq-muted);
+		font-size: 0.92rem;
+		text-decoration: none;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.nav-desktop a:hover,
+	.nav-desktop summary:hover {
+		color: var(--aq-primary);
+	}
+
+	.nav-cat {
+		position: relative;
+	}
+
+	.nav-cat ul {
+		display: none;
+		position: absolute;
+		top: 100%;
+		left: 0;
+		margin: 0.35rem 0 0;
+		padding: 0.4rem 0;
+		min-width: 10rem;
+		list-style: none;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-sm);
+		box-shadow: 0 10px 28px rgba(26, 34, 33, 0.08);
+		z-index: 20;
+	}
+
+	.nav-cat[open] ul {
+		display: block;
+	}
+
+	.nav-cat li a {
+		display: block;
+		padding: 0.4rem 0.85rem;
+	}
+
+	.nav-mobile {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.nav-mobile a {
+		color: var(--aq-muted);
+		font-size: 0.88rem;
+		text-decoration: none;
+	}
+
+	@media (min-width: 900px) {
+		.nav-desktop {
+			display: flex;
+		}
+		.nav-mobile {
+			display: none;
+		}
+	}
+
+	.page-main {
+		flex: 1 0 auto;
+		width: 100%;
+		max-width: 42rem;
+		margin: 0 auto;
+		padding: 1.5rem 1.15rem 3rem;
+	}
+
+	.page-main.wide {
+		max-width: 75rem;
+	}
+
+	.site-footer {
+		flex: 0 0 auto;
+		border-top: 1px solid var(--aq-line);
+		padding: 1.4rem 1.15rem 2rem;
+		text-align: center;
+		color: var(--aq-muted);
+		font-size: 0.85rem;
+		background: #fff;
+	}
+
+	.legacy-footer-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem}.legacy-footer-inner a{color:var(--aq-primary-dark);font-weight:650;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:4px}.legacy-footer-inner p{margin:0;font-size:.75rem;letter-spacing:.02em}
+
+	.site-footer p {
+		margin: 0.25rem 0;
+	}
+
+	.site-footer a {
+		color: var(--aq-primary);
+		text-decoration: none;
+	}
+</style>
+
+<style is:global>
+	body {
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+		min-height: 100svh;
+	}
+
+	body > main.page-main {
+		flex: 1 0 auto;
+	}
+
+	body > footer.site-footer {
+		flex: 0 0 auto;
+	}
+</style>

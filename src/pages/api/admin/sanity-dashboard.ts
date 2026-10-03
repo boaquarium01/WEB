@@ -11,12 +11,6 @@ function resolveToken(request: Request): string {
 
 export const POST: APIRoute = async ({ request }) => {
 	const token = resolveToken(request);
-	if (!token) {
-		return new Response(JSON.stringify({ error: { message: '未授權：請設定 SANITY_API_TOKEN（伺服器）或後台 x-admin-token' } }), {
-			status: 401,
-			headers: { 'Content-Type': 'application/json; charset=utf-8' }
-		});
-	}
 
 	let payload: { path?: string; method?: string; body?: string | null };
 	try {
@@ -29,10 +23,18 @@ export const POST: APIRoute = async ({ request }) => {
 	}
 
 	const path = String(payload.path ?? '').trim();
-	const method = String(payload.method ?? 'GET').trim();
+	const method = String(payload.method ?? 'GET').trim().toUpperCase();
 	if (!path.startsWith('/api/')) {
 		return new Response(JSON.stringify({ error: { message: 'path 必須以 /api/ 開頭' } }), {
 			status: 400,
+			headers: { 'Content-Type': 'application/json; charset=utf-8' }
+		});
+	}
+
+	// 公開 dataset 的 GET 可不帶 token；寫入仍需 SANITY_API_TOKEN
+	if (!token && method !== 'GET') {
+		return new Response(JSON.stringify({ error: { message: '未授權：請設定 SANITY_API_TOKEN（伺服器）或後台 x-admin-token' } }), {
+			status: 401,
 			headers: { 'Content-Type': 'application/json; charset=utf-8' }
 		});
 	}

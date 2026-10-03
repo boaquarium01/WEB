@@ -1,0 +1,220 @@
+---
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import {
+	getAdminBasePath,
+	isValidAdminSecretParam,
+} from '../../../../../lib/admin/path';
+import { listAdminOrders } from '../../../../../lib/services/admin-orders';
+import { formatTwd } from '../../../../../lib/services/catalog';
+import {
+	orderStatusLabel,
+	paymentStatusLabel,
+} from '../../../../../lib/services/order';
+import { shippingStatusLabel } from '../../../../../lib/services/order-management';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const status = Astro.url.searchParams.get('status')?.trim() || undefined;
+const memberUserId = Astro.url.searchParams.get('userId')?.trim() || undefined;
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const allRows = await listAdminOrders({ status, userId: memberUserId, limit: memberUserId ? 300 : 150 });
+const needle = query.toLocaleLowerCase('zh-Hant');
+const rows = needle
+	? allRows.filter((row) => [row.orderNumber, row.customerName, row.customerEmail].some((value) => String(value ?? '').toLocaleLowerCase('zh-Hant').includes(needle)))
+	: allRows;
+
+const filters = [
+	{ value: '', label: '全部' },
+	{ value: 'PAYMENT_REVIEW', label: '待付款／核對' },
+	{ value: 'AWAITING_SHIPMENT', label: '待出貨' },
+	{ value: 'PENDING_PAYMENT', label: '待付款' },
+	{ value: 'PAYMENT_SUBMITTED', label: '已回報付款' },
+	{ value: 'PROCESSING', label: '處理中' },
+	{ value: 'SHIPPED', label: '已出貨' },
+	{ value: 'COMPLETED', label: '已完成' },
+	{ value: 'CANCELLED', label: '已取消' },
+];
+---
+
+<AdminLayout title="訂單管理｜水博館水族">
+	<header class="head page-heading">
+		<p class="eyebrow">目前顯示 {rows.length} 筆訂單</p>
+		<div class="heading-row"><div><h1>{memberUserId ? `${allRows[0]?.customerName ?? '會員'}的訂單紀錄` : '訂單管理'}</h1><p class="lead">依狀態整理近期訂單，快速確認付款與出貨進度。</p></div><span class="result-count">顯示 {rows.length} 筆{!memberUserId && <small>最近 150 筆中</small>}</span></div>
+		<nav class="filters">
+			{
+				filters.map((f) => (
+					<a
+						href={`${base}/shop/orders?${new URLSearchParams({ ...(f.value ? { status: f.value } : {}), ...(memberUserId ? { userId: memberUserId } : {}) }).toString()}`}
+						class:list={[{ active: (status ?? '') === f.value }]}
+					>
+						{f.label}
+					</a>
+				))
+			}
+		</nav>
+		<form class="order-search" method="get" action={`${base}/shop/orders`}>
+			{status && <input type="hidden" name="status" value={status} />}
+			{memberUserId && <input type="hidden" name="userId" value={memberUserId} />}
+			<label for="order-search">搜尋訂單</label>
+			<div><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="order-search" type="search" name="q" value={query} placeholder="訂單編號、顧客姓名或電子郵件" /><button type="submit">搜尋</button>{query && <a href={`${base}/shop/orders${status ? `?status=${status}` : ''}`}>清除</a>}</div>
+		</form>
+	</header>
+
+	{
+		rows.length === 0 ? (
+			<div class="empty"><i class="fa-regular fa-clipboard" aria-hidden="true"></i><strong>沒有符合條件的訂單</strong><span>{query ? '試試其他訂單編號或顧客資料。' : '符合此狀態的新訂單會顯示在這裡。'}</span></div>
+		) : (
+			<div class="table-wrap">
+				<table>
+					<thead>
+						<tr>
+							<th>訂單</th>
+							<th>顧客</th>
+							<th>狀態</th>
+							<th>付款</th>
+							<th>出貨</th>
+							<th>金額</th>
+							<th>時間</th>
+						</tr>
+					</thead>
+					<tbody>
+						{rows.map((row) => (
+							<tr>
+								<td>
+									<a
+										class="mono order-number"
+										href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}
+									>
+										{row.orderNumber}
+									</a>
+									<small>{row.itemCount} 件</small>
+								</td>
+								<td>
+									{row.customerName ?? '—'}
+									<small>{row.customerEmail ?? ''}</small>
+								</td>
+								<td><span class="status-chip">{orderStatusLabel(row.status)}</span></td>
+								<td>{paymentStatusLabel(row.paymentStatus)}</td>
+								<td>{shippingStatusLabel(row.shippingStatus)}</td>
+								<td class="order-amount">{formatTwd(row.total)}</td>
+								<td class="mono">
+									{row.createdAt.toLocaleString('zh-TW', {
+										timeZone: 'Asia/Taipei',
+									})}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		)
+	}
+</AdminLayout>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
+	.eyebrow span { color: var(--commerce-primary); }
+	.heading-row { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+	.result-count { display: grid; justify-items: end; color: var(--commerce-primary-dark); font-size: 14px; font-weight: 750; }
+	.result-count small { color: var(--commerce-muted); font-size: 9px; font-weight: 500; }
+
+	h1 {
+		margin: 0;
+	}
+
+	.lead {
+		color: var(--aq-muted);
+		margin: 0.35rem 0 0.75rem;
+	}
+
+	.filters {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 18px;
+	}
+
+	.filters a {
+		text-decoration: none;
+		font-size: 10px;
+		font-weight: 650;
+		padding: 0.42rem 0.78rem;
+		border: 1px solid var(--aq-line);
+		border-radius: 999px;
+		color: var(--aq-muted);
+		background: #fff;
+	}
+
+	.filters a.active,
+	.filters a:hover {
+		border-color: var(--aq-primary);
+		color: var(--aq-primary);
+	}
+	.order-search { margin-top: 14px; }
+	.order-search label { display: block; margin-bottom: 6px; color: #74858a; font-size: 10px; font-weight: 700; }
+	.order-search > div { max-width: 570px; min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 4px 5px 4px 12px; border: 1px solid #dce6e3; border-radius: 10px; background: #fff; }
+	.order-search i { color: #8fa09f; font-size: 12px; }
+	.order-search input { flex: 1; min-width: 0; padding: 7px 2px; border: 0; outline: 0 !important; font-size: 11px; }
+	.order-search button { padding: 8px 13px; border: 0; border-radius: 7px; background: var(--commerce-primary); color: white; font-size: 10px; font-weight: 700; cursor: pointer; }
+	.order-search a { padding: 0 8px; color: #7b8b8c; font-size: 10px; text-decoration: none; }
+
+	.empty { display: grid; justify-items: center; gap: 7px; padding: 40px 15px; border: 1px dashed var(--commerce-line); border-radius: 14px; background: #fff; color: var(--commerce-muted); }
+	.empty i { color: #9db8b3; font-size: 24px; }
+	.empty strong { color: #41575e; font-size: 13px; }
+	.empty span { font-size: 10px; }
+
+	.table-wrap {
+		overflow-x: auto;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+
+	th,
+	td {
+		padding: 0.65rem 0.75rem;
+		border-bottom: 1px solid var(--aq-line);
+		text-align: left;
+		vertical-align: top;
+	}
+
+	th {
+		background: var(--aq-sand-2, #f3efe6);
+		font-weight: 650;
+		white-space: nowrap;
+	}
+
+	.mono {
+		font-variant-numeric: tabular-nums;
+	}
+
+	a.mono {
+		color: var(--aq-primary);
+		text-decoration: none;
+		font-weight: 650;
+	}
+
+	small {
+		display: block;
+		color: var(--aq-muted);
+		font-size: 0.8rem;
+	}
+	.order-number { color: var(--commerce-primary-dark); text-decoration: none; font-weight: 750; }
+	.status-chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #edf5f2; color: #4b766f; font-size: 9px; font-weight: 700; white-space: nowrap; }
+	.order-amount { font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	@media (max-width: 700px) { .heading-row { align-items: start; }.result-count { display: none; }.order-search > div { gap: 5px; }.order-search input { font-size: 10px; } }
+</style>

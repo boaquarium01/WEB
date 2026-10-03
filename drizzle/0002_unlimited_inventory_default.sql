@@ -1,0 +1,1 @@
+ALTER TABLE "inventory" ALTER COLUMN "on_hand" SET DEFAULT -1;

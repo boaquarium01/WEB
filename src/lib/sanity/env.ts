@@ -2,7 +2,7 @@
  * Sanity projectId／dataset：伺服器（Vercel）執行期務必先讀 `process.env`，
  * 避免 Vite 建置把空的 `import.meta.env.PUBLIC_*` 內嵌進 bundle，導致前台讀到預設專案、後台卻讀到環境變數。
  */
-const DEFAULT_PROJECT_ID = 'iz7fvprm';
+const DEFAULT_PROJECT_ID = 'jt3vrzpz';
 const DEFAULT_DATASET = 'production';
 
 function trimStr(v: unknown): string {

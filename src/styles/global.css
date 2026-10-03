@@ -15,6 +15,15 @@
   --aq-radius-sm: 10px;
   --aq-radius: 14px;
   --aq-radius-lg: 18px;
+  --aq-danger: #b42318;
+
+  /* Compat for earlier Phase pages */
+  --bg: var(--aq-sand);
+  --bg-accent: var(--aq-sand-2);
+  --ink: var(--aq-ink);
+  --muted: var(--aq-muted);
+  --line: var(--aq-line);
+  --accent: var(--aq-primary);
 }
 
 @theme {
@@ -125,4 +134,46 @@ body {
   .aq-hover-lift:hover {
     transform: translateY(-2px);
   }
+}
+
+/* Shop CTAs (cart / checkout / product) */
+.btn-primary,
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.65rem 1.1rem;
+  border-radius: var(--aq-radius-sm, 10px);
+  font: inherit;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background: var(--aq-primary, #2f6f68);
+  color: #fff;
+  border-color: var(--aq-primary, #2f6f68);
+}
+
+.btn-primary:hover {
+  background: var(--aq-primary-dark, #245851);
+}
+
+.btn-secondary {
+  background: #fff;
+  color: var(--aq-ink, #1a2221);
+  border-color: var(--aq-line, #e4e0d8);
+}
+
+.btn-secondary:hover {
+  border-color: var(--aq-primary, #2f6f68);
+  color: var(--aq-primary, #2f6f68);
+}
+
+button.btn-primary,
+button.btn-secondary {
+  appearance: none;
 }

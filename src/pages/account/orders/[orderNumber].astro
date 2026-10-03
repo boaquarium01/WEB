@@ -1,0 +1,490 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+import { formatTwd } from '../../../lib/services/catalog';
+import type { ShippingAddressSnapshot } from '../../../lib/services/checkout';
+import {
+	canCancelOrder,
+	canSubmitBankLastFive,
+	getOrderForUser,
+	orderStatusLabel,
+	paymentStatusLabel,
+} from '../../../lib/services/order';
+import {
+	cancelOrderForUser,
+	shippingStatusLabel,
+} from '../../../lib/services/order-management';
+import {
+	getBankTransferInfo,
+	submitBankTransferLastFive,
+} from '../../../lib/services/payment';
+import { getCustomerByUserId } from '../../../lib/services/customer';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+const customer = await getCustomerByUserId(user.id);
+const orderNumber = String(Astro.params.orderNumber ?? '').trim();
+
+let error: string | null = null;
+let message: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const action = String(form.get('_action') ?? '');
+	try {
+		if (action === 'submit_last_five') {
+			await submitBankTransferLastFive(user.id, {
+				orderNumber,
+				bankLastFive: String(form.get('bankLastFive') ?? ''),
+				amount: Number(form.get('amount')),
+				note: String(form.get('note') ?? ''),
+			});
+			message = '已送出轉帳末五碼，我們會盡快核對付款。';
+		} else if (action === 'cancel_order') {
+			await cancelOrderForUser(user.id, orderNumber);
+			message = '訂單已取消，預留庫存已釋放。';
+		}
+	} catch (e) {
+		error = e instanceof Error ? e.message : '操作失敗';
+	}
+}
+
+const order = orderNumber
+	? await getOrderForUser(user.id, orderNumber)
+	: null;
+
+if (!order) {
+	return Astro.redirect('/account/orders');
+}
+
+const addr = order.shippingAddress as ShippingAddressSnapshot;
+const payment = order.payments[0];
+const submissions = payment?.submissions ?? [];
+const bank = getBankTransferInfo();
+const showSubmitForm = canSubmitBankLastFive(order.status);
+const showCancel = canCancelOrder(order.status);
+const pageTitle =
+	order.status === 'CANCELLED'
+		? '訂單已取消'
+		: order.status === 'PENDING_PAYMENT'
+			? '訂單已建立'
+			: '訂單詳情';
+---
+
+<AccountLayout title={`訂單 ${order.orderNumber}｜水博館水族`}>
+	<header class="head">
+		<p class="crumb">
+			<a href="/account">會員中心</a> /
+			<a href="/account/orders">訂單</a> / {order.orderNumber}
+		</p>
+		<h1>{pageTitle}</h1>
+		<p class="lead">
+			訂單編號 <strong>{order.orderNumber}</strong> ·{' '}
+			{orderStatusLabel(order.status)}
+			{
+				payment && (
+					<>
+						{' '}
+						· 付款 {paymentStatusLabel(payment.status)}
+					</>
+				)
+			}
+			{' '}
+			· 出貨 {shippingStatusLabel(order.shippingStatus)}
+		</p>
+		<p class="lead muted-sm">
+			建立於{' '}
+			{order.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
+		</p>
+	</header>
+
+	{message && <p class="banner ok">{message}</p>}
+	{error && <p class="banner error">{error}</p>}
+
+	{
+		order.status !== 'CANCELLED' && (
+			<section class="panel">
+				<h2>銀行轉帳資訊</h2>
+				<p>付款方式：銀行轉帳</p>
+				<p>
+					應付金額：<strong>{formatTwd(order.total)}</strong>
+				</p>
+				<dl class="bank">
+					<div>
+						<dt>銀行</dt>
+						<dd>{bank.bankName}</dd>
+					</div>
+					<div>
+						<dt>戶名</dt>
+						<dd>{bank.accountName}</dd>
+					</div>
+					<div>
+						<dt>帳號</dt>
+						<dd class="mono">{bank.accountNumber}</dd>
+					</div>
+				</dl>
+				<p class="hint">
+					{bank.noteHint}建議備註：<strong>{order.orderNumber}</strong>
+				</p>
+			</section>
+		)
+	}
+
+	{
+		showSubmitForm && (
+			<section class="panel">
+				<h2>回報轉帳末五碼</h2>
+				<p class="hint">
+					完成轉帳後，請填寫您轉出帳號的末五碼，方便我們核對入帳。確認付款由門市／後台處理。
+				</p>
+				<form method="post" class="submit-form">
+					<input type="hidden" name="_action" value="submit_last_five" />
+					<label>
+						轉帳帳號末五碼
+						<input
+							type="text"
+							name="bankLastFive"
+							inputmode="numeric"
+							pattern="\d{5}"
+							maxlength="5"
+							minlength="5"
+							required
+							value={customer?.bankAccountLastFive ?? ''}
+							placeholder="12345"
+							autocomplete="off"
+						/>
+					</label>
+					<label>
+						轉帳金額（TWD）
+						<input
+							type="number"
+							name="amount"
+							min="1"
+							step="1"
+							required
+							value={order.total}
+						/>
+					</label>
+					<label>
+						備註（選填）
+						<input type="text" name="note" placeholder="例如：已於今晚轉帳" />
+					</label>
+					<button type="submit" class="btn-primary">
+						送出末五碼
+					</button>
+				</form>
+			</section>
+		)
+	}
+
+	{
+		submissions.length > 0 && (
+			<section class="panel">
+				<h2>已送出的末五碼</h2>
+				<ul class="subs">
+					{submissions.map((s) => (
+						<li>
+							<span class="mono">{s.bankLastFive}</span>
+							<span>{formatTwd(s.amount)}</span>
+							<span class="muted">
+								{s.submittedAt.toLocaleString('zh-TW', {
+									timeZone: 'Asia/Taipei',
+								})}
+							</span>
+							{s.verifiedAt ? (
+								<span class="badge ok">已核對</span>
+							) : (
+								<span class="badge">待核對</span>
+							)}
+						</li>
+					))}
+				</ul>
+			</section>
+		)
+	}
+
+	<section class="panel">
+		<h2>收件資訊</h2>
+		<p>
+			{addr.recipientName} · {addr.phone}
+		</p>
+		{addr.shippingMethodName && <p>配送方式：{addr.shippingMethodName}</p>}
+		<p>
+			{addr.postalCode} {addr.city}
+			{addr.district}
+			{addr.addressLine}
+		</p>
+		{order.note && <p class="note">備註：{order.note}</p>}
+	</section>
+
+	<section class="panel">
+		<h2>商品明細</h2>
+		<ul class="lines">
+			{
+				order.items.map((item) => (
+					<li>
+						<span>
+							{item.productName}
+							<small>
+								{item.sku} × {item.quantity}
+							</small>
+						</span>
+						<strong>{formatTwd(item.subtotal)}</strong>
+					</li>
+				))
+			}
+		</ul>
+		<dl class="totals">
+			<div>
+				<dt>小計</dt>
+				<dd>{formatTwd(order.subtotal)}</dd>
+			</div>
+			<div>
+				<dt>運費</dt>
+				<dd>{formatTwd(order.shippingFee)}</dd>
+			</div>
+			{
+				order.discount > 0 && (
+					<div>
+						<dt>折扣</dt>
+						<dd>-{formatTwd(order.discount)}</dd>
+					</div>
+				)
+			}
+			<div class="grand">
+				<dt>總計</dt>
+				<dd>{formatTwd(order.total)}</dd>
+			</div>
+		</dl>
+	</section>
+
+	{
+		showCancel && (
+			<section class="panel danger-panel">
+				<h2>取消訂單</h2>
+				<p class="hint">
+					僅能在確認付款前取消。取消後會釋放預留庫存，且無法復原。
+				</p>
+				<form method="post" onsubmit="return confirm('確定取消此訂單？');">
+					<input type="hidden" name="_action" value="cancel_order" />
+					<button type="submit" class="btn-danger">取消訂單</button>
+				</form>
+			</section>
+		)
+	}
+
+	<div class="actions">
+		<a class="btn-secondary" href="/account/orders">全部訂單</a>
+		<a class="btn-secondary" href="/products">繼續購物</a>
+		<a class="btn-primary" href="/account">回會員中心</a>
+	</div>
+</AccountLayout>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+
+	.crumb {
+		margin: 0 0 0.35rem;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.crumb a {
+		text-decoration: none;
+		color: var(--aq-primary);
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.6rem;
+	}
+
+	.lead {
+		margin: 0.4rem 0 0;
+		color: var(--aq-muted);
+	}
+
+	.muted-sm {
+		font-size: 0.88rem;
+	}
+
+	h2 {
+		margin: 0 0 0.65rem;
+		font-size: 1.05rem;
+	}
+
+	.banner {
+		padding: 0.7rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		margin-bottom: 0.85rem;
+	}
+
+	.banner.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
+
+	.banner.error {
+		background: rgba(180, 35, 24, 0.08);
+		color: var(--aq-danger);
+	}
+
+	.panel {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 1.1rem 1.2rem;
+		margin-bottom: 0.85rem;
+	}
+
+	.danger-panel {
+		border-color: rgba(180, 35, 24, 0.28);
+	}
+
+	.panel p {
+		margin: 0.3rem 0;
+	}
+
+	.hint,
+	.note,
+	.muted {
+		color: var(--aq-muted);
+		font-size: 0.92rem;
+	}
+
+	.bank {
+		margin: 0.75rem 0;
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.bank > div {
+		display: grid;
+		grid-template-columns: 4rem 1fr;
+		gap: 0.5rem;
+	}
+
+	.bank dt,
+	.bank dd {
+		margin: 0;
+	}
+
+	.mono {
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.04em;
+	}
+
+	.submit-form {
+		display: grid;
+		gap: 0.75rem;
+		margin-top: 0.75rem;
+		max-width: 22rem;
+	}
+
+	.submit-form label {
+		display: grid;
+		gap: 0.35rem;
+		font-size: 0.92rem;
+	}
+
+	.submit-form input {
+		padding: 0.55rem 0.7rem;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-sm);
+		font: inherit;
+	}
+
+	.subs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.5rem;
+	}
+
+	.subs li {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		align-items: center;
+		padding: 0.55rem 0;
+		border-bottom: 1px solid var(--aq-line);
+	}
+
+	.badge {
+		font-size: 0.78rem;
+		padding: 0.15rem 0.45rem;
+		border-radius: 999px;
+		background: var(--aq-sand-2, #f3efe6);
+		color: var(--aq-muted);
+	}
+
+	.badge.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
+
+	.lines {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.lines li {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.lines small {
+		display: block;
+		color: var(--aq-muted);
+		margin-top: 0.15rem;
+	}
+
+	.totals {
+		margin: 1rem 0 0;
+		padding-top: 0.85rem;
+		border-top: 1px solid var(--aq-line);
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.totals > div {
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.totals dt,
+	.totals dd {
+		margin: 0;
+	}
+
+	.totals .grand {
+		font-weight: 700;
+		font-size: 1.08rem;
+	}
+
+	.btn-danger {
+		appearance: none;
+		padding: 0.6rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		border: 1px solid rgba(180, 35, 24, 0.45);
+		background: #fff;
+		color: var(--aq-danger);
+		font: inherit;
+		font-weight: 650;
+		cursor: pointer;
+	}
+
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		margin-top: 0.5rem;
+	}
+</style>

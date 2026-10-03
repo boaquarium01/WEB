@@ -1,10 +1,10 @@
 /**
  * Sanity Image Pipeline：URL 建構、srcset、LQIP（極小模糊預覽）
  */
-import imageUrlBuilder from '@sanity/image-url';
-import type { ImageUrlBuilder } from '@sanity/image-url/lib/types/builder';
-import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import { createImageUrlBuilder, type SanityImageSource } from '@sanity/image-url';
 import { readSanityProjectDataset } from './env';
+
+type ImageUrlBuilder = ReturnType<typeof createImageUrlBuilder>;
 
 /** 與 fetchProducts／fetchPromotions 共用 env，避免列表有圖、詳情 SanityImage 卻缺 projectId 而空白 */
 function readProject() {
@@ -12,12 +12,12 @@ function readProject() {
 }
 
 /** 單一建構器（與舊程式相容）；缺 asset 或格式錯誤時回傳 null */
-export function urlForImage(source: SanityImageSource | undefined | null): ImageUrlBuilder | null {
+export function urlForImage(source: SanityImageSource | undefined | null): ReturnType<ImageUrlBuilder['image']> | null {
   const { projectId, dataset } = readProject();
   if (!source || !projectId) return null;
   try {
     /** 忽略 Studio 裁切／熱點，網址對應完整原圖（版型再用 object-fit 控制顯示） */
-    return imageUrlBuilder({ projectId, dataset }).image(source).ignoreImageParams();
+    return createImageUrlBuilder({ projectId, dataset }).image(source).ignoreImageParams();
   } catch {
     return null;
   }

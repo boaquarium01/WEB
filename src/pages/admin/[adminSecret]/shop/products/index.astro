@@ -1,0 +1,335 @@
+---
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import { isValidAdminSecretParam } from '../../../../../lib/admin/path';
+import { listAdminSkus, updateSkuCommerceSettings } from '../../../../../lib/services/admin-catalog';
+import { getAdminBasePath } from '../../../../../lib/admin/path';
+import { listInventoryMovements } from '../../../../../lib/services/inventory';
+import { listCatalogCategories } from '../../../../../lib/services/catalog';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const currentSearch = Astro.url.searchParams.toString();
+const user = Astro.locals.user!;
+let error: string | null = null;
+let message: string | null = null;
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const rawStock = String(form.get('onHand') ?? '').trim();
+	const quantity = Number(rawStock);
+	const hasStock = form.get('hasStock') === 'on';
+	try {
+		await updateSkuCommerceSettings({
+			productSkuId: String(form.get('productSkuId') ?? ''),
+			sellingPrice: Number(form.get('sellingPrice')),
+			onHand: hasStock ? (quantity === 0 ? -1 : quantity) : 0,
+			createdBy: user.id,
+		});
+		message = '價格與庫存已儲存至資料庫';
+	} catch (e) {
+		error = e instanceof Error ? e.message : '儲存失敗';
+	}
+}
+const [rows, cmsCategories] = await Promise.all([listAdminSkus(), listCatalogCategories()]);
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const category = Astro.url.searchParams.get('category')?.trim() ?? '';
+const sort = Astro.url.searchParams.get('sort') ?? 'name';
+const direction = Astro.url.searchParams.get('direction') === 'desc' ? 'desc' : 'asc';
+const requestedPage = Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10);
+const needle = query.toLocaleLowerCase('zh-Hant');
+const productCategorySlugs = new Set(rows.map((row) => row.productType).filter(Boolean));
+const knownCategorySlugs = new Set(cmsCategories.map((item) => item.slug));
+const categories = [
+	...cmsCategories.filter((item) => productCategorySlugs.has(item.slug)),
+	...[...productCategorySlugs].filter((slug) => !knownCategorySlugs.has(slug)).map((slug) => ({ slug, label: '其他分類' })),
+];
+const categoryLabels = new Map(cmsCategories.map((item) => [item.slug, item.label]));
+const filteredRows = rows.filter((row) => {
+	const matchesQuery = !needle || [row.productName, row.skuName, row.productType].some((value) => String(value ?? '').toLocaleLowerCase('zh-Hant').includes(needle));
+	return matchesQuery && (!category || row.productType === category);
+});
+const allowedSorts = ['name', 'price', 'stock', 'status', 'updatedAt'];
+const sortKey = allowedSorts.includes(sort) ? sort : 'name';
+const sortedRows = [...filteredRows].sort((a, b) => {
+	let comparison = 0;
+	if (sortKey === 'price') comparison = a.sellingPrice - b.sellingPrice;
+	else if (sortKey === 'stock') comparison = (a.onHand < 0 ? Number.POSITIVE_INFINITY : a.onHand) - (b.onHand < 0 ? Number.POSITIVE_INFINITY : b.onHand);
+	else if (sortKey === 'updatedAt') comparison = a.updatedAt.getTime() - b.updatedAt.getTime();
+	else if (sortKey === 'status') {
+		const statusRank = (row: typeof a) => row.onHand === 0 ? 0 : row.productActive && row.productOnline ? 2 : 1;
+		comparison = statusRank(a) - statusRank(b);
+	} else comparison = a.productName.localeCompare(b.productName, 'zh-Hant');
+	return (direction === 'desc' ? -comparison : comparison) || a.productName.localeCompare(b.productName, 'zh-Hant');
+});
+const pageSize = 25;
+const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+const currentPage = Number.isFinite(requestedPage) ? Math.min(Math.max(requestedPage, 1), totalPages) : 1;
+const pageRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+const movements = await listInventoryMovements({ limit: 100 });
+const productCount = new Set(rows.map((row) => row.productId)).size;
+const sellingProductCount = new Set(rows.filter((row) => row.onHand !== 0 && row.productActive && row.productOnline).map((row) => row.productId)).size;
+const lastUpdatedAt = rows.reduce<Date | null>((latest, row) => !latest || row.updatedAt > latest ? row.updatedAt : latest, null);
+const pageHref = (page: number) => {
+	const params = new URLSearchParams();
+	if (query) params.set('q', query);
+	if (category) params.set('category', category);
+	if (sortKey !== 'name') params.set('sort', sortKey);
+	if (direction !== 'asc') params.set('direction', direction);
+	params.set('page', String(page));
+	return `${base}/shop/products?${params.toString()}#products-list`;
+};
+---
+
+<AdminLayout title="商品管理｜水博館水族">
+	<header class="head page-heading">
+		<div class="heading-row"><h1>商品管理</h1><span class="summary-pill">共 {productCount} 項商品 <i>/</i> 共 {sellingProductCount} 項販售中</span></div>
+		<div class="data-updated">商品最後更新時間：<time>{lastUpdatedAt ? lastUpdatedAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '尚無更新紀錄'}</time></div>
+		<form class="product-filters" method="get" action={`${base}/shop/products`}>
+			<label class="search-field" for="product-search">搜尋商品或規格<input id="product-search" type="search" name="q" value={query} placeholder="輸入商品名稱或規格" /></label>
+			<label>商品分類<select name="category" onchange="this.form.requestSubmit()"><option value="">全部分類</option>{categories.map((item) => <option value={item.slug} selected={category === item.slug}>{item.label || categoryLabels.get(item.slug) || '其他分類'}</option>)}</select></label>
+			<label>排序依據<select name="sort" onchange="this.form.requestSubmit()"><option value="name" selected={sortKey === 'name'}>商品名稱</option><option value="price" selected={sortKey === 'price'}>價格</option><option value="stock" selected={sortKey === 'stock'}>庫存</option><option value="status" selected={sortKey === 'status'}>販售狀態</option><option value="updatedAt" selected={sortKey === 'updatedAt'}>更新時間</option></select></label>
+			<label>排序方向<select name="direction" onchange="this.form.requestSubmit()"><option value="asc" selected={direction === 'asc'}>由低至高／最早</option><option value="desc" selected={direction === 'desc'}>由高至低／最新</option></select></label>
+			<button type="submit"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>搜尋</button>
+			<button class="movement-link" type="button" aria-controls="inventory-movements" aria-expanded="false"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看異動紀錄</button>
+		</form>
+	</header>
+	{message && <p class="notice ok">{message}</p>}
+	{error && <p class="notice error">{error}</p>}
+
+	{
+		filteredRows.length === 0 ? (
+			<div class="empty"><i class="fa-solid fa-box-open" aria-hidden="true"></i><strong>{rows.length === 0 ? '商品資料尚未同步' : '找不到符合的商品'}</strong><span>{rows.length === 0 ? '請先執行商品同步流程，再回來管理商品規格與售價。' : '請更換關鍵字後再搜尋。'}</span></div>
+		) : (
+			<div id="products-list" class="table-wrap">
+			<div class="table-toolbar"><span>顯示第 {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, sortedRows.length)} 項，共 <strong>{filteredRows.length}</strong> 項商品規格</span><span>每頁 25 項</span></div>
+				<table class="product-table">
+					<colgroup><col style="width:15%" /><col style="width:13%" /><col style="width:16%" /><col style="width:21%" /><col style="width:11%" /><col style="width:14%" /><col style="width:10%" /></colgroup>
+					<thead>
+						<tr>
+							<th>商品</th>
+							<th>商品規格</th>
+							<th>售價（NT$）</th>
+							<th>庫存</th>
+							<th>販售狀態</th>
+							<th>最後更新</th>
+							<th>儲存</th>
+						</tr>
+					</thead>
+					<tbody>
+						{pageRows.map((row) => (
+							<tr>
+								<td data-label="商品">
+									<a href={`/product/${row.slug}`}>{row.productName}</a>
+								</td>
+								<td data-label="商品規格">
+									<strong>{row.skuName}</strong>
+								</td>
+								<td data-label="售價"><label class="price-field"><span>NT$</span><input form={`sku-edit-${row.productSkuId}`} type="number" name="sellingPrice" min="0" step="1" required value={row.sellingPrice} aria-label={`${row.productName} ${row.skuName} 售價`} /></label></td>
+								<td data-label="庫存"><div class="stock-editor"><label class="stock-field"><input form={`sku-edit-${row.productSkuId}`} type="number" name="onHand" min="0" step="1" required value={row.onHand < 0 ? 0 : row.onHand} aria-label={`${row.productName} ${row.skuName} 庫存數量`} /><small>{row.onHand < 0 ? '0 = 不限量' : `已預留 ${row.reserved}`}</small></label><label class="stock-check"><input form={`sku-edit-${row.productSkuId}`} type="checkbox" name="hasStock" checked={row.onHand !== 0} /><span>有庫存</span></label></div></td>
+								<td data-label="販售狀態"><span class:list={['product-status', 'product-status-label', { online: row.onHand !== 0 && row.productActive && row.productOnline, disabled: row.onHand === 0 }]}><i class="fa-solid fa-circle" aria-hidden="true"></i>{row.onHand === 0 ? '禁售' : row.productActive && row.productOnline ? '販售中' : row.productActive ? '未上架' : '已停用'}</span></td>
+								<td class="updated-at" data-label="最後更新">{row.updatedAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}</td>
+								<td data-label="操作"><form id={`sku-edit-${row.productSkuId}`} class="sku-edit-form" data-sell-status={row.productActive && row.productOnline ? '販售中' : row.productActive ? '未上架' : '已停用'} method="post" action={`${base}/shop/products${currentSearch ? `?${currentSearch}` : ''}`}><input type="hidden" name="productSkuId" value={row.productSkuId} /><button class="save-row" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存</button></form></td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+			<nav class="pagination" aria-label="商品清單頁數">
+				<a class:list={[{ disabled: currentPage <= 1 }]} href={pageHref(Math.max(1, currentPage - 1))} aria-disabled={currentPage <= 1}>上一頁</a>
+				{Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => <a class:active={page === currentPage} href={pageHref(page)} aria-current={page === currentPage ? 'page' : undefined}>{page}</a>)}
+				<a class:list={[{ disabled: currentPage >= totalPages }]} href={pageHref(Math.min(totalPages, currentPage + 1))} aria-disabled={currentPage >= totalPages}>下一頁</a>
+			</nav>
+		)
+	}
+
+	<details id="inventory-movements" class="movement-section">
+		<summary><span><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>庫存異動紀錄</span><small>最近 {movements.length} 筆</small></summary>
+		{movements.length === 0 ? <div class="empty"><strong>目前沒有庫存異動紀錄</strong></div> : <div class="table-wrap movement-table"><table><thead><tr><th>時間</th><th>商品</th><th>地點</th><th>數量變化</th><th>庫存變化</th><th>說明</th></tr></thead><tbody>{movements.map((row) => <tr><td>{row.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}</td><td>{row.productName}</td><td>{row.locationName}</td><td>{row.quantity}</td><td>{row.beforeQuantity < 0 ? '不限量' : row.beforeQuantity} → {row.afterQuantity < 0 ? '不限量' : row.afterQuantity}</td><td>{row.note ?? '—'}</td></tr>)}</tbody></table></div>}
+	</details>
+</AdminLayout>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
+	.eyebrow span { color: var(--commerce-primary); }
+	.heading-row { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
+	.summary-pill { display: inline-flex; align-items: center; gap: 9px; padding: 10px 14px; border: 1px solid #d8ebe4; border-radius: 999px; background: #f2faf6; color: #28745f; font-size: 14px; font-weight: 750; white-space: nowrap; }
+	.summary-pill i { color: #95b6aa; font-style: normal; font-weight: 500; }
+	.data-updated { margin-top: 9px; color: var(--commerce-muted); font-size: 12px; }
+	.data-updated time { margin-left: 5px; color: #3a5d60; font-variant-numeric: tabular-nums; }
+	.online-count { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #d8ebe4; border-radius: 999px; background: #f2faf6; color: #39866c; font-size: 10px; font-weight: 700; white-space: nowrap; }
+	.online-count i { font-size: 7px; }
+	.product-filters { display: grid; grid-template-columns: minmax(230px, 1.6fr) repeat(3, minmax(130px, 1fr)) auto auto; align-items: end; gap: 10px; margin-top: 20px; padding: 15px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; }
+	.product-filters label { display: grid; gap: 6px; color: #607579; font-size: 12px; font-weight: 700; }
+	.product-filters input,.product-filters select { width: 100%; min-width: 0; height: 40px; padding: 0 11px; font-size: 13px; }
+	.product-filters button,.movement-link { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 40px; padding: 0 13px; border: 1px solid var(--commerce-primary); border-radius: 9px; background: var(--commerce-primary); color: #fff; font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; cursor: pointer; }
+	.product-filters .movement-link { border-color: #dce8e5; background: #fff; color: var(--commerce-primary-dark); }
+	.notice { padding: 11px 14px; border: 1px solid; border-radius: 10px; font-size: 11px; }
+	.notice.ok { border-color: #cce8d9; background: #f1faf5; color: #287451; }
+	.notice.error { border-color: #f1c9c4; background: #fff5f3; color: #a23e34; }
+
+	h1 {
+		margin: 0;
+	}
+
+	.lead {
+		color: var(--aq-muted);
+		font-size: 0.92rem;
+	}
+
+	.lead code {
+		font-size: 0.85rem;
+	}
+
+	.empty {
+		color: var(--aq-muted);
+	}
+
+	.table-wrap {
+		overflow-x: auto;
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+	}
+	.product-table { table-layout: fixed; min-width: 1080px; }
+	.product-table th { padding: 14px 12px; font-size: 12px; }
+	.product-table td { padding: 14px 12px; font-size: 14px; vertical-align: middle; overflow-wrap: anywhere; }
+	.product-table td:first-child a { display: inline-block; line-height: 1.45; }
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.9rem;
+	}
+
+	th,
+	td {
+		padding: 0.65rem 0.75rem;
+		border-bottom: 1px solid var(--aq-line);
+		text-align: left;
+		vertical-align: top;
+	}
+
+	th {
+		background: var(--aq-sand-2, #f3efe6);
+		font-weight: 650;
+		white-space: nowrap;
+	}
+
+	a {
+		color: var(--aq-primary);
+		text-decoration: none;
+		font-weight: 650;
+	}
+
+	.mono {
+		font-variant-numeric: tabular-nums;
+	}
+
+	small {
+		display: block;
+		color: var(--aq-muted);
+		font-size: 0.8rem;
+	}
+	.price-field, .stock-field { display: flex; align-items: center; gap: 7px; width: 100%; min-width: 0; min-height: 42px; padding: 5px 9px; box-sizing: border-box; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #73868a; font-size: 12px; }
+	.price-field input, .stock-field input { display: block; width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; border: 0; outline: 0; background: transparent; color: #243e44; font: inherit; font-size: 14px; font-weight: 650; }
+	.stock-editor { display: grid; gap: 5px; }
+	.stock-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+	.stock-field small { min-width: 0; font-size: 10px; white-space: nowrap; }
+	.stock-check { display: inline-flex; align-items: center; gap: 6px; width: max-content; color: #4a6266; font-size: 12px; font-weight: 650; cursor: pointer; }
+	.stock-check input { accent-color: var(--commerce-primary); }
+	.sku-edit-form { display: flex; justify-content: center; width: 100%; min-width: 0; margin: 0; }
+	.save-row { display: inline-flex; flex: 0 0 auto; justify-content: center; align-items: center; gap: 6px; width: 100%; min-width: 82px; min-height: 42px; box-sizing: border-box; padding: 8px 10px; border: 0; border-radius: 8px; background: var(--commerce-primary); color: #fff; font-size: 13px; font-weight: 700; line-height: 1; white-space: nowrap; word-break: keep-all; cursor: pointer; }
+	.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+	.table-toolbar { display: flex; justify-content: space-between; padding: 12px 15px; border-bottom: 1px solid var(--commerce-line); color: #839294; font-size: 10px; }
+	.table-toolbar strong { color: var(--commerce-primary-dark); }
+	.pagination { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 15px 0 34px; }
+	.pagination a { min-width: 38px; height: 38px; display: inline-grid; place-items: center; padding: 0 10px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-primary-dark); font-size: 13px; text-decoration: none; }
+	.pagination a.active { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
+	.pagination a.disabled { opacity: .45; pointer-events: none; }
+	.movement-section { margin-top: 38px; scroll-margin-top: 18px; }
+	.movement-heading { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 12px; }
+	.movement-heading h2 { margin: 0; font-size: 25px; }
+	.movement-heading p { margin: 5px 0 0; color: var(--commerce-muted); font-size: 13px; }
+	.movement-heading > span { padding: 7px 11px; border-radius: 999px; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); font-size: 12px; font-weight: 700; }
+	.movement-table td { font-size: 13px; }
+	.updated-at { min-width: 0; white-space: nowrap; font-size: 12px; font-variant-numeric: tabular-nums; }
+	.movement-section { margin-top: 4px; scroll-margin-top: 18px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.movement-section summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; color: var(--commerce-primary-dark); font-size: 16px; font-weight: 750; cursor: pointer; list-style: none; }
+	.movement-section summary::-webkit-details-marker { display: none; }
+	.movement-section summary > span { display: inline-flex; align-items: center; gap: 9px; }
+	.movement-section summary small { color: var(--commerce-muted); font-size: 12px; font-weight: 550; }
+	.movement-section[open] summary { border-bottom: 1px solid var(--commerce-line); }
+	.movement-section .table-wrap { border: 0; border-radius: 0 0 14px 14px; box-shadow: none; }
+	.product-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; background: #f3f5f4; color: #8a9899; font-size: 9px; white-space: nowrap; }
+	.product-status i { font-size: 6px; }
+	.product-status.online { background: #eaf6f0; color: #39866c; }
+	.product-status.disabled { background: #fff0ee; color: #b44d43; }
+	.empty { display: grid; justify-items: center; gap: 7px; padding: 40px 15px; border: 1px dashed var(--commerce-line); border-radius: 14px; background: #fff; color: var(--commerce-muted); }
+	.empty i { color: #9db8b3; font-size: 24px; }
+	.empty strong { color: #41575e; font-size: 13px; }
+	.empty span { font-size: 10px; }
+	@media (max-width: 1000px) { .product-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }.product-filters .search-field { grid-column: 1 / -1; } }
+	@media (max-width: 760px) {
+		#products-list.table-wrap { overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+		.product-table { display: block; min-width: 0; }
+		.product-table colgroup,.product-table thead { display: none; }
+		.product-table tbody { display: grid; gap: 11px; padding-top: 10px; }
+		.product-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "product variant" "price stock" "status updated" "save save"; gap: 7px 10px; padding: 12px; border: 1px solid var(--commerce-line); border-radius: 13px; background: #fff; box-shadow: 0 5px 18px rgba(28, 67, 70, .045); }
+		.product-table td { display: flex; flex-direction: column; align-items: stretch; min-width: 0; padding: 3px 2px; border: 0; font-size: 14px; }
+		.product-table td::before { margin-bottom: 5px; color: var(--commerce-muted); content: attr(data-label); font-size: 11px; font-weight: 700; }
+		.product-table td:nth-child(1) { grid-area: product; }
+		.product-table td:nth-child(2) { grid-area: variant; }
+		.product-table td:nth-child(3) { grid-area: price; }
+		.product-table td:nth-child(4) { grid-area: stock; }
+		.product-table td:nth-child(5) { grid-area: status; justify-content: center; }
+		.product-table td:nth-child(6) { grid-area: updated; justify-content: center; }
+		.product-table td:nth-child(7) { grid-area: save; }
+		.product-table td:nth-child(1) a,.product-table td:nth-child(2) strong { font-size: 14px; }
+		.product-table .price-field,.product-table .stock-field { min-height: 42px; }
+		.product-table .stock-field small { font-size: 9px; }
+		.product-table .updated-at { white-space: normal; font-size: 12px; }
+		.product-table .product-status { width: max-content; max-width: 100%; font-size: 11px; }
+		.product-table .save-row { min-height: 44px; }
+		.table-toolbar { border: 1px solid var(--commerce-line); border-radius: 11px; background: #fff; }
+	}
+	@media (max-width: 700px) { .heading-row { align-items: start; flex-direction: column; gap: 10px; }.summary-pill { padding: 8px 11px; font-size: 12px; }.product-filters { grid-template-columns: 1fr; padding: 12px; }.product-filters .search-field { grid-column: auto; }.product-filters button,.product-filters .movement-link { width: 100%; }.movement-heading { align-items: start; flex-direction: column; } }
+</style>
+
+<script>
+	const movementDetails = document.querySelector<HTMLDetailsElement>('#inventory-movements');
+	const movementToggle = document.querySelector<HTMLButtonElement>('.movement-link');
+	if (movementDetails && movementToggle) {
+		const syncMovementToggle = () => movementToggle.setAttribute('aria-expanded', String(movementDetails.open));
+		movementToggle.addEventListener('click', () => {
+			movementDetails.open = !movementDetails.open;
+			syncMovementToggle();
+			if (movementDetails.open) movementDetails.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		});
+		if (window.location.hash === '#inventory-movements') {
+			movementDetails.open = true;
+			syncMovementToggle();
+		}
+		movementDetails.addEventListener('toggle', syncMovementToggle);
+	}
+	document.querySelectorAll<HTMLFormElement>('.sku-edit-form').forEach((form) => {
+		const stockToggle = form.elements.namedItem('hasStock') as HTMLInputElement | null;
+		const status = form.closest('tr')?.querySelector<HTMLElement>('.product-status-label');
+		if (!stockToggle || !status) return;
+		stockToggle.addEventListener('change', () => {
+			const disabled = !stockToggle.checked;
+			const label = status.lastChild;
+			if (label?.nodeType === Node.TEXT_NODE) {
+				label.textContent = disabled ? '禁售' : form.dataset.sellStatus ?? '販售中';
+			}
+			status.classList.toggle('disabled', disabled);
+			status.classList.toggle('online', !disabled && form.dataset.sellStatus === '販售中');
+		});
+	});
+</script>

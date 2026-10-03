@@ -1,0 +1,35 @@
+---
+import AccountLayout from '../../layouts/AccountLayout.astro';
+import { getServerEnv } from '../../lib/env';
+import { getDb } from '../../lib/db/client';
+import { account } from '../../lib/db/schema';
+import { eq } from 'drizzle-orm';
+export const prerender = false;
+const user = Astro.locals.user!;
+const oauthError = Astro.url.searchParams.get('error');
+const accounts = await getDb().select({ id: account.id, providerId: account.providerId, createdAt: account.createdAt }).from(account).where(eq(account.userId, user.id));
+const env = getServerEnv();
+const providers = { google: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET), line: Boolean(env.LINE_CHANNEL_ID && env.LINE_CHANNEL_SECRET) };
+const hasCredential = accounts.some((item) => item.providerId === 'credential');
+---
+<AccountLayout title="登入與安全｜水博館水族">
+	<h1>登入與安全</h1>
+	<p class="lead">管理這個會員帳號可使用的登入方式。</p>
+	{oauthError && <p class="error">授權未完成或已取消。請確認該登入方式尚未綁定其他會員後再試。</p>}
+	<section class="panel"><h2>已綁定登入方式</h2><ul id="account-list" class="list">
+		{accounts.map((item) => <li class="card" data-account-id={item.id}><strong>{item.providerId === 'credential' ? 'Email 與密碼' : item.providerId === 'google' ? 'Google' : item.providerId === 'line' ? 'LINE' : item.providerId}</strong>{item.providerId !== 'credential' && <button type="button" class="danger unlink">解除綁定</button>}</li>)}
+	</ul>
+	<div class="actions">{providers.google && !accounts.some((a)=>a.providerId==='google') && <button type="button" class="link-social" data-provider="google">綁定 Google</button>}{providers.line && !accounts.some((a)=>a.providerId==='line') && <button type="button" class="link-social" data-provider="line">綁定 LINE</button>}</div>
+	{!providers.google && !providers.line && <p class="muted">Google 與 LINE 尚未完成伺服器端憑證設定。</p>}</section>
+	<section class="panel"><h2>{hasCredential ? '修改密碼' : '設定 Email 密碼'}</h2><form id="password-form" class="form" data-has-credential={String(hasCredential)}>{hasCredential && <label>目前密碼<input type="password" name="currentPassword" autocomplete="current-password" required /></label>}<label>新密碼<input type="password" name="newPassword" minlength="8" autocomplete="new-password" required /></label><button type="submit">{hasCredential ? '更新密碼' : '設定密碼'}</button></form><p id="security-status" role="status" aria-live="polite"></p><p><a href="/account/forgot-password">忘記密碼／重設密碼</a></p></section>
+	<section class="panel"><h2>其他裝置</h2><p>可讓目前登入以外的所有裝置重新登入。</p><button id="revoke-sessions" class="danger" type="button">登出所有其他裝置</button></section>
+</AccountLayout>
+<script>
+	import { authClient } from '../../lib/auth/client';
+	const hasCredential = document.getElementById('password-form')?.dataset.hasCredential === 'true';
+	const status=document.getElementById('security-status');
+	for(const button of document.querySelectorAll<HTMLButtonElement>('.link-social')) button.addEventListener('click', async()=>{button.disabled=true; status.textContent='正在前往授權…'; try{const result=await authClient.linkSocial({provider:button.dataset.provider as 'google'|'line',callbackURL:'/account/security'}); if(result.error) throw new Error();}catch{status.textContent='綁定失敗或授權已取消。';button.disabled=false;}});
+	for(const button of document.querySelectorAll<HTMLButtonElement>('.unlink')) button.addEventListener('click', async()=>{if(!window.confirm('確定解除此登入方式？'))return;const item=button.closest<HTMLElement>('[data-account-id]'); if(!item)return; button.disabled=true; const response=await fetch('/api/account/security',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:item.dataset.accountId})}); if(response.ok){item.remove();status.textContent='已解除綁定。';}else{const result=await response.json().catch(()=>({}));status.textContent=result.error||'解除失敗，請保留至少一種登入方式。';button.disabled=false;}});
+	document.getElementById('password-form')?.addEventListener('submit',async(event)=>{event.preventDefault();const data=new FormData(event.currentTarget as HTMLFormElement);try{const result=hasCredential?await authClient.changePassword({currentPassword:String(data.get('currentPassword')),newPassword:String(data.get('newPassword')),revokeOtherSessions:true}):await authClient.setPassword({newPassword:String(data.get('newPassword'))});status.textContent=result.error?'密碼更新失敗，請確認資料後再試。':'密碼已更新。';}catch{status.textContent='密碼更新失敗，請確認資料後再試。';}});
+	document.getElementById('revoke-sessions')?.addEventListener('click',async()=>{const result=await authClient.revokeSessions();if(result.error){status.textContent='登出失敗，請稍後再試。';return;}await authClient.signOut();window.location.assign('/account/login');});
+</script>

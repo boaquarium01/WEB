@@ -1,0 +1,29 @@
+---
+import '../styles/global.css';
+
+interface Props {
+	title?: string;
+	description?: string;
+}
+
+const {
+	title = '桃園中壢水博館水族',
+	description = '桃園中壢水博館水族｜淡水魚、水草造景、專業魚缸保養與線上選購',
+} = Astro.props;
+---
+
+<!doctype html>
+<html lang="zh-Hant">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<link rel="icon" href="/favicon.ico" />
+		<meta name="viewport" content="width=device-width" />
+		<meta name="generator" content={Astro.generator} />
+		<meta name="description" content={description} />
+		<title>{title}</title>
+	</head>
+	<body>
+		<slot />
+	</body>
+</html>

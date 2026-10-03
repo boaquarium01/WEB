@@ -1,0 +1,30 @@
+---
+import AccountLayout from '../../layouts/AccountLayout.astro';
+import { isAuthEmailConfigured } from '../../lib/email/adapter';
+
+export const prerender = false;
+const mailConfigured = isAuthEmailConfigured();
+---
+
+<AccountLayout title="驗證 Email｜水博館水族">
+	<h1>驗證 Email</h1>
+	<p class="lead">{Astro.url.searchParams.has('sent') ? '註冊已完成。請前往信箱點選驗證連結，再回來登入。' : '輸入註冊時使用的 Email，我們會以相同訊息回覆是否已寄出。'}</p>
+	{!mailConfigured && <p class="notice">驗證信服務尚未設定，請聯絡網站管理員完成郵件設定。</p>}
+	<form id="verify-form" class="form">
+		<label>Email<input type="email" name="email" required autocomplete="email" /></label>
+		<button type="submit" disabled={!mailConfigured}>重新寄送驗證信</button>
+	</form>
+	<p id="verify-status" class="status" role="status" aria-live="polite"></p>
+	<p class="meta"><a href="/account/login">返回登入</a></p>
+</AccountLayout>
+
+<script>
+	const form = document.getElementById('verify-form');
+	const status = document.getElementById('verify-status');
+	form?.addEventListener('submit', async (event) => {
+		event.preventDefault();
+		const data = new FormData(form);
+		await fetch('/api/account/resend-verification', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:data.get('email') }) });
+		status.textContent = '若此 Email 尚未驗證且已註冊，驗證信將寄至信箱。';
+	});
+</script>

@@ -1,1096 +1,516 @@
 ---
-import Layout from '../../layouts/Layout.astro';
-import Breadcrumbs from '../../components/Breadcrumbs.astro';
-import SanityImage from '../../components/SanityImage.astro';
-import { getProductBySlug } from '../../data/products';
-import { portableTextToHtml, portableBlocksToPlainText } from '../../lib/portableText';
-import { isPortableTextBlocks, strapiBlocksToHtml, strapiBlocksToPlainText } from '../../lib/strapi/blocks';
-import { SITE_TITLE_SHORT } from '../../config/site';
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { portableTextToHtml } from '../../lib/portable-text';
+import {
+	formatTwd,
+	getCatalogProductBySlug,
+} from '../../lib/services/catalog';
 
-/**
- * 必須 SSR：Vercel 上 `PUBLIC_CMS`／`PUBLIC_STRAPI_URL` 在「執行期」才可靠。
- * 若 `prerender = true` + getStaticPaths，會只在建置時抓資料，易與託管環境變數不同步而永遠撈不到 Strapi。
- */
 export const prerender = false;
 
-const slug = String(Astro.params.slug ?? '').trim();
-const product = await getProductBySlug(slug);
+const slug = Astro.params.slug;
+if (!slug) {
+	return Astro.redirect('/products');
+}
 
+const product = await getCatalogProductBySlug(slug);
 if (!product) {
-  return Astro.redirect('/products');
+	return Astro.redirect('/products');
 }
 
-const categoryLabel = product.categoryLabel;
-const categoryHref = `/products/1?category=${encodeURIComponent(product.category)}`;
-function truncateForMeta(input: string, maxLen: number) {
-  const s = String(input ?? '').trim();
-  if (!s) return '';
-  if (s.length <= maxLen) return s;
-  return `${s.slice(0, maxLen).trim()}...`;
-}
-
-function absUrl(href: string) {
-  const s = String(href ?? '').trim();
-  if (!s) return '';
-  if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  return new URL(s, Astro.url.origin).href;
-}
-
-const bodyPlain = isPortableTextBlocks(product.body)
-  ? portableBlocksToPlainText(product.body)
-  : strapiBlocksToPlainText(product.body as unknown[] | null);
-
-const bodyHtml = isPortableTextBlocks(product.body)
-  ? portableTextToHtml(product.body)
-  : strapiBlocksToHtml(product.body as unknown[] | null);
-
-const usePortableBody = Boolean(String(bodyHtml ?? '').trim());
-
-// SEO：優先 Studio 的 seo 欄位，否則由短述或富文本純文字產生
-const pageTitle = product.seoTitle
-  ? `${product.seoTitle}｜${SITE_TITLE_SHORT}`
-  : `${product.name}｜${SITE_TITLE_SHORT}`;
-const seoDescription =
-  product.seoDescription?.trim() ||
-  truncateForMeta(product.excerpt || bodyPlain, 160);
-
-const firstImageSrc = String(product.images[0] ?? '').trim();
-const ogImageUrl = firstImageSrc ? absUrl(firstImageSrc) : '';
-
-function normalizeKeyword(input: unknown) {
-  return String(input ?? '')
-    .trim()
-    .replace(/\s+/g, ' ')
-    .replace(/^,|,$/g, '');
-}
-
-function extractAutoKeywords(text: string, limit = 12): string[] {
-  const t = String(text ?? '').trim();
-  if (!t) return [];
-
-  // 粗略抓取「中文詞組（連續兩字以上）」與英文/數字（兩個以上）
-  const tokens = t.match(/[\u4e00-\u9fff]{2,}|[a-zA-Z0-9]{2,}/g) ?? [];
-  if (tokens.length === 0) return [];
-
-  const freq = new Map<string, number>();
-  const firstIndex = new Map<string, number>();
-
-  tokens.forEach((tok, i) => {
-    // 避免抓到很長的純數字（例如時間戳/ID），讓 keywords 更像「關鍵字」
-    if (/^\d+$/.test(tok) && tok.length > 6) return;
-
-    const k = tok.toLowerCase();
-    freq.set(k, (freq.get(k) ?? 0) + 1);
-    if (!firstIndex.has(k)) firstIndex.set(k, i);
-  });
-
-  return [...freq.keys()]
-    .sort((a, b) => {
-      const fa = freq.get(a) ?? 0;
-      const fb = freq.get(b) ?? 0;
-      if (fa !== fb) return fb - fa;
-      return (firstIndex.get(a) ?? 0) - (firstIndex.get(b) ?? 0);
-    })
-    .slice(0, limit);
-}
-
-// 1) 手動關鍵字：Studio 的 seoKeywords（tags）
-// 2) 自動關鍵字：由名稱+內文抓取
-// 排序要求：手動在前，接著才是自動抓到的（去重後補上）
-const manualKeywords = (product.seoKeywords ?? [])
-  .flatMap((k) => String(k).split(/[,，、]/g))
-  .map(normalizeKeyword)
-  .filter(Boolean);
-
-const manualLower = new Set(manualKeywords.map((k) => k.toLowerCase()));
-const autoKeywords = extractAutoKeywords(`${product.name} ${bodyPlain}`);
-
-const finalKeywords: string[] = [...manualKeywords];
-for (const k of autoKeywords) {
-  const lk = k.toLowerCase();
-  if (manualLower.has(lk)) continue;
-  if (finalKeywords.some((x) => x.toLowerCase() === lk)) continue;
-  finalKeywords.push(k);
-  manualLower.add(lk);
-}
-
-const keywordsMeta = finalKeywords.join(', ');
-Astro.response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=600');
+const bodyHtml = portableTextToHtml(product.body);
+const images = [
+	...(product.imageUrl ? [product.imageUrl] : []),
+	...product.galleryUrls,
+];
+const user = Astro.locals.user;
+const error = Astro.url.searchParams.get('error');
+const added = Astro.url.searchParams.get('added');
+const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 ---
 
-<Layout
-  title={pageTitle}
-  description={seoDescription}
-  keywords={keywordsMeta}
-  ogImage={ogImageUrl || undefined}
-  ogType="article"
+<SiteLayout
+	title={`${product.seoTitle ?? product.name}｜桃園中壢水博館水族`}
+	description={product.seoDescription ?? product.excerpt ?? product.name}
+	wide
+	legacyFooter
+	productBack={{
+		href: product.categorySlug
+			? `/products/1?category=${encodeURIComponent(product.categorySlug)}`
+			: '/products',
+		label: product.categoryLabel ?? '商品列表',
+	}}
 >
-  <div class="page">
-    <header
-      class="site-header sticky top-0 z-[100] border-b border-white/20 bg-white/75 shadow-[0_8px_30px_rgba(0,0,0,0.06)] backdrop-blur-xl backdrop-saturate-150"
-    >
-      <div class="header-inner">
-        <a href={categoryHref} class="back-link" aria-label={`返回${categoryLabel}`}>
-          <i class="fa-solid fa-arrow-left"></i>
-        </a>
-        <a href="/" class="brand">水博館水族</a>
-        <span class="header-spacer" aria-hidden="true"></span>
-      </div>
-    </header>
+	<p class="crumb">
+		<a href="/">首頁</a>
+		<span>/</span>
+		<a href="/products/1">本店商品</a>
+		<span>/</span>
+		{product.categorySlug && product.categoryLabel ? <><a href={`/products/1?category=${encodeURIComponent(product.categorySlug)}`}>{product.categoryLabel}</a><span>/</span></> : null}
+		<span>{product.name}</span>
+	</p>
 
-    <main class="wrap">
-      <Breadcrumbs
-        class="mb-6 reveal-on-scroll"
-        items={[
-          { label: '首頁', href: '/' },
-          { label: '全部商品', href: '/products/1' },
-          {
-            label: categoryLabel,
-            href: categoryHref
-          },
-          { label: product.name }
-        ]}
-      />
+	{error && <p class="banner error">{error}</p>}
+	{added && <p class="banner ok">已加入購物車</p>}
 
-      <article
-        class:list={['detail', 'reveal-on-scroll', 'reveal-on-scroll--delay-sm', { 'detail--no-media': product.images.length === 0 }]}
-      >
-        {product.images.length > 0 && (
-          <div class="detail-media">
-            <div
-              class="product-carousel"
-              data-product-carousel
-              data-product-lightbox-group
-              aria-roledescription="輪播"
-              aria-label={`${product.name} 商品圖片`}
-            >
-              <div class="carousel-main">
-                <div class="carousel-viewport" tabindex="0">
-                  <div class="carousel-track">
-                    {product.images.map((src, i) => {
-                      const ref = product.carouselImageRefs?.[i] ?? null;
-                      const alt = i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`;
-                      return (
-                        <div class="carousel-slide" aria-hidden={i === 0 ? 'false' : 'true'}>
-                          <div class="carousel-slide__stack">
-                            <img
-                              class="carousel-slide__blur"
-                              src={src}
-                              alt=""
-                              aria-hidden="true"
-                              width="1000"
-                              height="750"
-                              loading={i === 0 ? 'eager' : 'lazy'}
-                              decoding="async"
-                            />
-                            {ref ? (
-                              <SanityImage
-                                source={ref}
-                                alt={alt}
-                                sizes="(max-width: 900px) 100vw, 50vw"
-                                priority={i === 0}
-                                width={1200}
-                                height={900}
-                                omitLqipBackground={true}
-                                class="carousel-slide__contain !bg-transparent"
-                              />
-                            ) : (
-                              <div class="carousel-slide__contain">
-                                <img
-                                  class="carousel-slide__img--front carousel-slide__img--fill"
-                                  src={src}
-                                  alt={alt}
-                                  width="1000"
-                                  height="750"
-                                  loading={i === 0 ? 'eager' : 'lazy'}
-                                  decoding="async"
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {product.images.length > 1 && (
-                  <>
-                    <button type="button" class="carousel-nav carousel-prev" aria-label="上一張圖片">
-                      <i class="fa-solid fa-chevron-left" aria-hidden="true" />
-                    </button>
-                    <button type="button" class="carousel-nav carousel-next" aria-label="下一張圖片">
-                      <i class="fa-solid fa-chevron-right" aria-hidden="true" />
-                    </button>
-                    <div class="carousel-dots" role="tablist" aria-label="選擇圖片">
-                      {product.images.map((_, i) => (
-                        <button
-                          type="button"
-                          class:list={['carousel-dot', { 'is-active': i === 0 }]}
-                          aria-label={`第 ${i + 1} 張，共 ${product.images.length} 張`}
-                          aria-selected={i === 0 ? 'true' : 'false'}
-                          role="tab"
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        <div class="detail-body">
-          <p class="category-pill">{categoryLabel}</p>
-          <h1>{product.name}</h1>
-          {usePortableBody ? (
-            <div
-              class="prose prose-slate max-w-none prose-headings:font-bold prose-p:leading-relaxed prose-li:leading-relaxed"
-              set:html={bodyHtml}
-            />
-          ) : (
-            <p class="product-body-empty">尚未填寫商品介紹。</p>
-          )}
-          <p class="note">網站僅供參考請以現場為準，歡迎來店參觀選購。</p>
-          <div class="detail-back-actions">
-            <a href="/" class="btn-secondary">
-              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
-              首頁
-            </a>
-            <a href="/products/1" class="btn-secondary">
-              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
-              全部
-            </a>
-            <a href={categoryHref} class="btn-secondary">
-              <i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
-              {categoryLabel}
-            </a>
-          </div>
-        </div>
-      </article>
-    </main>
+	<article class="detail">
+		<section class="media detail-media">
+			{
+				images.length > 0 ? (
+					<div class="product-carousel" data-product-carousel data-product-lightbox-group aria-roledescription="輪播" aria-label={`${product.name} 商品圖片`}>
+						<div class="carousel-main">
+							<div class="carousel-viewport" tabindex="0" aria-label="滑動瀏覽商品圖片">
+								<div class="carousel-track">
+									{images.map((src, i) => (
+										<button type="button" class="carousel-slide" data-product-lightbox-trigger data-index={String(i)} data-src={src} data-alt={`${product.name}（第 ${i + 1} 張）`} aria-label={`放大檢視第 ${i + 1} 張商品圖片`} aria-hidden={i === 0 ? 'false' : 'true'}>
+											<span class="carousel-slide__stack">
+												<img class="carousel-slide__blur" src={src} alt="" aria-hidden="true" loading={i === 0 ? 'eager' : 'lazy'} />
+												<img class="carousel-slide__image" src={src} alt={i === 0 ? product.name : `${product.name}（第 ${i + 1} 張）`} loading={i === 0 ? 'eager' : 'lazy'} />
+											</span>
+										</button>
+									))}
+								</div>
+							</div>
+							{images.length > 1 && <>
+								<button type="button" class="carousel-nav carousel-prev" aria-label="上一張圖片"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+								<button type="button" class="carousel-nav carousel-next" aria-label="下一張圖片"><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
+								<div class="carousel-dots" role="tablist" aria-label="選擇圖片">
+									{images.map((_, i) => <button type="button" class:list={['carousel-dot', { 'is-active': i === 0 }]} aria-label={`第 ${i + 1} 張，共 ${images.length} 張`} aria-selected={i === 0 ? 'true' : 'false'} role="tab" />)}
+								</div>
+							</>}
+						</div>
+					</div>
+				) : (
+					<div class="placeholder">暫無圖片</div>
+				)
+			}
+		</section>
 
-    <footer class="border-t border-[var(--aq-line)] bg-inherit px-4 py-8 sm:px-6">
-      <div class="mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-2 text-center">
-        <a
-          href="/#about"
-          class="text-sm font-semibold text-[var(--aq-primary-dark)] underline decoration-[1.5px] underline-offset-4 transition hover:text-[var(--aq-primary)]"
-        >
-          聯絡資訊
-        </a>
-        <p class="m-0 text-xs tracking-[0.02em] text-[var(--aq-muted)]">© 2026 水博館水族</p>
-      </div>
-    </footer>
+		<section class="summary">
+			{product.categoryLabel && (
+				<span class="category-pill">{product.categoryLabel}</span>
+			)}
+			<h1>{product.name}</h1>
+			<p class="price">{product.sellingPrice > 0 ? formatTwd(product.sellingPrice) : '價格洽詢'}</p>
+			<p class:list={['stock', { out: !product.inStock }]}>
+				{product.inStock ? (product.available < 0 ? '庫存充足' : `可售庫存 ${product.available}`) : '暫無庫存'}
+			</p>
+			{
+				product.requiresManualConfirmation && (
+					<p class="note">活體商品：出貨前可能需要人工確認。</p>
+				)
+			}
+			{product.excerpt && <p class="excerpt">{product.excerpt}</p>}
 
-    <div
-      id="productImageLightbox"
-      class="product-lightbox"
-      hidden
-      role="dialog"
-      aria-modal="true"
-      aria-label="放大檢視商品圖"
-    >
-      <button
-        type="button"
-        id="productLightboxBackdrop"
-        class="product-lightbox__backdrop"
-        aria-label="關閉放大圖"
-      ></button>
-      <button type="button" id="productLightboxClose" class="product-lightbox__close" aria-label="關閉">
-        <i class="fa-solid fa-xmark text-lg" aria-hidden="true"></i>
-      </button>
-      <button
-        type="button"
-        id="productLightboxPrev"
-        class="product-lightbox__nav product-lightbox__nav--prev"
-        aria-label="上一張"
-        hidden
-      >
-        <i class="fa-solid fa-chevron-left text-xl" aria-hidden="true"></i>
-      </button>
-      <button
-        type="button"
-        id="productLightboxNext"
-        class="product-lightbox__nav product-lightbox__nav--next"
-        aria-label="下一張"
-        hidden
-      >
-        <i class="fa-solid fa-chevron-right text-xl" aria-hidden="true"></i>
-      </button>
-      <div id="productLightboxShell" class="product-lightbox__shell">
-        <img id="productLightboxImg" class="product-lightbox__img" alt="" decoding="async" />
-      </div>
-      <p id="productLightboxCounter" class="product-lightbox__counter" aria-live="polite" hidden></p>
-    </div>
-  </div>
-</Layout>
+			{
+				user && defaultSkuId && product.sellingPrice > 0 ? (
+					<form method="post" action="/api/cart/add" class="add-form">
+						<input type="hidden" name="returnTo" value={`/product/${product.slug}`} />
+						{product.skus.length > 1 ? (
+							<label>
+								規格
+								<select name="productSkuId" required>
+									{product.skus.map((sku) => (
+										<option value={sku.id} selected={sku.id === defaultSkuId}>
+										{sku.name} · {formatTwd(sku.sellingPrice)}（{sku.available < 0 ? '庫存充足' : `庫存 ${sku.available}`}）
+										</option>
+									))}
+								</select>
+							</label>
+						) : (
+							<input type="hidden" name="productSkuId" value={defaultSkuId} />
+						)}
+						<label>
+							數量
+							<input
+								type="number"
+								name="quantity"
+								min="1"
+								{...(product.available >= 0 ? { max: Math.max(product.available, 1) } : {})}
+								value="1"
+								required
+							/>
+						</label>
+						<button
+							class="btn-primary"
+							type="submit"
+							disabled={!product.inStock}
+						>
+							加入購物車
+						</button>
+					</form>
+				) : !user ? (
+					<p class="login-hint">
+						<a href={`/account/login?next=${encodeURIComponent(`/product/${product.slug}`)}`}>
+							登入
+						</a>
+						後即可加入購物車
+					</p>
+				) : <p class="note">商品價格尚待確認，請洽門市或 LINE 詢問。</p>
+			}
+
+			{
+				bodyHtml ? (
+					<section class="body">
+						<h2>商品介紹</h2>
+						<div class="prose" set:html={bodyHtml} />
+					</section>
+				) : (
+					<p class="product-body-empty">尚未填寫商品介紹。</p>
+				)
+			}
+			<p class="ref-note">網站價格／庫存供參考，實際以門市與訂單確認為準。</p>
+			<div class="detail-back-actions">
+				<a href="/" class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>首頁</a>
+				<a href="/products/1" class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>全部</a>
+				{product.categorySlug && product.categoryLabel && <a href={`/products/1?category=${encodeURIComponent(product.categorySlug)}`} class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>{product.categoryLabel}</a>}
+			</div>
+		</section>
+	</article>
+
+	<div id="productLightbox" class="product-lightbox" hidden role="dialog" aria-modal="true" aria-label="放大檢視商品圖片">
+		<button type="button" id="productLbBackdrop" class="product-lightbox__backdrop" aria-label="關閉放大圖"></button>
+		<button type="button" id="productLbClose" class="product-lightbox__close" aria-label="關閉">
+			<i class="fa-solid fa-xmark" aria-hidden="true"></i>
+		</button>
+		<button type="button" id="productLbPrev" class="product-lightbox__nav product-lightbox__nav--prev" aria-label="上一張" hidden>
+			<i class="fa-solid fa-chevron-left" aria-hidden="true"></i>
+		</button>
+		<button type="button" id="productLbNext" class="product-lightbox__nav product-lightbox__nav--next" aria-label="下一張" hidden>
+			<i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+		</button>
+		<div id="productLbShell" class="product-lightbox__shell">
+			<img id="productLbImg" class="product-lightbox__img" alt="" decoding="async" />
+		</div>
+		<p id="productLbCounter" class="product-lightbox__counter" aria-live="polite" hidden></p>
+	</div>
+
+</SiteLayout>
 
 <style>
-  /* 使用 svh 避免 100dvh 隨網址列收合改變高度，導致整頁重排與捲動位置跳動（手機明顯） */
-  .page {
-    min-height: 100vh;
-    min-height: 100svh;
-    background: #fff;
-    color: #111;
-  }
+	.crumb {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.45rem;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+		margin: 0 0 1rem;
+	}
 
-  .header-inner {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 12px;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 12px 16px;
-    min-height: 56px;
-  }
+	.crumb a {
+		text-decoration: none;
+	}
 
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    color: #111;
-    transition: transform 0.2s ease, background 0.15s ease, box-shadow 0.2s ease;
-  }
+	.banner {
+		padding: 0.75rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		margin-bottom: 1rem;
+	}
 
-  @media (hover: hover) and (pointer: fine) {
-    .back-link:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 10px rgba(26, 34, 33, 0.06);
-    }
-  }
+	.banner.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
 
-  .back-link:hover {
-    background: #f5f5f5;
-  }
+	.banner.error {
+		background: rgba(180, 35, 24, 0.08);
+		color: var(--aq-danger);
+	}
 
-  .brand {
-    justify-self: center;
-    font-weight: 800;
-    font-size: 1.0625rem;
-    letter-spacing: 0.04em;
-    color: #111;
-  }
+	.detail {
+		display: grid;
+		gap: 28px;
+		align-items: start;
+	}
 
-  .header-spacer {
-    width: 40px;
-  }
+	@media (min-width: 900px) {
+		.detail {
+			grid-template-columns: 1fr 1fr;
+		}
+	}
 
-  .wrap {
-    width: 100%;
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 24px 16px 48px;
-  }
+	.product-carousel,.carousel-main{position:relative}.carousel-viewport{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pinch-zoom}.carousel-viewport::-webkit-scrollbar{display:none}.carousel-track{display:flex}.carousel-slide{position:relative;flex:0 0 100%;aspect-ratio:4/3;overflow:hidden;padding:0;border:0;background:#e8e8e8;scroll-snap-align:start;scroll-snap-stop:always;cursor:zoom-in;-webkit-tap-highlight-color:transparent}.carousel-slide:focus-visible{outline:3px solid var(--aq-primary);outline-offset:-3px}.carousel-slide__stack{position:absolute;inset:0;overflow:hidden}.carousel-slide__blur{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;filter:blur(26px);transform:scale(1.14);opacity:.9;pointer-events:none}.carousel-slide__image{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain;object-position:center;background:transparent}.carousel-nav{position:absolute;top:50%;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:1px solid rgba(0,0,0,.08);border-radius:50%;color:#333;background:rgba(255,255,255,.9);box-shadow:0 1px 6px rgba(0,0,0,.08);transform:translateY(-50%);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease}.carousel-main:hover .carousel-nav,.carousel-main:focus-within .carousel-nav,.carousel-main.carousel-show-nav .carousel-nav{opacity:1;pointer-events:auto}.carousel-prev{left:10px}.carousel-next{right:10px}.carousel-dots{position:absolute;left:0;right:0;bottom:12px;z-index:2;display:flex;justify-content:center;gap:8px}.carousel-dot{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.2);cursor:pointer}.carousel-dot.is-active{background:#111;box-shadow:0 0 0 2px rgba(255,255,255,.9);transform:scale(1.2)}@media(prefers-reduced-motion:reduce){.carousel-slide__blur{filter:none;transform:none;opacity:.45}.carousel-nav{transition:none}}
 
-  .detail {
-    display: grid;
-    gap: 28px;
-  }
+	.product-lightbox {
+		position: fixed;
+		inset: 0;
+		z-index: 9999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+		box-sizing: border-box;
+	}
 
-  @media (min-width: 900px) {
-    .detail:not(.detail--no-media) {
-      grid-template-columns: 1fr 1fr;
-      align-items: start;
-    }
-  }
+	.product-lightbox[hidden] { display: none !important; }
 
-  .detail-media {
-    border-radius: 12px;
-    overflow: hidden;
-    border: 1px solid #eee;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-    background: #f5f5f5;
-  }
+	.product-lightbox__backdrop {
+		position: absolute;
+		inset: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: rgba(0, 0, 0, 0.82);
+		cursor: pointer;
+	}
 
-  .category-pill {
-    display: inline-block;
-    margin: 0 0 12px;
-    padding: 4px 12px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    background: #f0f0f0;
-    border-radius: 999px;
-    color: #333;
-  }
+	.product-lightbox__close,
+	.product-lightbox__nav {
+		position: absolute;
+		z-index: 2;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 0;
+		color: #111;
+		background: rgba(255, 255, 255, 0.96);
+		cursor: pointer;
+	}
 
-  .detail-body h1 {
-    margin: 0 0 12px;
-    font-size: clamp(1.5rem, 3vw, 2rem);
-    font-weight: 800;
-    line-height: 1.25;
-  }
+	.product-lightbox__close {
+		top: max(10px, env(safe-area-inset-top));
+		right: max(10px, env(safe-area-inset-right));
+		width: 46px;
+		height: 46px;
+		border-radius: 50%;
+	}
 
-  .product-body-empty {
-    margin: 0 0 14px;
-    padding: 16px 18px;
-    font-size: 0.9375rem;
-    line-height: 1.65;
-    color: #64748b;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-  }
+	.product-lightbox__nav {
+		top: 50%;
+		width: 48px;
+		height: 64px;
+		border-radius: 12px;
+		transform: translateY(-50%);
+	}
 
-  .prose p {
-    margin: 0 0 14px;
-    line-height: 1.85;
-    color: #333;
-    font-size: 0.9375rem;
-  }
+	.product-lightbox__nav:not([hidden]) { display: inline-flex; }
+	.product-lightbox__nav--prev { left: max(12px, env(safe-area-inset-left)); }
+	.product-lightbox__nav--next { right: max(12px, env(safe-area-inset-right)); }
 
-  .note {
-    margin: 24px 0 20px;
-    padding: 14px 16px;
-    background: #fafafa;
-    border: 1px solid #eee;
-    border-radius: 8px;
-    font-size: 0.875rem;
-    color: #555;
-    line-height: 1.6;
-  }
+	.product-lightbox__shell {
+		position: relative;
+		z-index: 1;
+		max-width: min(96vw, 1200px);
+		max-height: min(88vh, 900px);
+		touch-action: none;
+	}
 
-  .detail-back-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-  }
+	.product-lightbox__img {
+		display: block;
+		max-width: 100%;
+		max-height: min(88vh, 900px);
+		width: auto;
+		height: auto;
+		object-fit: contain;
+		border-radius: 6px;
+		box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+		user-select: none;
+	}
 
-  .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45em;
-    padding: 10px 20px;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: #111;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background: #fff;
-  }
+	.product-lightbox__counter {
+		position: absolute;
+		left: 50%;
+		bottom: max(8px, env(safe-area-inset-bottom));
+		z-index: 3;
+		margin: 0;
+		padding: 8px 16px;
+		border-radius: 999px;
+		color: #fff;
+		background: rgba(15, 23, 42, 0.72);
+		transform: translateX(-50%);
+		pointer-events: none;
+	}
 
-  .btn-secondary .fa-arrow-left {
-    font-size: 0.75em;
-    opacity: 0.7;
-  }
+	.product-lightbox__counter[hidden] { display: none !important; }
 
-  .btn-secondary:hover {
-    background: #f5f5f5;
-  }
+	.placeholder {
+		min-height: 16rem;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-lg);
+		display: grid;
+		place-items: center;
+		color: var(--aq-muted);
+		background: #fff;
+	}
 
-  .product-carousel {
-    position: relative;
-  }
+	.summary {
+		min-width: 0;
+	}
 
-  .carousel-main {
-    position: relative;
-  }
+	.category-pill{display:inline-block;margin:0 0 12px;padding:4px 12px;border-radius:999px;background:#f0f0f0;color:#333;font-size:.8125rem;font-weight:600}
 
-  .carousel-viewport {
-    overflow-x: auto;
-    overflow-y: hidden;
-    scroll-snap-type: x mandatory;
-    /* 勿用 CSS smooth：iOS 上易與手勢／snap 衝突；改由 JS 在按鈕換頁時再決定 behavior */
-    scroll-behavior: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    touch-action: pan-x pinch-zoom;
-  }
+	h1 {
+		margin: 0 0 12px;
+		font-size: clamp(1.5rem, 3vw, 2rem);
+		font-weight: 800;
+		line-height: 1.25;
+	}
 
-  .carousel-viewport::-webkit-scrollbar {
-    display: none;
-  }
+	.price {
+		margin: 0;
+		font-size: 1.45rem;
+		font-weight: 750;
+		color: var(--aq-primary-dark);
+	}
 
-  .carousel-track {
-    display: flex;
-  }
+	.stock {
+		margin: 0.35rem 0 0;
+		color: var(--aq-muted);
+	}
 
-  .carousel-slide {
-    flex: 0 0 100%;
-    scroll-snap-align: start;
-    scroll-snap-stop: always;
-    position: relative;
-    aspect-ratio: 4 / 3;
-    overflow: hidden;
-    background: #e8e8e8;
-  }
+	.stock.out {
+		color: var(--aq-danger);
+	}
 
-  .carousel-slide__stack {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-  }
+	.note,
+	.excerpt,
+	.ref-note,
+	.login-hint {
+		color: var(--aq-muted);
+		line-height: 1.6;
+	}
 
-  /**
-   * 底層：同圖放大裁切 + 模糊，填滿留白區
-   * 前景：完整顯示、不裁切（object-contain）
-   */
-  .carousel-slide__blur {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    object-fit: cover;
-    object-position: center;
-    transform: scale(1.14);
-    filter: blur(26px);
-    opacity: 0.9;
-    pointer-events: none;
-    user-select: none;
-  }
+	.add-form {
+		display: grid;
+		gap: 0.75rem;
+		margin: 1.1rem 0;
+	}
 
-  @media (prefers-reduced-motion: reduce) {
-    .carousel-slide__blur {
-      filter: none;
-      transform: none;
-      opacity: 0.45;
-    }
-  }
+	label {
+		display: grid;
+		gap: 0.35rem;
+		font-size: 0.92rem;
+	}
 
-  /**
-   * 前景圖：填滿輪播格 + object-contain 盡量大（完整顯示、不裁切）
-   * 使用 .carousel-slide__img--fill + 強制覆寫全站 img{max-width;height:auto}，避免 flex+max% 變成中間小圖
-   */
-  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain) {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    min-height: 0;
-    width: 100%;
-    height: 100%;
-    box-sizing: border-box;
-    background: transparent;
-  }
+	input,
+	select {
+		padding: 0.65rem 0.75rem;
+		border-radius: var(--aq-radius-sm);
+		border: 1px solid var(--aq-line);
+		background: #fff;
+		color: var(--aq-ink);
+	}
 
-  /* SanityImage 的 img 在子元件內，須 :global 才會套上 */
-  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain > img.carousel-slide__img--fill) {
-    position: absolute !important;
-    inset: 0 !important;
-    display: block !important;
-    width: 100% !important;
-    height: 100% !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    object-fit: contain !important;
-    object-position: center center !important;
-  }
+	button:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
 
-  .carousel-nav {
-    position: absolute;
-    top: 50%;
-    z-index: 3;
-    transform: translateY(-50%);
-    width: 32px;
-    height: 32px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 999px;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.7rem;
-    color: #333;
-    background: rgba(255, 255, 255, 0.88);
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
-    cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      opacity 0.2s ease,
-      color 0.15s ease,
-      background 0.15s ease,
-      border-color 0.15s ease;
-  }
+	.back {
+		text-decoration: none;
+	}
 
-  .carousel-main:hover .carousel-nav,
-  .carousel-main:focus-within .carousel-nav,
-  .carousel-main.carousel-show-nav .carousel-nav {
-    opacity: 1;
-    pointer-events: auto;
-  }
+	.detail-back-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:1.25rem}.detail-back-actions .btn-secondary{display:inline-flex;align-items:center;gap:.45em;padding:10px 20px;border:1px solid #ccc;border-radius:8px;background:#fff;color:#111;font-size:.9375rem;font-weight:600;text-decoration:none}.detail-back-actions .btn-secondary:hover{background:#f5f5f5}.detail-back-actions .fa-arrow-left{font-size:.75em;opacity:.7}
 
-  .carousel-nav:hover {
-    color: #111;
-    background: #fff;
-    border-color: rgba(0, 0, 0, 0.12);
-  }
+	.body {
+		margin: 1.4rem 0 1rem;
+	}
 
-  .carousel-nav:focus-visible {
-    opacity: 1;
-    pointer-events: auto;
-    outline: 2px solid #111;
-    outline-offset: 2px;
-  }
+	.body h2 {
+		margin: 0 0 1rem;
+		font-size: 1.15rem;
+	}
 
-  .carousel-prev {
-    left: 10px;
-  }
+	.prose :global(p) {
+		line-height: 1.85;
+		color: #333;
+		font-size: .9375rem;
+		margin: 0 0 0.9rem;
+	}
 
-  .carousel-next {
-    right: 10px;
-  }
-
-  @media (min-width: 480px) {
-    .carousel-nav {
-      width: 36px;
-      height: 36px;
-      font-size: 0.75rem;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .carousel-nav {
-      transition: none;
-    }
-  }
-
-  .carousel-dots {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 12px;
-    z-index: 2;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    pointer-events: none;
-  }
-
-  .carousel-dots .carousel-dot {
-    pointer-events: auto;
-  }
-
-  .carousel-dot {
-    width: 8px;
-    height: 8px;
-    padding: 0;
-    border: none;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.7);
-    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
-    cursor: pointer;
-    transition: transform 0.15s ease, background 0.15s ease;
-  }
-
-  .carousel-dot.is-active {
-    background: #111;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
-    transform: scale(1.2);
-  }
-
-  .carousel-dot:focus-visible {
-    outline: 2px solid #fff;
-    outline-offset: 2px;
-  }
-
-  .product-carousel .carousel-slide__stack :global(.carousel-slide__contain img) {
-    cursor: zoom-in;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .product-lightbox {
-    position: fixed;
-    inset: 0;
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-      max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-    box-sizing: border-box;
-  }
-
-  .product-lightbox[hidden] {
-    display: none !important;
-  }
-
-  .product-lightbox:not([hidden]) {
-    animation: product-lb-fade-in 0.22s ease-out;
-  }
-
-  @keyframes product-lb-fade-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  .product-lightbox__backdrop {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: rgba(0, 0, 0, 0.78);
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .product-lightbox__shell {
-    position: relative;
-    z-index: 1;
-    max-width: min(96vw, 1400px);
-    max-height: min(92vh, 900px);
-    margin: 0;
-    pointer-events: auto;
-    touch-action: none;
-    cursor: grab;
-  }
-
-  .product-lightbox__shell:active,
-  .product-lightbox__shell.is-dragging {
-    cursor: grabbing;
-  }
-
-  @media (pointer: fine) {
-    .product-lightbox__shell {
-      cursor: default;
-      touch-action: auto;
-    }
-    .product-lightbox__shell:active,
-    .product-lightbox__shell.is-dragging {
-      cursor: default;
-    }
-  }
-
-  .product-lightbox__img {
-    display: block;
-    max-width: 100%;
-    max-height: min(92vh, 900px);
-    width: auto;
-    height: auto;
-    object-fit: contain;
-    pointer-events: auto;
-    border-radius: 4px;
-    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .product-lightbox:not([hidden]) {
-      animation: none;
-    }
-  }
-
-  .product-lightbox__close {
-    position: absolute;
-    top: max(10px, env(safe-area-inset-top, 0px));
-    right: max(10px, env(safe-area-inset-right, 0px));
-    z-index: 2;
-    display: inline-flex;
-    width: 46px;
-    height: 46px;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.96);
-    color: #0f172a;
-    cursor: pointer;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .product-lightbox__nav {
-    position: absolute;
-    top: 50%;
-    z-index: 3;
-    display: none;
-    width: min(20vw, 160px);
-    height: min(72vh, 560px);
-    max-height: calc(100% - 120px);
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.92);
-    cursor: pointer;
-    transform: translateY(-50%);
-    -webkit-tap-highlight-color: transparent;
-  }
-  @media (pointer: fine) {
-    .product-lightbox__nav:not([hidden]) {
-      display: inline-flex;
-    }
-  }
-  .product-lightbox__nav--prev {
-    left: max(10px, env(safe-area-inset-left, 0px));
-  }
-  .product-lightbox__nav--next {
-    right: max(10px, env(safe-area-inset-right, 0px));
-  }
-
-  .product-lightbox__counter {
-    position: absolute;
-    left: 50%;
-    bottom: max(8px, env(safe-area-inset-bottom, 0px));
-    z-index: 4;
-    margin: 0;
-    padding: 8px 16px;
-    border-radius: 999px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: #fff;
-    background: rgba(15, 23, 42, 0.72);
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-
-  .product-lightbox__counter[hidden] {
-    display: none !important;
-  }
+	.product-body-empty{margin:1rem 0;padding:16px 18px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#64748b;font-size:.9375rem;line-height:1.65}
+	.detail-media{overflow:hidden;border:1px solid #eee;border-radius:12px;background:#f5f5f5;box-shadow:0 4px 20px rgba(0,0,0,.08)}
 </style>
 
 <script>
-  import { setupGalleryLightbox } from '../../scripts/galleryLightbox';
+	import { setupGalleryLightbox } from '../../scripts/galleryLightbox';
 
-  function setupProductCarousels() {
-    document.querySelectorAll('[data-product-carousel]').forEach((root) => {
-      if (!(root instanceof HTMLElement)) return;
-      if (root.dataset.carouselInit === '1') return;
-      root.dataset.carouselInit = '1';
+	function setupProductCarousels() {
+		document.querySelectorAll('[data-product-carousel]').forEach((root) => {
+			if (!(root instanceof HTMLElement) || root.dataset.carouselInit === '1') return;
+			root.dataset.carouselInit = '1';
+			const viewport = root.querySelector('.carousel-viewport');
+			const main = root.querySelector('.carousel-main');
+			const slides = Array.from(root.querySelectorAll('.carousel-slide'));
+			const prev = root.querySelector('.carousel-prev');
+			const next = root.querySelector('.carousel-next');
+			const dots = Array.from(root.querySelectorAll('.carousel-dot'));
+			if (!(viewport instanceof HTMLElement) || !(main instanceof HTMLElement) || slides.length < 2) return;
+			let index = 0;
+			let timer = 0;
+			let hideNavTimer = 0;
+			let ticking = false;
+			const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			const setIndex = (nextIndex, behavior = reducedMotion ? 'auto' : 'smooth') => {
+				index = (nextIndex + slides.length) % slides.length;
+				viewport.scrollTo({ left: index * viewport.clientWidth, behavior });
+				slides.forEach((slide, i) => slide.setAttribute('aria-hidden', String(i !== index)));
+				dots.forEach((dot, i) => {
+					dot.classList.toggle('is-active', i === index);
+					dot.setAttribute('aria-selected', String(i === index));
+				});
+			};
+			const stop = () => { if (timer) window.clearInterval(timer); timer = 0; };
+			const start = () => {
+				stop();
+				if (reducedMotion || document.hidden) return;
+				timer = window.setInterval(() => setIndex(index + 1, 'auto'), 5500);
+			};
+			prev?.addEventListener('click', () => { setIndex(index - 1); start(); });
+			next?.addEventListener('click', () => { setIndex(index + 1); start(); });
+			dots.forEach((dot, i) => dot.addEventListener('click', () => { setIndex(i); start(); }));
+			viewport.addEventListener('pointerdown', stop, { passive: true });
+			viewport.addEventListener('pointerup', start, { passive: true });
+			viewport.addEventListener('pointercancel', start, { passive: true });
+			main.addEventListener('pointerdown', (event) => {
+				if (event.pointerType !== 'touch') return;
+				main.classList.add('carousel-show-nav');
+				window.clearTimeout(hideNavTimer);
+				hideNavTimer = window.setTimeout(() => main.classList.remove('carousel-show-nav'), 4200);
+			}, { passive: true });
+			viewport.addEventListener('scroll', () => {
+				if (ticking) return;
+				ticking = true;
+				requestAnimationFrame(() => {
+					ticking = false;
+					const active = Math.round(viewport.scrollLeft / Math.max(1, viewport.clientWidth));
+					if (active !== index) setIndex(active, 'auto');
+				});
+			}, { passive: true });
+			main.addEventListener('mouseenter', stop);
+			main.addEventListener('mouseleave', start);
+			document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
+			window.addEventListener('resize', () => setIndex(index, 'auto'));
+			start();
+		});
+	}
 
-      const main = root.querySelector('.carousel-main');
-      const viewport = root.querySelector('.carousel-viewport');
-      const slides = root.querySelectorAll('.carousel-slide');
-      const prevBtn = root.querySelector('.carousel-prev');
-      const nextBtn = root.querySelector('.carousel-next');
-      const dots = root.querySelectorAll('.carousel-dot');
+	function setupProductLightbox() {
+		setupGalleryLightbox({
+			pageRootSelector: '[data-product-lightbox-group]',
+			triggerSelector: '[data-product-lightbox-trigger]',
+			indexOfTrigger: (trigger) => Number(trigger.dataset.index ?? 0),
+			collectItems: () => Array.from(document.querySelectorAll('[data-product-lightbox-trigger]'))
+				.map((element) => ({
+					src: element.getAttribute('data-src') ?? '',
+					alt: element.getAttribute('data-alt') ?? '',
+				}))
+				.filter((item) => item.src),
+			lightboxId: 'productLightbox',
+			backdropId: 'productLbBackdrop',
+			closeBtnId: 'productLbClose',
+			shellId: 'productLbShell',
+			imgId: 'productLbImg',
+			counterId: 'productLbCounter',
+			prevBtnId: 'productLbPrev',
+			nextBtnId: 'productLbNext',
+			wheelDismiss: true,
+			swipeDownDismiss: true,
+		});
+	}
 
-      if (
-        !(main instanceof HTMLElement) ||
-        !(viewport instanceof HTMLElement) ||
-        slides.length < 2
-      ) {
-        return;
-      }
-
-      const TOUCH_NAV_MS = 4200;
-      let hideNavTimer = 0;
-      function revealNavForTouch() {
-        main.classList.add('carousel-show-nav');
-        window.clearTimeout(hideNavTimer);
-        hideNavTimer = window.setTimeout(() => {
-          main.classList.remove('carousel-show-nav');
-        }, TOUCH_NAV_MS);
-      }
-
-      main.addEventListener(
-        'pointerdown',
-        (e) => {
-          if (e.pointerType === 'touch') revealNavForTouch();
-        },
-        { passive: true }
-      );
-
-      const reduceMotion =
-        typeof window.matchMedia === 'function' &&
-        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-      const AUTOPLAY_MS = 5500;
-      let autoplayTimer = 0;
-      let scrollProgrammatic = false;
-      /** 輪播是否在視窗內；離開視窗時必須停 autoplay，否則背景水平捲動與垂直捲動在 iOS 上會互搶造成顫動 */
-      let carouselInView = true;
-
-      let index = 0;
-      let ticking = false;
-
-      const slideWidth = () => viewport.clientWidth;
-
-      function syncDots(active) {
-        dots.forEach((dot, j) => {
-          dot.classList.toggle('is-active', j === active);
-          dot.setAttribute('aria-selected', String(j === active));
-        });
-        slides.forEach((slide, j) => {
-          slide.setAttribute('aria-hidden', String(j !== active));
-        });
-      }
-
-      function clearAutoplay() {
-        if (autoplayTimer) {
-          window.clearInterval(autoplayTimer);
-          autoplayTimer = 0;
-        }
-      }
-
-      function scheduleAutoplay() {
-        if (reduceMotion || slides.length < 2 || !carouselInView) return;
-        clearAutoplay();
-        autoplayTimer = window.setInterval(() => {
-          goTo(index + 1, { behavior: 'auto' });
-        }, AUTOPLAY_MS);
-      }
-
-      function onUserNavigation() {
-        clearAutoplay();
-        scheduleAutoplay();
-      }
-
-      function goTo(i, opts?: { behavior?: ScrollBehavior }) {
-        const n = slides.length;
-        index = ((i % n) + n) % n;
-        scrollProgrammatic = true;
-        const behavior: ScrollBehavior =
-          opts?.behavior ?? (reduceMotion ? 'auto' : 'smooth');
-        viewport.scrollTo({
-          left: index * slideWidth(),
-          behavior
-        });
-        syncDots(index);
-        window.setTimeout(() => {
-          scrollProgrammatic = false;
-        }, behavior === 'smooth' ? 1000 : 80);
-      }
-
-      const extendTouchNav = (el) => {
-        el?.addEventListener(
-          'pointerdown',
-          (e) => {
-            if (e.pointerType === 'touch') revealNavForTouch();
-          },
-          { passive: true }
-        );
-      };
-
-      prevBtn?.addEventListener('click', () => {
-        goTo(index - 1);
-        onUserNavigation();
-      });
-      nextBtn?.addEventListener('click', () => {
-        goTo(index + 1);
-        onUserNavigation();
-      });
-      extendTouchNav(prevBtn);
-      extendTouchNav(nextBtn);
-      dots.forEach((dot, i) => {
-        dot.addEventListener('click', () => {
-          goTo(i);
-          onUserNavigation();
-        });
-        extendTouchNav(dot);
-      });
-
-      viewport.addEventListener(
-        'pointerdown',
-        () => {
-          onUserNavigation();
-        },
-        { passive: true }
-      );
-
-      viewport.addEventListener('scroll', () => {
-        if (ticking) return;
-        ticking = true;
-        requestAnimationFrame(() => {
-          ticking = false;
-          const w = Math.max(1, slideWidth());
-          const i = Math.round(viewport.scrollLeft / w);
-          if (i >= 0 && i < slides.length && i !== index) {
-            index = i;
-            syncDots(index);
-          }
-        });
-      }, { passive: true });
-
-      main.addEventListener('mouseenter', clearAutoplay);
-      main.addEventListener('mouseleave', scheduleAutoplay);
-
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) clearAutoplay();
-        else if (carouselInView) scheduleAutoplay();
-      });
-
-      if (typeof IntersectionObserver !== 'undefined') {
-        const vio = new IntersectionObserver(
-          (entries) => {
-            for (const e of entries) {
-              carouselInView = e.isIntersecting;
-              if (carouselInView) scheduleAutoplay();
-              else clearAutoplay();
-            }
-          },
-          { root: null, threshold: 0.08 }
-        );
-        vio.observe(root);
-      }
-
-      let resizeTimer;
-      let lastInnerWidth = window.innerWidth;
-      window.addEventListener('resize', () => {
-        const w = window.innerWidth;
-        if (w === lastInnerWidth) return;
-        lastInnerWidth = w;
-        clearTimeout(resizeTimer);
-        resizeTimer = window.setTimeout(() => {
-          scrollProgrammatic = true;
-          viewport.scrollTo({ left: index * slideWidth(), behavior: 'auto' });
-          window.setTimeout(() => {
-            scrollProgrammatic = false;
-          }, 100);
-        }, 120);
-      });
-
-      scheduleAutoplay();
-    });
-  }
-
-  setupProductCarousels();
-
-  function setupProductImageLightbox() {
-    setupGalleryLightbox({
-      pageRootSelector: '[data-product-lightbox-group]',
-      triggerSelector: '.carousel-slide',
-      ignoreSelector: '.carousel-nav, .carousel-dot',
-      indexOfTrigger: (trigger) => {
-        const root = trigger.closest('[data-product-lightbox-group]');
-        if (!(root instanceof HTMLElement)) return 0;
-        const slides = Array.from(root.querySelectorAll('.carousel-slide'));
-        const i = slides.indexOf(trigger);
-        return i >= 0 ? i : 0;
-      },
-      collectItems: () => {
-        const root = document.querySelector('[data-product-lightbox-group]');
-        if (!(root instanceof HTMLElement)) return [];
-        return Array.from(root.querySelectorAll('.carousel-slide'))
-          .map((slide) => {
-            const img = slide.querySelector('.carousel-slide__contain img');
-            if (!(img instanceof HTMLImageElement)) return null;
-            const src = String(img.currentSrc || img.src || '').trim();
-            if (!src) return null;
-            return { src, alt: img.alt || '' };
-          })
-          .filter((x): x is { src: string; alt: string } => x !== null);
-      },
-      lightboxId: 'productImageLightbox',
-      backdropId: 'productLightboxBackdrop',
-      closeBtnId: 'productLightboxClose',
-      shellId: 'productLightboxShell',
-      imgId: 'productLightboxImg',
-      counterId: 'productLightboxCounter',
-      prevBtnId: 'productLightboxPrev',
-      nextBtnId: 'productLightboxNext',
-      wheelDismiss: true,
-      swipeDownDismiss: true
-    });
-  }
-
-  setupProductImageLightbox();
-  document.addEventListener('astro:page-load', setupProductImageLightbox);
+	setupProductLightbox();
+	setupProductCarousels();
+	document.addEventListener('astro:page-load', setupProductLightbox);
+	document.addEventListener('astro:page-load', setupProductCarousels);
 </script>

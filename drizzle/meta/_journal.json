@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1789978355942,
+      "tag": "0000_slippery_spectrum",
+      "breakpoints": true
+    },
+    {
+      "breakpoints": true,
+      "when": 1790257709321,
+      "version": "7",
+      "idx": 1,
+      "tag": "0001_add_customer_bank_account_last_five"
+    },
+    {
+      "breakpoints": true,
+      "when": 1790370000000,
+      "version": "7",
+      "idx": 2,
+      "tag": "0002_unlimited_inventory_default"
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790428353063,
+      "tag": "0003_wise_jackal",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790429019726,
+      "tag": "0004_nostalgic_ulik",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791000000000,
+      "tag": "0005_auth_member_security",
+      "breakpoints": true
+    }
+  ]
+}

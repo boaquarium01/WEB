@@ -1,22 +1,16 @@
 ---
-/**
- * 分類瀏覽已併入「全部商品」篩選（單一路徑、避免兩套頁面）。
- * 舊連結 /category/:slug 永久導向 /products/1?category=:slug
- */
+/** V1 compatibility route: category browsing uses the paginated catalog filter. */
 import { getAllCategories } from '../../data/products';
 
+export const prerender = false;
+
 const slug = String(Astro.params.category ?? '').trim();
-if (!slug) {
-  return Astro.redirect('/products/1', 301);
-}
+if (!slug) return Astro.redirect('/products/1', 301);
 
 const categories = await getAllCategories();
-const exists = (categories ?? []).some((c) => c.id === slug);
-
-if (!exists) {
-  return Astro.redirect('/products/1', 301);
+if (!categories.some((category) => category.id === slug)) {
+	return Astro.redirect('/products/1', 301);
 }
 
-const qs = new URLSearchParams({ category: slug }).toString();
-return Astro.redirect(`/products/1?${qs}`, 301);
+return Astro.redirect(`/products/1?${new URLSearchParams({ category: slug })}`, 301);
 ---

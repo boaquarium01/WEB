@@ -3,9 +3,10 @@ import Layout from '../../../layouts/Layout.astro';
 import { SITE_TITLE_SHORT } from '../../../config/site';
 import { readStrapiAdminBaseUrl } from '../../../lib/strapi/env';
 import { readAdminBackend } from '../../../lib/admin/adminBackend';
-import promotionSchema from '../../../../strapi-cms/src/api/promotion/content-types/promotion/schema.json';
-import productSchema from '../../../../strapi-cms/src/api/product/content-types/product/schema.json';
-import categorySchema from '../../../../strapi-cms/src/api/category/content-types/category/schema.json';
+import { getAdminBasePath } from '../../../lib/admin/path';
+import promotionSchema from '../../../data/admin-schemas/promotion/schema.json';
+import productSchema from '../../../data/admin-schemas/product/schema.json';
+import categorySchema from '../../../data/admin-schemas/category/schema.json';
 
 type Schema = {
   config?: { metadatas?: Record<string, { edit?: { label?: string } }> };
@@ -28,6 +29,7 @@ const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
 const adminBackend = readAdminBackend();
 /** 官網前台 origin（供「官網預覽／QR」）；可用 PUBLIC_SITE_URL 覆寫；未設則由瀏覽器用目前網站 origin */
 const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
+const shopAdminHref = `${getAdminBasePath()}/shop`;
 ---
 
 <Layout title={`後台管理｜${SITE_TITLE_SHORT}`} description="員工後台">
@@ -56,6 +58,10 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
     <div class="desktop-sanity-bar" aria-label="後台標題列">
       <span class="desktop-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
       <span class="desktop-sanity-bar__title">水博館官網後台</span>
+      <nav class="desktop-sanity-bar__nav" aria-label="後台切換">
+        <a class="desktop-sanity-bar__navlink is-active" href="#" aria-current="page">官網內容</a>
+        <a class="desktop-sanity-bar__navlink" href={shopAdminHref}>電商後台</a>
+      </nav>
       <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
     </div>
 
@@ -96,6 +102,11 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
 
     <section id="mobileHub" class="mobile-hub" aria-label="管理選單首頁">
       <nav class="mobile-hub__list">
+        <a class="mobile-hub__row mobile-hub__row--shop" href={shopAdminHref}>
+          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-cart-shopping"></i></span>
+          <span class="mobile-hub__label">電商後台</span>
+          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+        </a>
         <button type="button" class="mobile-hub__row mobile-hub__row--primary" data-hub="products-all">
           <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-box-open"></i></span>
           <span class="mobile-hub__label">全部商品</span>
@@ -231,8 +242,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
   <script>
     import { applyBodyScrollLock, releaseBodyScrollLock } from '../../../scripts/scrollLock';
     import { plainTextToStrapiBlocks, strapiBlocksToPlainText } from '../../../lib/strapi/blocks';
-    import { portableBlocksToPlainText } from '../../../lib/portableText';
 
+    try {
+    const portableBlocksToPlainText = (blocks) => {
+      if (!Array.isArray(blocks)) return '';
+      return blocks
+        .filter((block) => block && typeof block === 'object' && block._type === 'block' && Array.isArray(block.children))
+        .map((block) => block.children.map((child) => child && typeof child === 'object' && 'text' in child ? String(child.text ?? '') : '').join('').trim())
+        .filter(Boolean)
+        .join('\n');
+    };
     const root = document.querySelector('.adminx');
     if (!(root instanceof HTMLElement)) throw new Error('missing root');
     const schemas = JSON.parse(root.dataset.schemas ?? '{}');
@@ -2542,6 +2561,16 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
       if (!(imgPreviewModal instanceof HTMLElement) || imgPreviewModal.hidden) return;
       closePreview();
     });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const status = document.getElementById('statusText');
+      const titleStatus = document.getElementById('titleStatus');
+      const titleStatusDesktop = document.getElementById('titleStatusDesktop');
+      if (status) status.textContent = `後台初始化失敗：${message}`;
+      if (titleStatus) titleStatus.textContent = '初始化失敗';
+      if (titleStatusDesktop) titleStatusDesktop.textContent = `初始化失敗：${message}`;
+      console.error('[admin-dashboard:init]', error);
+    }
   </script>
 </Layout>
 
@@ -4823,4 +4852,43 @@ const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/
       display: none !important;
     }
   }
+
+  .desktop-sanity-bar__nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.75rem;
+  }
+  .desktop-sanity-bar__navlink {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.28rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    text-decoration: none;
+    color: #475569;
+    background: rgba(148, 163, 184, 0.18);
+    border: 1px solid transparent;
+  }
+  .desktop-sanity-bar__navlink.is-active,
+  .desktop-sanity-bar__navlink[aria-current='page'] {
+    color: #0f766e;
+    background: rgba(45, 212, 191, 0.18);
+    border-color: rgba(13, 148, 136, 0.28);
+  }
+  .desktop-sanity-bar__navlink:hover {
+    color: #0f766e;
+  }
+  .action-btn--shop {
+    text-decoration: none;
+  }
+  a.mobile-hub__row--shop {
+    text-decoration: none;
+    color: inherit;
+  }
+  .mobile-hub__row--shop {
+    background: rgba(45, 212, 191, 0.12);
+  }
+
 </style>

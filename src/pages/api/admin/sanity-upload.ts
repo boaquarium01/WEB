@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@sanity/client';
-import imageUrlBuilder from '@sanity/image-url';
+import { createImageUrlBuilder } from '@sanity/image-url';
 import { readEnv, readSanityWriteToken } from '../../../lib/admin/sanityDashboardServer';
 
 const API_VERSION = '2025-03-18';
@@ -38,7 +38,7 @@ export const POST: APIRoute = async ({ request }) => {
 		token
 	});
 
-	const b = imageUrlBuilder({ projectId, dataset });
+	const b = createImageUrlBuilder({ projectId, dataset });
 
 	let formData: FormData;
 	try {

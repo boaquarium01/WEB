@@ -6,6 +6,9 @@ export type ProductCardItem = {
   categoryLabel?: string;
   /** 空字串或缺漏時不顯示圖片區；載入失敗也會隱藏圖片區 */
   imageUrl?: string | null;
+  priceLabel?: string;
+  stockLabel?: string;
+  inStock?: boolean;
 };
 
 type Props = {
@@ -66,6 +69,12 @@ const { items, compact = false } = Astro.props as Props;
             <p class="line-clamp-2 text-[0.75rem] leading-relaxed text-[var(--aq-muted)] sm:text-[0.8125rem]">
               {product.excerpt}
             </p>
+            {(product.priceLabel || product.stockLabel) ? (
+              <div class="mt-3 flex items-baseline justify-between gap-2 border-t border-[color-mix(in_srgb,var(--aq-ink)_8%,transparent)] pt-2.5">
+                {product.priceLabel ? <span class="text-sm font-bold text-[var(--aq-primary-dark)]">{product.priceLabel}</span> : null}
+                {product.stockLabel ? <span class:list={['text-xs', product.inStock === false ? 'text-[var(--aq-danger)]' : 'text-[var(--aq-muted)]']}>{product.stockLabel}</span> : null}
+              </div>
+            ) : null}
           </div>
         </a>
       </article>

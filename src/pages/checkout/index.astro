@@ -1,0 +1,357 @@
+---
+import SiteLayout from '../../layouts/SiteLayout.astro';
+import { listAddressesForUser } from '../../lib/services/address';
+import { placeOrderFromCart } from '../../lib/services/checkout';
+import { getCartView } from '../../lib/services/cart';
+import { formatTwd } from '../../lib/services/catalog';
+import { getShippingFee, listShippingMethods } from '../../lib/services/shipping';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+let error: string | null = null;
+let submittedShippingMethodId = '';
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	submittedShippingMethodId = String(form.get('shippingMethodId') ?? '');
+	try {
+		const result = await placeOrderFromCart(user.id, {
+			addressId: String(form.get('addressId') ?? ''),
+			shippingMethodId: submittedShippingMethodId,
+			note: String(form.get('note') ?? ''),
+		});
+		return Astro.redirect(
+			`/account/orders/${encodeURIComponent(result.orderNumber)}`,
+		);
+	} catch (e) {
+		error = e instanceof Error ? e.message : '結帳失敗';
+	}
+}
+
+const [cart, addresses, shippingMethods] = await Promise.all([
+	getCartView(user.id),
+	listAddressesForUser(user.id),
+	listShippingMethods(true),
+]);
+
+if (cart.items.length === 0 && !error) {
+	return Astro.redirect('/cart');
+}
+
+const selectedShippingMethod = shippingMethods.find((method) => method.id === submittedShippingMethodId) ?? shippingMethods[0] ?? null;
+const shippingFee = selectedShippingMethod ? getShippingFee(selectedShippingMethod, cart.subtotal) : 0;
+const discount = 0;
+const total = cart.subtotal + shippingFee - discount;
+const defaultAddressId =
+	addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? '';
+---
+
+<SiteLayout title="結帳｜桃園中壢水博館水族" description="結帳" wide legacyFooter productBack={{ href: '/cart', label: '上一頁' }}>
+	<header class="head">
+		<p class="crumb">
+			<a href="/">首頁</a> / <a href="/cart">購物車</a> / 結帳
+		</p>
+		<h1>結帳</h1>
+	</header>
+
+	{error && <p class="banner error">{error}</p>}
+
+	{
+		cart.items.length === 0 ? (
+			<div class="empty">
+				<p>購物車是空的。</p>
+				<a class="btn-primary" href="/products">
+					去選購商品
+				</a>
+			</div>
+		) : (
+			<form method="post" class="checkout">
+				<section class="panel">
+					<h2>收件地址</h2>
+					{addresses.length === 0 ? (
+						<p class="hint">
+							尚未新增收件地址。請先
+							<a href="/account/addresses">新增地址</a>
+							再結帳。
+						</p>
+					) : (
+						<ul class="addrs">
+							{addresses.map((a) => (
+								<li>
+									<label class="addr">
+										<input
+											type="radio"
+											name="addressId"
+											value={a.id}
+											required
+											checked={a.id === defaultAddressId}
+										/>
+										<span>
+											<strong>{a.recipientName}</strong>
+											{a.isDefault ? '（預設）' : ''}
+											<br />
+											{a.postalCode} {a.city}
+											{a.district}
+											{a.addressLine}
+											<br />
+											{a.phone}
+										</span>
+									</label>
+								</li>
+							))}
+						</ul>
+					)}
+					<h2 class="shipping-heading">配送方式</h2>
+					{shippingMethods.length === 0 ? <p class="hint">目前尚未提供配送方式，請聯絡商店。</p> : <ul class="shipping-options">{shippingMethods.map((method) => <li><label class="shipping-option" data-fee={method.fee} data-threshold={method.freeShippingThreshold ?? ''}><input type="radio" name="shippingMethodId" value={method.id} required checked={method.id === selectedShippingMethod?.id} /><span><strong>{method.name}</strong><small>運費 {formatTwd(method.fee)}{method.freeShippingThreshold !== null ? ` · 滿 ${formatTwd(method.freeShippingThreshold)} 免運` : ''}</small></span></label></li>)}</ul>}
+				</section>
+
+				<section class="panel">
+					<h2>訂單備註</h2>
+					<textarea
+						name="note"
+						rows="3"
+						placeholder="選填：希望到貨時段、門市自取備註等"
+					/>
+				</section>
+
+				<section class="panel">
+					<h2>商品明細</h2>
+					<ul class="lines">
+						{cart.items.map((item) => (
+							<li>
+								<span>
+									{item.productName}
+									<small>
+										{item.skuName} × {item.quantity}
+									</small>
+								</span>
+								<strong>{formatTwd(item.lineTotal)}</strong>
+							</li>
+						))}
+					</ul>
+					<dl class="totals">
+						<div>
+							<dt>小計</dt>
+							<dd>{formatTwd(cart.subtotal)}</dd>
+						</div>
+						<div>
+							<dt>運費</dt>
+							<dd id="checkout-shipping-fee" data-subtotal={cart.subtotal}>{formatTwd(shippingFee)}</dd>
+						</div>
+						{discount > 0 && (
+							<div>
+								<dt>折扣</dt>
+								<dd>-{formatTwd(discount)}</dd>
+							</div>
+						)}
+						<div class="grand">
+							<dt>應付總額</dt>
+							<dd>{formatTwd(total)}</dd>
+						</div>
+					</dl>
+					<p class="hint">
+						價格與庫存由伺服器重新驗證。下單後請依訂單頁銀行資訊轉帳，並回報帳號末五碼。
+					</p>
+				</section>
+
+				<div class="actions">
+					<a class="btn-secondary" href="/cart">
+						返回購物車
+					</a>
+					<button
+						type="submit"
+						class="btn-primary"
+						disabled={addresses.length === 0 || shippingMethods.length === 0}
+					>
+						確認下單
+					</button>
+				</div>
+			</form>
+		)
+	}
+</SiteLayout>
+
+<script>
+	const shippingLabels = Array.from(document.querySelectorAll<HTMLLabelElement>('.shipping-option'));
+	const shippingFeeLabel = document.querySelector<HTMLElement>('#checkout-shipping-fee');
+	const totalLabel = document.querySelector<HTMLElement>('.totals .grand dd');
+	const formatTwd = (value: number) => `NT$ ${new Intl.NumberFormat('zh-TW').format(value)}`;
+	const updateShippingTotal = () => {
+		const selected = shippingLabels.find((label) => label.querySelector<HTMLInputElement>('input')?.checked);
+		if (!selected || !shippingFeeLabel || !totalLabel) return;
+		const fee = Number(selected.dataset.fee || 0);
+		const threshold = selected.dataset.threshold ? Number(selected.dataset.threshold) : null;
+		const subtotal = Number(shippingFeeLabel.dataset.subtotal || 0);
+		const actualFee = threshold !== null && subtotal >= threshold ? 0 : fee;
+		shippingFeeLabel.textContent = formatTwd(actualFee);
+		totalLabel.textContent = formatTwd(subtotal + actualFee);
+	};
+	shippingLabels.forEach((label) => label.querySelector('input')?.addEventListener('change', updateShippingTotal));
+</script>
+
+<style>
+	.head {
+		margin-bottom: 1rem;
+	}
+
+	.crumb {
+		margin: 0 0 0.35rem;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.crumb a {
+		text-decoration: none;
+	}
+
+	h1 {
+		margin: 0;
+	}
+
+	h2 {
+		margin: 0 0 0.75rem;
+		font-size: 1.1rem;
+	}
+
+	.banner {
+		padding: 0.7rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		margin-bottom: 1rem;
+	}
+
+	.banner.error {
+		background: rgba(180, 35, 24, 0.08);
+		color: var(--aq-danger);
+	}
+
+	.empty {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 2rem 1.25rem;
+		text-align: center;
+	}
+
+	.checkout {
+		display: grid;
+		gap: 1rem;
+	}
+
+	.panel {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 1.1rem 1.2rem;
+	}
+
+	.addrs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.65rem;
+	}
+
+	.addr {
+		display: flex;
+		gap: 0.65rem;
+		align-items: flex-start;
+		cursor: pointer;
+		padding: 0.65rem 0.75rem;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-sm);
+	}
+
+	.addr input {
+		margin-top: 0.25rem;
+	}
+
+	textarea {
+		width: 100%;
+		box-sizing: border-box;
+		padding: 0.65rem 0.75rem;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius-sm);
+		font: inherit;
+		resize: vertical;
+	}
+
+	.lines {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.55rem;
+	}
+
+	.lines li {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		align-items: baseline;
+	}
+
+	.lines small {
+		display: block;
+		color: var(--aq-muted);
+		margin-top: 0.15rem;
+	}
+
+	.totals {
+		margin: 1rem 0 0;
+		padding-top: 0.85rem;
+		border-top: 1px solid var(--aq-line);
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.totals > div {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.totals dt,
+	.totals dd {
+		margin: 0;
+	}
+
+	.totals .grand {
+		font-size: 1.1rem;
+		font-weight: 700;
+		margin-top: 0.25rem;
+	}
+
+	.hint {
+		margin: 0.85rem 0 0;
+		color: var(--aq-muted);
+		font-size: 0.9rem;
+	}
+
+	.hint a {
+		color: var(--aq-primary);
+	}
+
+	.actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		justify-content: flex-end;
+	}
+
+	button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.shipping-heading { margin-top: 1.4rem; }
+	.shipping-options { display: grid; gap: .65rem; padding: 0; list-style: none; }
+	.shipping-option { display: flex; align-items: center; gap: .75rem; padding: .9rem 1rem; border: 1px solid #e4e8e3; border-radius: 13px; cursor: pointer; }
+	.shipping-option:has(input:checked) { border-color: var(--aq-primary); background: #f3f8f5; }
+	.shipping-option input { accent-color: var(--aq-primary); }
+	.shipping-option span { display: grid; gap: .25rem; }
+	.shipping-option small { color: var(--aq-muted); }
+
+	.head{margin-bottom:1.5rem}.head h1{font-size:clamp(1.9rem,4vw,2.5rem);font-weight:800;letter-spacing:-.04em}.checkout{grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr);grid-template-areas:"address summary" "note summary" "actions actions";gap:1rem}.checkout>section:nth-of-type(1){grid-area:address}.checkout>section:nth-of-type(2){grid-area:note}.checkout>section:nth-of-type(3){grid-area:summary;position:sticky;top:100px;align-self:start}.panel{padding:1.35rem;border:1px solid #e8ebe6;border-radius:18px;box-shadow:0 10px 30px rgba(35,49,42,.04)}.panel h2{font-size:1.05rem;font-weight:800}.addr{padding:.9rem;border-color:#e4e8e3;border-radius:13px;line-height:1.65;transition:border-color .15s,background .15s}.addr:has(input:checked){border-color:var(--aq-primary);background:#f3f8f5}.addr input{accent-color:var(--aq-primary)}textarea{min-height:95px;border-color:#e0e4df!important;border-radius:12px!important}.checkout .lines{gap:0}.checkout .lines li{padding:.7rem 0;border-bottom:1px solid #edf0ec}.checkout .lines small{color:#89938e}.totals{margin-top:1rem;padding-top:1rem}.totals .grand{margin-top:.5rem;padding-top:.75rem;border-top:1px solid #e8ebe6;font-size:1.18rem}.actions{grid-area:actions}.checkout .btn-primary{min-height:46px;padding:.75rem 1.2rem;border-radius:12px}.checkout .btn-secondary{min-height:46px;padding:.75rem 1.1rem;border-radius:12px}
+	@media(max-width:780px){.checkout{grid-template-columns:1fr;grid-template-areas:"address" "note" "summary" "actions"}.checkout>section:nth-of-type(3){position:static}.actions{justify-content:stretch}.actions>*{flex:1}}
+</style>

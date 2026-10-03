@@ -1,0 +1,17 @@
+---
+/** Numeric slugs restore V1's paginated catalog; other slugs remain product aliases. */
+import ProductCatalog from '../../components/ProductCatalog.astro';
+export const prerender = false;
+
+const slug = Astro.params.slug ?? '';
+if (/^\d+$/.test(slug)) {
+  if (Number(slug) < 1) return Astro.redirect(`/products/1${Astro.url.search}`);
+  if (String(Number(slug)) !== slug) {
+    return Astro.redirect(`/products/${Number(slug)}${Astro.url.search}`);
+  }
+} else {
+  return Astro.redirect(slug ? `/product/${slug}` : `/products/1${Astro.url.search}`);
+}
+const page = Number(slug);
+---
+<ProductCatalog page={page} />

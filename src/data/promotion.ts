@@ -1,4 +1,4 @@
-import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import type { SanityImageSource } from '@sanity/image-url';
 
 /**
  * 促銷分頁（Sanity：asset ref；Strapi：已展開的絕對 URL）

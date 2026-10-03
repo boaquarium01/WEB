@@ -1,0 +1,471 @@
+---
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import {
+	getAdminBasePath,
+	isValidAdminSecretParam,
+} from '../../../../../lib/admin/path';
+import {
+	adminCancelOrder,
+	adminCompleteOrder,
+	adminConfirmPayment,
+	adminMarkShipped,
+	getAdminOrder,
+} from '../../../../../lib/services/admin-orders';
+import { formatTwd } from '../../../../../lib/services/catalog';
+import {
+	orderStatusLabel,
+	paymentStatusLabel,
+} from '../../../../../lib/services/order';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const user = Astro.locals.user!;
+const orderNumber = String(Astro.params.orderNumber ?? '').trim();
+
+let error: string | null = null;
+let message: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const action = String(form.get('_action') ?? '');
+	try {
+		if (action === 'confirm_payment') {
+			await adminConfirmPayment(
+				orderNumber,
+				user.id,
+				String(form.get('submissionId') ?? '') || undefined,
+			);
+			message = '已確認付款，訂單進入處理中。';
+		} else if (action === 'mark_shipped') {
+			await adminMarkShipped(orderNumber, user.id);
+			message = '已標記出貨，並扣減庫存。';
+		} else if (action === 'complete') {
+			await adminCompleteOrder(orderNumber);
+			message = '訂單已完成。';
+		} else if (action === 'cancel') {
+			await adminCancelOrder(orderNumber, user.id);
+			message = '訂單已取消，預留庫存已釋放。';
+		}
+	} catch (e) {
+		error = e instanceof Error ? e.message : '操作失敗';
+	}
+}
+
+const order = orderNumber ? await getAdminOrder(orderNumber) : null;
+if (!order) {
+	return Astro.redirect(`${base}/shop/orders`);
+}
+
+const addr = order.shippingAddress;
+const payment = order.payments[0];
+const submissions = payment?.submissions ?? [];
+const memberOrdersHref = order.customerEmail
+	? `${base}/shop/orders?userId=${encodeURIComponent(order.userId)}`
+	: null;
+const copyAddress = [
+	`收件人：${addr.recipientName}`,
+	`電話：${addr.phone}`,
+	...(addr.shippingMethodName ? [`配送方式：${addr.shippingMethodName}`] : []),
+	`地址：${addr.postalCode} ${addr.city}${addr.district}${addr.addressLine}`,
+	...(order.note ? [`備註：${order.note}`] : []),
+].join('\n');
+const formatDateTime = (date: Date) => date.toLocaleString('zh-TW', {
+	timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
+	hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+});
+const currentStateSummary: Record<string, string> = {
+	PENDING_PAYMENT: '等待顧客付款',
+	PAYMENT_SUBMITTED: '顧客已回報付款，等待核對',
+	PAID: '付款已確認，等待備貨',
+	PROCESSING: '付款已確認，商品備貨中',
+	SHIPPED: '商品已出貨，等待送達',
+	COMPLETED: '訂單已完成',
+	CANCELLED: '訂單已取消',
+};
+const progressSteps = [
+	{ label: '成立', reached: true, event: order.statusHistory[0] ?? { createdAt: order.createdAt } },
+	{
+		label: '付款',
+		reached: order.statusHistory.some((event) => event.paymentStatus === 'PAID'),
+		event: order.statusHistory.find((event) => event.paymentStatus === 'PAID')
+			?? order.statusHistory.find((event) => event.status === 'PAYMENT_SUBMITTED'),
+	},
+	{
+		label: '出貨',
+		reached: order.statusHistory.some((event) => event.shippingStatus === 'SHIPPED'),
+		event: order.statusHistory.find((event) => event.shippingStatus === 'SHIPPED'),
+	},
+	{
+		label: '完成',
+		reached: order.statusHistory.some((event) => event.status === 'COMPLETED'),
+		event: order.statusHistory.find((event) => event.status === 'COMPLETED'),
+	},
+];
+const currentProgressIndex = order.status === 'CANCELLED'
+	? -1
+	: order.status === 'COMPLETED'
+		? 3
+		: order.shippingStatus === 'SHIPPED'
+			? 3
+			: order.paymentStatus === 'PAID'
+				? 2
+				: order.status === 'PAYMENT_SUBMITTED'
+					? 1
+					: 0;
+const cancellationEvent = order.statusHistory.find((event) => event.status === 'CANCELLED');
+
+const canConfirm =
+	order.status === 'PENDING_PAYMENT' || order.status === 'PAYMENT_SUBMITTED';
+const canShip = order.status === 'PROCESSING' || order.status === 'PAID';
+const canComplete = order.status === 'SHIPPED';
+const canCancel = [
+	'PENDING_PAYMENT',
+	'PAYMENT_SUBMITTED',
+	'PAID',
+	'PROCESSING',
+].includes(order.status);
+---
+
+<AdminLayout title={`訂單 ${order.orderNumber}｜水博館水族`}>
+	<header class="head page-heading order-heading">
+		<a class="back-link" href={`${base}/shop/orders`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回訂單管理</a>
+		<div class="heading-row"><div><p class="eyebrow">訂單明細</p><h1>{order.orderNumber}</h1></div></div>
+		<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
+		<p class="current-summary"><span>建立於 {formatDateTime(order.createdAt)}</span></p>
+		<div class="actions-bar">
+			{canConfirm && <form method="post"><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-primary">確認付款</button></form>}
+			{canShip && <form method="post"><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-primary">標記出貨</button></form>}
+			{canComplete && <form method="post"><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-primary">完成訂單</button></form>}
+			{canCancel && <form method="post" onsubmit="return confirm('確定取消此訂單？');"><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
+		</div>
+	</header>
+
+	{message && <p class="banner ok">{message}</p>}
+	{error && <p class="banner error">{error}</p>}
+
+	<section class="panel status-panel">
+		<div class="section-heading"><h2>訂單進度</h2><strong>目前：{currentStateSummary[order.status] ?? orderStatusLabel(order.status)}</strong></div>
+		{order.status === 'CANCELLED' ? (
+			<div class="cancelled-progress"><span class="timeline-dot"></span><strong>訂單已取消</strong>{cancellationEvent && <time>{formatDateTime(cancellationEvent.createdAt)}</time>}</div>
+		) : (
+			<ol class="order-progress">{progressSteps.map((step, index) => <li class:list={{ reached: step.reached, current: index === currentProgressIndex, passed: index < currentProgressIndex }}><span class="progress-marker">{step.reached ? <i class="fa-solid fa-check" aria-hidden="true"></i> : index + 1}</span><strong>{step.label}</strong><time>{step.event ? formatDateTime(step.event.createdAt) : '—'}</time></li>)}</ol>
+		)}
+	</section>
+
+	<div class="order-panels">
+	<section class="panel delivery-panel">
+		<div class="section-heading"><h2>收件資訊</h2><button class="copy-address" type="button" data-copy={copyAddress}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製資訊</button></div>
+		<div class="address-details"><strong>{addr.recipientName}</strong><span>{addr.phone}</span>{addr.shippingMethodName && <span>配送方式：{addr.shippingMethodName}</span>}<span>{addr.postalCode} {addr.city}{addr.district}{addr.addressLine}</span>{order.note && <span>備註：{order.note}</span>}</div>
+	</section>
+
+	<section class="panel payment-panel">
+		<h2>付款／末五碼</h2>
+		{
+			payment ? (
+				<p>
+					{payment.method === 'BANK_TRANSFER' ? '銀行轉帳' : payment.method} · {formatTwd(payment.amount)} ·{' '}
+					{paymentStatusLabel(payment.status)}
+					{payment.paidAt && (
+						<>
+							{' '}
+							· 確認於{' '}
+							{payment.paidAt.toLocaleString('zh-TW', {
+								timeZone: 'Asia/Taipei',
+							})}
+						</>
+					)}
+				</p>
+			) : (
+				<p class="muted">無付款紀錄</p>
+			)
+		}
+		{
+			submissions.length > 0 ? (
+				<ul class="subs">
+					{submissions.map((s) => (
+						<li>
+							<span class="mono">{s.bankLastFive}</span>
+							<span>{formatTwd(s.amount)}</span>
+							<span class="muted">
+								{s.submittedAt.toLocaleString('zh-TW', {
+									timeZone: 'Asia/Taipei',
+								})}
+							</span>
+							{s.verifiedAt ? (
+								<span class="badge ok">已核對</span>
+							) : (
+								<span class="badge">待核對</span>
+							)}
+						</li>
+					))}
+				</ul>
+			) : (
+				<p class="muted">顧客尚未回報末五碼</p>
+			)
+		}
+	</section>
+	</div>
+
+	<section class="panel item-panel">
+		<h2>商品明細 <span>{order.items.length} 項</span></h2>
+		<ul class="lines">
+			{
+				order.items.map((item) => (
+					<li>
+						<span>
+							{item.productName}
+							<small>
+								{item.sku} × {item.quantity}
+							</small>
+						</span>
+						<strong>{formatTwd(item.subtotal)}</strong>
+					</li>
+				))
+			}
+		</ul>
+		<dl class="totals">
+			<div>
+				<dt>小計</dt>
+				<dd>{formatTwd(order.subtotal)}</dd>
+			</div>
+			<div>
+				<dt>運費</dt>
+				<dd>{formatTwd(order.shippingFee)}</dd>
+			</div>
+			<div class="grand">
+				<dt>總計</dt>
+				<dd>{formatTwd(order.total)}</dd>
+			</div>
+		</dl>
+	</section>
+</AdminLayout>
+
+<script>
+	const copyButton = document.querySelector<HTMLButtonElement>('.copy-address');
+	copyButton?.addEventListener('click', async () => {
+		const originalText = '複製資訊';
+		try {
+			await navigator.clipboard.writeText(copyButton.dataset.copy ?? '');
+			copyButton.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>已複製';
+			window.setTimeout(() => { copyButton.innerHTML = '<i class="fa-regular fa-copy" aria-hidden="true"></i>' + originalText; }, 1800);
+		} catch {
+			copyButton.textContent = '複製失敗，請手動複製';
+		}
+	});
+</script>
+
+<style>
+	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
+	.eyebrow span { color: var(--commerce-primary); }
+	.heading-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+	.order-date { display: inline-flex; align-items: center; gap: 8px; color: var(--commerce-muted); font-size: 11px; white-space: nowrap; }
+	.crumb { margin-bottom: 18px; }
+	.crumb a { display: inline-flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid var(--commerce-line); border-radius: 8px; background: #fff; color: #526b70; font-size: 10px; font-weight: 650; text-decoration: none; }
+	.meta { display: flex; align-items: center; gap: 5px; margin: 14px 0 0; color: #60757a; font-size: 11px; }
+	.meta span { color: #829295; }
+	.head {
+		margin-bottom: 1rem;
+	}
+
+	.crumb {
+		margin: 0 0 0.35rem;
+		font-size: 0.9rem;
+		color: var(--aq-muted);
+	}
+
+	.crumb a {
+		color: var(--aq-primary);
+		text-decoration: none;
+	}
+
+	h1 {
+		margin: 0;
+		font-size: 1.45rem;
+	}
+
+	.lead,
+	.meta,
+	.muted {
+		color: var(--aq-muted);
+		font-size: 0.92rem;
+	}
+
+	.banner {
+		padding: 0.7rem 1rem;
+		border-radius: var(--aq-radius-sm);
+		margin-bottom: 0.85rem;
+	}
+
+	.banner.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
+
+	.banner.error {
+		background: rgba(180, 35, 24, 0.08);
+		color: var(--aq-danger);
+	}
+
+	.actions-bar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.55rem;
+		margin: 18px 0 16px;
+	}
+	.order-progress { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 0 0 19px; padding: 15px 18px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; list-style: none; }
+	.order-progress { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); margin: 0; padding: 8px 0 0; list-style: none; }
+	.order-progress li { position: relative; display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: 30px auto auto; justify-items: center; align-items: start; row-gap: 4px; color: #9ba8a8; font-size: 13px; text-align: center; }
+	.order-progress li:not(:last-child)::after { position: absolute; z-index: 0; top: 13px; left: calc(50% + 15px); right: calc(-50% + 15px); height: 2px; background: #e6ecea; content: ''; }
+	.progress-marker { z-index: 1; width: 26px; height: 26px; display: grid; place-items: center; grid-row: 1; border: 1px solid #e2e9e7; border-radius: 50%; background: #fff; color: #96a4a5; font-size: 11px; }
+	.order-progress li strong { grid-column: 1; grid-row: 2; font-weight: 650; }
+	.order-progress li time { grid-column: 1; grid-row: 3; min-height: 18px; color: #829294; font-size: 12px; white-space: nowrap; }
+	.order-progress li.reached .progress-marker,.order-progress li.current .progress-marker { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
+	.order-progress li.reached strong,.order-progress li.current strong { color: var(--commerce-primary-dark); }
+	.order-progress li.passed:not(:last-child)::after { background: #9fd0c5; }
+	.cancelled-progress { display: flex; align-items: center; gap: 10px; padding: 12px 0 2px; color: #a94742; }
+	.cancelled-progress .timeline-dot { background: #c94c42; box-shadow: 0 0 0 3px #ffefed; }
+	.cancelled-progress time { margin-left: auto; color: #829294; font-size: 13px; }
+	.cancelled-note { margin: 0 0 17px; padding: 13px 16px; border-radius: 11px; background: #fff1ef; color: #a94742; font-size: 11px; font-weight: 700; }
+	.order-panels { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px; }
+	.order-panels .panel { margin-bottom: 15px; }
+	.delivery-panel .recipient { color: var(--commerce-primary-dark); font-weight: 700; }
+	.item-panel h2 { display: flex; align-items: center; gap: 9px; }
+	.item-panel h2 span { padding: 3px 7px; border-radius: 999px; background: #eff5f3; color: #6b8380; font-size: 9px; }
+
+	.btn-danger {
+		appearance: none;
+		padding: 0.55rem 0.9rem;
+		border-radius: var(--aq-radius-sm);
+		border: 1px solid rgba(180, 35, 24, 0.45);
+		background: #fff;
+		color: var(--aq-danger);
+		font: inherit;
+		font-weight: 650;
+		cursor: pointer;
+	}
+	.btn-primary { appearance: none; padding: 0.62rem 0.95rem; border: 1px solid var(--commerce-primary); border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+	.btn-primary:hover { border-color: var(--commerce-primary-dark); background: var(--commerce-primary-dark); }
+
+	.panel {
+		background: #fff;
+		border: 1px solid var(--aq-line);
+		border-radius: var(--aq-radius);
+		padding: 1.1rem 1.2rem;
+		margin-bottom: 0.85rem;
+	}
+
+	h2 {
+		margin: 0 0 0.55rem;
+		font-size: 1.05rem;
+	}
+
+	.subs {
+		list-style: none;
+		margin: 0.5rem 0 0;
+		padding: 0;
+		display: grid;
+		gap: 0.4rem;
+	}
+
+	.subs li {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.65rem;
+		align-items: center;
+	}
+
+	.mono {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.badge {
+		font-size: 0.75rem;
+		padding: 0.12rem 0.4rem;
+		border-radius: 999px;
+		background: var(--aq-sand-2, #f3efe6);
+		color: var(--aq-muted);
+	}
+
+	.badge.ok {
+		background: var(--aq-primary-soft);
+		color: var(--aq-primary-dark);
+	}
+
+	.lines {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 0.45rem;
+	}
+
+	.lines li {
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.lines small {
+		display: block;
+		color: var(--aq-muted);
+	}
+
+	.totals {
+		margin: 0.85rem 0 0;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--aq-line);
+		display: grid;
+		gap: 0.35rem;
+	}
+
+	.totals > div {
+		display: flex;
+		justify-content: space-between;
+	}
+
+	.totals dt,
+	.totals dd {
+		margin: 0;
+	}
+
+	.totals .grand {
+		font-weight: 700;
+	}
+	.back-link { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 9px 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #526b70; font-size: 14px; font-weight: 700; text-decoration: none; }
+	.order-heading .heading-row { align-items: center; }
+	.order-heading h1 { font-size: clamp(26px, 3vw, 36px); }
+	.order-heading .eyebrow { margin-bottom: 5px; font-size: 13px; letter-spacing: .04em; }
+	.current-status { display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; background: #fff2dc; color: #9b6417; font-size: 15px; font-weight: 750; white-space: nowrap; }
+	.current-status.complete { background: #e9f6ef; color: #26724f; }
+	.current-status.cancelled { background: #fff0ee; color: #ad4a40; }
+	.customer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+	.meta { margin: 0; flex-wrap: wrap; font-size: 14px; }
+	.meta strong { color: #40575c; }
+	.member-orders-link { display: inline-flex; align-items: center; gap: 7px; color: var(--commerce-primary-dark); font-size: 14px; font-weight: 700; text-decoration: none; }
+	.current-summary { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0 0; color: #536c70; font-size: 14px; }
+	.current-summary span { color: #76888a; font-size: 13px; }
+	.actions-bar { margin: 15px 0 18px; }
+	.btn-primary,.btn-danger { min-height: 42px; padding: 9px 15px; font-size: 14px; }
+	.status-panel { margin-bottom: 16px; }
+	.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+	.section-heading h2 { margin: 0; font-size: 21px; }
+	.section-heading > strong { color: var(--commerce-primary-dark); font-size: 14px; }
+	.timeline-dot { width: 10px; height: 10px; margin: 4px 0 0 2px; border-radius: 50%; background: var(--commerce-primary); box-shadow: 0 0 0 3px var(--commerce-primary-soft); }
+	.delivery-panel .section-heading { margin-bottom: 10px; }
+	.copy-address { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid var(--commerce-line); border-radius: 8px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+	.address-details { display: grid; gap: 6px; color: #52666a; font-size: 15px; line-height: 1.5; }
+	.address-details strong { color: var(--commerce-primary-dark); }
+	.item-panel h2 { font-size: 21px; }
+	.item-panel h2 span { font-size: 12px; }
+	.payment-panel h2 { font-size: 21px; }
+	.subs li { font-size: 14px; }
+	.lines li { font-size: 15px; }
+	.lines small { margin-top: 4px; font-size: 13px; }
+	.totals { font-size: 15px; }
+	@media (max-width: 720px) { .heading-row { align-items: flex-start; }.customer-row,.current-summary { align-items: flex-start; flex-direction: column; }.order-progress { grid-template-columns: 1fr; gap: 12px; padding-top: 0; }.order-progress li { grid-template-columns: 28px minmax(0,1fr); grid-template-rows: 26px auto; justify-items: stretch; align-items: center; column-gap: 10px; row-gap: 3px; text-align: left; }.order-progress li:not(:last-child)::after { top: 27px; bottom: -25px; left: 13px; right: auto; width: 2px; height: auto; }.order-progress li .progress-marker { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }.order-progress li strong { grid-column: 2; grid-row: 1; align-self: end; }.order-progress li time { grid-column: 2; grid-row: 2; min-height: 0; white-space: normal; }.order-panels { grid-template-columns: 1fr; gap: 0; }.actions-bar { gap: 8px; }.actions-bar form,.actions-bar button { width: 100%; } }
+</style>

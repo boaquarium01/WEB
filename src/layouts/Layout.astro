@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import { SITE_TITLE as defaultTitle, SITE_DESCRIPTION as defaultDescription } from '../config/site';
+import { getCartItemCount } from '../lib/services/cart';
 
 const {
   title = defaultTitle,
@@ -11,6 +12,16 @@ const {
 } = Astro.props;
 
 const pageUrl = Astro.url.href;
+const isAdminRoute = Astro.url.pathname.startsWith('/admin/');
+const user = Astro.locals.user;
+let cartCount = 0;
+if (user) {
+	try {
+		cartCount = await getCartItemCount(user.id);
+	} catch {
+		cartCount = 0;
+	}
+}
 const keywordsContent = Array.isArray(keywords) ? keywords.join(', ') : typeof keywords === 'string' ? keywords : '';
 const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 ---
@@ -56,15 +67,23 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	</head>
 	<body>
 		<slot />
-		<a
-			class="line-float"
-			href="https://lin.ee/nG8kcR2"
-			target="_blank"
-			rel="noopener noreferrer"
-			aria-label="使用 LINE 私訊聯絡（另開新視窗）"
-		>
-			<img class="line-float__icon" src="/line.png" alt="LINE" width="56" height="56" loading="lazy" />
-		</a>
+		{!isAdminRoute ? (
+			<a class="cart-float" href="/cart" aria-label={`購物車，目前 ${cartCount} 件商品`}>
+				<i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
+				<span class="cart-float-count" aria-hidden="true">{cartCount}</span>
+			</a>
+		) : null}
+		{!isAdminRoute ? (
+			<a
+				class="line-float"
+				href="https://lin.ee/nG8kcR2"
+				target="_blank"
+				rel="noopener noreferrer"
+				aria-label="使用 LINE 私訊聯絡（另開新視窗）"
+			>
+				<img class="line-float__icon" src="/line.png" alt="LINE" width="56" height="56" loading="lazy" />
+			</a>
+		) : null}
 
 		<script>
 			import { initScrollReveal } from '../scripts/initScrollReveal';
@@ -129,6 +148,8 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		transition: transform 0.2s ease, box-shadow 0.2s ease;
 	}
 
+	.cart-float{position:fixed;right:18px;bottom:calc(86px + env(safe-area-inset-bottom, 0px));z-index:9998;display:grid;place-items:center;width:56px;height:56px;border:1px solid rgba(255,255,255,.65);border-radius:50%;background:var(--aq-primary,#156a66);color:#fff!important;text-decoration:none;box-shadow:0 10px 26px rgba(21,106,102,.3);transition:transform .18s ease,box-shadow .18s ease}.cart-float:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(21,106,102,.36)}.cart-float>i{font-size:1.25rem}.cart-float-count{position:absolute;top:-4px;right:-5px;display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:999px;background:#e33e46;color:#fff;font-size:.69rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(107,22,28,.2)}
+
 	.line-float:hover {
 		transform: translateY(-2px);
 		box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
@@ -157,5 +178,6 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 			width: 56px;
 			height: 56px;
 		}
+		.cart-float{right:14px;bottom:calc(82px + env(safe-area-inset-bottom, 0px));width:56px;height:56px}
 	}
 </style>

@@ -1,5 +1,5 @@
 import { createClient, type SanityClient } from '@sanity/client';
-import type { SanityImageSource } from '@sanity/image-url/lib/types/types';
+import type { SanityImageSource } from '@sanity/image-url';
 import type { Promotion } from '../../data/promotion';
 import { portableBlocksToPlainText } from '../portableText';
 import { strapiBlocksToPlainText } from '../strapi/blocks';
@@ -143,7 +143,17 @@ export async function getPromotionBySlug(slug: string): Promise<Promotion | null
   if (!doc && PROMO_DOC_ID_BY_SLUG[s]) {
     doc = await getPromotionByDocId(client, PROMO_DOC_ID_BY_SLUG[s]);
   }
-  if (!doc) return null;
+  if (!doc) {
+    /** V2 dataset 尚未有促銷文件時仍顯示 V1 促銷頁殼，避免導覽 404／回首頁 */
+    const fallbackTitle = PROMO_TITLE_BY_SLUG[s];
+    if (!fallbackTitle) return null;
+    return {
+      title: fallbackTitle,
+      slug: s,
+      content: '',
+      promoImages: [],
+    };
+  }
   if (!doc.slug) {
     doc.slug = s;
   }

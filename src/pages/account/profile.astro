@@ -1,0 +1,67 @@
+---
+import AccountLayout from '../../layouts/AccountLayout.astro';
+import {
+	ensureCustomerForUser,
+	updateCustomerProfile,
+} from '../../lib/services/customer';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+let message: string | null = null;
+let error: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	try {
+		const form = await Astro.request.formData();
+		await updateCustomerProfile(user.id, {
+			displayName: String(form.get('displayName') ?? ''),
+			phone: String(form.get('phone') ?? ''),
+			contactEmail: String(form.get('contactEmail') ?? ''),
+			bankAccountLastFive: String(form.get('bankAccountLastFive') ?? ''),
+		});
+		message = '資料已更新';
+	} catch (e) {
+		error = e instanceof Error ? e.message : '更新失敗';
+	}
+}
+
+const customer = await ensureCustomerForUser(user.id, user.name);
+---
+
+<AccountLayout title="個人資料｜水博館 V2">
+	<h1>個人資料</h1>
+	<p class="lead">登入帳號：{user.email.endsWith('@line-user.invalid') ? 'LINE' : user.email}</p>
+	<p class="account-created">建立日期：{user.createdAt.toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei' })}</p>
+
+	{message && <p class="ok">{message}</p>}
+	{error && <p class="error">{error}</p>}
+
+	<form method="post" class="form">
+		<label>
+			顯示名稱
+			<input type="text" name="displayName" value={customer.displayName ?? user.name} />
+		</label>
+		<label>
+			手機
+			<input type="tel" name="phone" value={customer.phone ?? ''} placeholder="09xxxxxxxx" />
+		</label>
+		<label>聯絡 Email（選填）<input type="email" name="contactEmail" value={customer.contactEmail ?? ''} autocomplete="email" /></label>
+		<label>
+			常用轉帳帳號末五碼
+			<input type="text" name="bankAccountLastFive" value={customer.bankAccountLastFive ?? ''} inputmode="numeric" pattern="[0-9]{5}" maxlength="5" minlength="5" placeholder="例如：12345" autocomplete="off" />
+			<small>儲存後會自動帶入訂單的匯款末五碼回報欄位；留空可清除。</small>
+		</label>
+		<button type="submit">儲存</button>
+	</form>
+</AccountLayout>
+
+<style>
+	h1 { margin: 0 0 0.5rem; font-size: 1.8rem; }
+	.lead { color: var(--muted); }
+	.account-created, small { color: var(--aq-muted); font-size:.88rem; }
+	.form { display: grid; gap: 1rem; margin: 1.5rem 0; }
+	label { display: grid; gap: 0.4rem; }
+	input { padding: 0.7rem 0.8rem; border-radius: 0.5rem; border: 1px solid var(--line); background: rgba(8, 20, 28, 0.55); color: var(--ink); }
+	button { padding: 0.75rem 1rem; border: 0; border-radius: 0.5rem; background: var(--accent); color: #062018; font-weight: 650; cursor: pointer; justify-self: start; }
+</style>

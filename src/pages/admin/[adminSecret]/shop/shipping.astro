@@ -1,0 +1,96 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../lib/admin/path';
+import { listShippingMethods, saveShippingMethod } from '../../../../lib/services/shipping';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+let error: string | null = null;
+let message: string | null = null;
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const rawThreshold = String(form.get('freeShippingThreshold') ?? '').trim();
+	try {
+		await saveShippingMethod({
+			id: String(form.get('id') ?? '').trim() || undefined,
+			name: String(form.get('name') ?? ''),
+			fee: Number(form.get('fee')),
+			freeShippingThreshold: rawThreshold ? Number(rawThreshold) : null,
+			isActive: form.get('isActive') === 'on',
+		});
+		message = '運費設定已儲存';
+	} catch (cause) {
+		error = cause instanceof Error ? cause.message : '儲存失敗';
+	}
+}
+const methods = await listShippingMethods();
+---
+
+<AdminLayout title="運費設定｜水博館水族">
+	<header class="head page-heading">
+		<div class="heading-row"><div><h1>運費設定</h1><p>管理配送方式、基本運費與滿額免運門檻。</p></div></div>
+	</header>
+	{message && <p class="notice success">{message}</p>}
+	{error && <p class="notice error">{error}</p>}
+
+	<section class="methods" aria-label="配送方式設定">
+		{methods.map((method) => (
+			<form class="method-card" method="post" action={`${base}/shop/shipping`}>
+				<input type="hidden" name="id" value={method.id} />
+				<header class="method-head"><div><h2>{method.name}</h2><span class:list={['status', { active: method.isActive }]}>{method.isActive ? '啟用中' : '已停用'}</span></div><label class="enabled"><input type="checkbox" name="isActive" checked={method.isActive} /><span>啟用配送</span></label></header>
+				<div class="fields">
+					<label>配送方式名稱<input name="name" maxlength="60" required value={method.name} /></label>
+					<label>基本運費（NT$）<input name="fee" type="number" min="0" step="1" required value={method.fee} /></label>
+					<label>滿額免運門檻（NT$）<input name="freeShippingThreshold" type="number" min="0" step="1" value={method.freeShippingThreshold ?? ''} placeholder="不設定免運" /></label>
+				</div>
+				<footer><span>{method.freeShippingThreshold === null ? '未設定滿額免運' : `訂單滿 NT$ ${method.freeShippingThreshold.toLocaleString('zh-TW')} 免運`}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存設定</button></footer>
+			</form>
+		))}
+	</section>
+
+	<section class="add-panel">
+		<h2>新增配送方式</h2>
+		<p>可依需求新增宅配、超商取貨或其他配送方式。</p>
+		<form class="method-card" method="post" action={`${base}/shop/shipping`}>
+			<div class="fields">
+				<label>配送方式名稱<input name="name" maxlength="60" required placeholder="例如：超商取貨" /></label>
+				<label>基本運費（NT$）<input name="fee" type="number" min="0" step="1" required value="0" /></label>
+				<label>滿額免運門檻（NT$）<input name="freeShippingThreshold" type="number" min="0" step="1" placeholder="不設定免運" /></label>
+			</div>
+			<input type="hidden" name="isActive" value="on" />
+			<footer><span>新增後可隨時修改或停用</span><button type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i>新增配送方式</button></footer>
+		</form>
+	</section>
+</AdminLayout>
+
+<style>
+	.head h1 { font-size: 34px; }
+	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); font-size: 15px; }
+	.notice { padding: 12px 15px; border-radius: 10px; font-size: 14px; }
+	.notice.success { background: #edf8f1; color: #28734b; }
+	.notice.error { background: #fff0ee; color: #a8433a; }
+	.methods { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+	.method-card,.add-panel { min-width: 0; padding: 21px; border: 1px solid var(--commerce-line); border-radius: 16px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.method-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+	.method-head > div { display: flex; align-items: center; gap: 10px; }
+	.method-head h2,.add-panel h2 { margin: 0; font-size: 21px; }
+	.status { padding: 5px 9px; border-radius: 999px; background: #f1f3f2; color: #68787a; font-size: 12px; }
+	.status.active { background: #e8f5f0; color: #287b61; }
+	.enabled { display: inline-flex; align-items: center; gap: 7px; color: var(--commerce-muted); font-size: 13px; white-space: nowrap; }
+	.enabled input { accent-color: var(--commerce-primary); }
+	.fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+	.fields label { display: grid; gap: 7px; color: #52676b; font-size: 13px; font-weight: 650; }
+	.fields label:first-child { grid-column: 1 / -1; }
+	.fields input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; font-size: 15px; }
+	.method-card footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--commerce-muted); font-size: 13px; }
+	.method-card footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 9px 14px; border: 0; border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+	.add-panel { margin-top: 20px; }
+	.add-panel > p { margin: 7px 0 16px; color: var(--commerce-muted); font-size: 14px; }
+	@media(max-width:900px) { .methods { grid-template-columns: 1fr; } }
+	@media(max-width:560px) { .method-card,.add-panel { padding: 15px; }.method-head { align-items: flex-start; flex-direction: column; }.fields { grid-template-columns: 1fr; }.fields label:first-child { grid-column: auto; }.method-card footer { align-items: stretch; flex-direction: column; }.method-card footer button { width: 100%; } }
+</style>

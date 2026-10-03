@@ -1,9 +1,6 @@
-# 本機暫存目錄（勿提交）
-.tmp/
-
 # build output
 dist/
-
+.vercel/
 # generated types
 .astro/
 
@@ -20,30 +17,19 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
-!.env.v2.example
 
-# macOS-specific files
+# macOS / IDE
 .DS_Store
-
-# jetbrains setting folder
 .idea/
+.vscode/*
+!.vscode/extensions.json
 
-# sanity runtime cache
+# drizzle local
+drizzle/meta/databases/
+*.sql.bak
+
+# Sanity export temp
+.tmp-sanity-*.tar.gz
+
+# Local Sanity Studio runtime cache
 .sanity/
-
-# vercel local build output
-.vercel
-.vercel/
-
-# Strapi（子專案 strapi-cms）
-strapi-cms/node_modules/
-strapi-cms/.tmp/*
-!strapi-cms/.tmp/.gitkeep
-strapi-cms/dist/
-strapi-cms/.strapi/
-strapi-cms/.cache/
-strapi-cms/build/
-strapi-cms/.env
-# Strapi 本機上傳媒體（勿提交；雲端用資料庫／儲存服務）
-strapi-cms/public/uploads/*
-!strapi-cms/public/uploads/.gitkeep

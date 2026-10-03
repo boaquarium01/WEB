@@ -1,0 +1,200 @@
+---
+import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../../lib/admin/path';
+import { formatTwd } from '../../../../../lib/services/catalog';
+import { orderStatusLabel } from '../../../../../lib/services/order';
+import { getAdminMember, listAdminMembers, saveAdminMemberAddress, updateAdminMember } from '../../../../../lib/services/admin-members';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const query = Astro.url.searchParams.get('q')?.trim() ?? '';
+const selectedUserId = Astro.url.searchParams.get('userId')?.trim() ?? '';
+let error: string | null = null;
+let message: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	try {
+		const action = String(form.get('_action') ?? '');
+		const userId = String(form.get('userId') ?? '').trim();
+		if (!userId) throw new Error('請先選擇會員');
+		if (action === 'update_member') {
+			await updateAdminMember({
+				userId,
+				name: String(form.get('name') ?? ''),
+				email: String(form.get('email') ?? ''),
+				displayName: String(form.get('displayName') ?? ''),
+				phone: String(form.get('phone') ?? ''),
+				bankAccountLastFive: String(form.get('bankAccountLastFive') ?? ''),
+				note: String(form.get('note') ?? ''),
+			});
+			message = '會員資料已儲存';
+		} else if (action === 'save_address') {
+			await saveAdminMemberAddress({
+				userId,
+				addressId: String(form.get('addressId') ?? '').trim() || undefined,
+				label: String(form.get('label') ?? ''),
+				recipientName: String(form.get('recipientName') ?? ''),
+				phone: String(form.get('phone') ?? ''),
+				postalCode: String(form.get('postalCode') ?? ''),
+				city: String(form.get('city') ?? ''),
+				district: String(form.get('district') ?? ''),
+				addressLine: String(form.get('addressLine') ?? ''),
+				isDefault: form.get('isDefault') === 'on',
+			});
+			message = '收件地址已儲存';
+		} else {
+			throw new Error('無法辨識的操作');
+		}
+	} catch (cause) {
+		error = cause instanceof Error ? cause.message : '儲存失敗';
+	}
+}
+
+const [members, selected] = await Promise.all([
+	listAdminMembers(query),
+	selectedUserId ? getAdminMember(selectedUserId) : Promise.resolve(null),
+]);
+const selectedHref = selected ? `${base}/shop/members?${new URLSearchParams({ ...(query ? { q: query } : {}), userId: selected.userId }).toString()}` : '';
+const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+---
+
+<AdminLayout title="會員管理｜水博館水族">
+	<header class="head page-heading">
+		<div class="heading-row"><div><h1>會員管理</h1><p>搜尋會員、編輯聯絡資料與收件地址，並查看完整訂單紀錄。</p></div><span class="total-count">{members.length} 位會員</span></div>
+		<form class="member-search" method="get" action={`${base}/shop/members`}>
+			<label for="member-query">搜尋會員</label>
+			<div><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="member-query" type="search" name="q" value={query} placeholder="姓名、電子郵件或手機號碼" /><button type="submit">搜尋</button>{query && <a href={`${base}/shop/members`}>清除</a>}</div>
+		</form>
+	</header>
+	{message && <p class="notice success" role="status">{message}</p>}
+	{error && <p class="notice error" role="alert">{error}</p>}
+
+	<div class="members-layout">
+		<aside class="member-list panel" aria-label="會員搜尋結果">
+			<h2>會員名單</h2>
+			{members.length ? <ul>{members.map((member) => <li><a class:list={{ selected: member.userId === selectedUserId }} href={`${base}/shop/members?${new URLSearchParams({ ...(query ? { q: query } : {}), userId: member.userId }).toString()}`}><span class="avatar">{member.name.slice(0, 1)}</span><span class="member-list-info"><strong>{member.name}</strong><span>{member.email}</span><span>{member.phone ?? '未填手機'}</span></span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a></li>)}</ul> : <p class="empty">沒有符合條件的會員</p>}
+			{members.length === 500 && <p class="list-limit">目前顯示最新 500 位，請使用搜尋縮小範圍。</p>}
+		</aside>
+
+		{selected ? <section class="member-detail">
+			<header class="detail-head"><div><a class="back-members" href={`${base}/shop/members${query ? `?q=${encodeURIComponent(query)}` : ''}`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>會員名單</a><h2>{selected.displayName || selected.name}</h2><p>{selected.email}</p></div><span class:list={['verified', { yes: selected.emailVerified }]}>{selected.emailVerified ? '電子郵件已驗證' : '電子郵件未驗證'}</span></header>
+
+			<section class="panel member-profile">
+				<div class="section-head"><h3>會員資料</h3><span>建立於 {formatDate(selected.createdAt)}</span></div>
+				<form method="post" action={selectedHref} class="profile-form">
+					<input type="hidden" name="_action" value="update_member" /><input type="hidden" name="userId" value={selected.userId} />
+					<div class="fields">
+						<label>登入姓名<input name="name" required maxlength="120" value={selected.name} /></label>
+						<label>登入電子郵件<input name="email" type="email" required value={selected.email} /><small>修改電子郵件後需重新驗證。</small></label>
+						<label>會員顯示名稱<input name="displayName" maxlength="120" value={selected.displayName ?? ''} /></label>
+						<label>手機號碼<input name="phone" type="tel" maxlength="40" value={selected.phone ?? ''} /></label>
+						<label>常用轉帳帳號末五碼<input name="bankAccountLastFive" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" value={selected.bankAccountLastFive ?? ''} placeholder="選填，5 位數字" /></label>
+						<label class="wide">會員備註<textarea name="note" rows="3" maxlength="2000">{selected.note ?? ''}</textarea></label>
+					</div>
+					<div class="form-footer"><span>最後更新：{formatDate(selected.customerUpdatedAt ?? selected.updatedAt)}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存會員資料</button></div>
+				</form>
+			</section>
+
+			<section class="panel addresses-panel">
+				<div class="section-head"><h3>收件地址 <span class="sub-count">{selected.addresses.length} 筆</span></h3><span>修改後僅影響會員儲存的地址，不會更改既有訂單快照。</span></div>
+				{selected.addresses.map((address) => <form class="address-card" method="post" action={selectedHref}>
+					<input type="hidden" name="_action" value="save_address" /><input type="hidden" name="userId" value={selected.userId} /><input type="hidden" name="addressId" value={address.id} />
+					<div class="address-card-head"><strong>{address.label || '收件地址'}</strong><label class="default-toggle"><input type="checkbox" name="isDefault" checked={address.isDefault} />設為預設</label></div>
+					<div class="fields address-fields">
+						<label>地址名稱<input name="label" maxlength="60" value={address.label ?? ''} placeholder="例如：住家" /></label><label>收件人<input name="recipientName" required value={address.recipientName} /></label><label>電話<input name="phone" type="tel" required maxlength="40" value={address.phone} /></label><label>郵遞區號<input name="postalCode" required value={address.postalCode} /></label><label>縣市<input name="city" required value={address.city} /></label><label>行政區<input name="district" required value={address.district} /></label><label class="wide">詳細地址<input name="addressLine" required maxlength="500" value={address.addressLine} /></label>
+					</div>
+					<div class="form-footer"><span>更新於 {formatDate(address.updatedAt)}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存地址</button></div>
+				</form>)}
+				<details class="new-address"><summary><i class="fa-solid fa-plus" aria-hidden="true"></i>新增收件地址</summary>
+					<form class="address-card" method="post" action={selectedHref}><input type="hidden" name="_action" value="save_address" /><input type="hidden" name="userId" value={selected.userId} />
+						<div class="fields address-fields"><label>地址名稱<input name="label" maxlength="60" placeholder="例如：公司" /></label><label>收件人<input name="recipientName" required /></label><label>電話<input name="phone" type="tel" required maxlength="40" /></label><label>郵遞區號<input name="postalCode" required /></label><label>縣市<input name="city" required /></label><label>行政區<input name="district" required /></label><label class="wide">詳細地址<input name="addressLine" required maxlength="500" /></label></div>
+						<div class="form-footer"><label class="default-toggle"><input type="checkbox" name="isDefault" />設為預設地址</label><button type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i>新增地址</button></div>
+					</form>
+				</details>
+			</section>
+
+			<section class="panel orders-panel">
+				<div class="section-head"><h3>訂單紀錄 <span class="sub-count">{selected.orders.length} 筆</span></h3><a href={`${base}/shop/orders?userId=${encodeURIComponent(selected.userId)}`}>前往此會員訂單 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></div>
+				{selected.orders.length ? <div class="orders-list">{selected.orders.map((order) => <a href={`${base}/shop/orders/${encodeURIComponent(order.orderNumber)}`}><span><strong>{order.orderNumber}</strong><small>{formatDate(order.createdAt)} · {order.itemCount} 件商品</small></span><span class="order-status">{orderStatusLabel(order.status)}</span><strong>{formatTwd(order.total)}</strong></a>)}</div> : <p class="empty">此會員目前沒有訂單。</p>}
+			</section>
+		</section> : <div class="select-hint panel"><i class="fa-solid fa-users" aria-hidden="true"></i><strong>選擇會員查看資料</strong><span>可用姓名、電子郵件或手機號碼搜尋。</span></div>}
+	</div>
+</AdminLayout>
+
+<style>
+	.page-heading h1 { font-size: 34px; }
+	.heading-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); }
+	.total-count,.sub-count { padding: 7px 11px; border-radius: 999px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 13px; white-space: nowrap; }
+	.member-search { margin-top: 20px; padding: 15px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; }
+	.member-search > label { display: block; margin-bottom: 7px; color: #52676b; font-size: 13px; font-weight: 650; }
+	.member-search > div { display: flex; align-items: center; gap: 9px; }
+	.member-search i { color: #849497; }
+	.member-search input { flex: 1; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--commerce-line); border-radius: 9px; font: inherit; }
+	.member-search button,.form-footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 9px 14px; border: 0; border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+	.member-search a { color: var(--commerce-primary-dark); font-size: 13px; }
+	.notice { padding: 12px 15px; border-radius: 10px; font-size: 14px; }
+	.notice.success { background: #edf8f1; color: #28734b; }
+	.notice.error { background: #fff0ee; color: #a8433a; }
+	.members-layout { display: grid; grid-template-columns: minmax(245px, 310px) minmax(0,1fr); align-items: start; gap: 17px; }
+	.panel { min-width: 0; padding: 19px; border: 1px solid var(--commerce-line); border-radius: 15px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.member-list { position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow: auto; }
+	.member-list h2 { margin: 0 0 12px; font-size: 18px; }
+	.member-list ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
+	.member-list a { display: flex; align-items: center; gap: 10px; padding: 10px 8px; border-radius: 10px; color: inherit; text-decoration: none; }
+	.member-list a:hover,.member-list a.selected { background: var(--commerce-primary-soft); }
+	.avatar { width: 37px; height: 37px; display: grid; place-items: center; flex: none; border-radius: 50%; background: #e7f3f0; color: var(--commerce-primary-dark); font-weight: 700; }
+	.member-list-info { display: grid; min-width: 0; flex: 1; gap: 3px; }
+	.member-list-info strong,.member-list-info span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.member-list-info strong { font-size: 14px; }
+	.member-list-info span { color: var(--commerce-muted); font-size: 12px; }
+	.member-list a > i { color: #99a8a8; font-size: 11px; }
+	.list-limit,.empty { color: var(--commerce-muted); font-size: 13px; }
+	.member-detail { display: grid; gap: 14px; min-width: 0; }
+	.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 1px; }
+	.detail-head h2 { margin: 10px 0 3px; font-size: 25px; }
+	.detail-head p { margin: 0; color: var(--commerce-muted); }
+	.back-members { color: var(--commerce-primary-dark); font-size: 13px; text-decoration: none; }
+	.back-members i { margin-right: 6px; }
+	.verified { padding: 7px 10px; border-radius: 99px; background: #f5f1e9; color: #876a2c; font-size: 12px; white-space: nowrap; }
+	.verified.yes { background: #eaf6f2; color: #27775f; }
+	.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+	.section-head h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 19px; }
+	.section-head > span { color: var(--commerce-muted); font-size: 12px; }
+	.section-head a { color: var(--commerce-primary-dark); font-size: 13px; text-decoration: none; white-space: nowrap; }
+	.sub-count { padding: 4px 8px; font-size: 11px; }
+	.fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+	.fields label { display: grid; align-content: start; gap: 6px; min-width: 0; color: #52676b; font-size: 13px; font-weight: 650; }
+	.fields input,.fields textarea { width: 100%; min-width: 0; box-sizing: border-box; min-height: 42px; padding: 9px 11px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; font-size: 14px; font-weight: 400; }
+	.fields textarea { resize: vertical; }
+	.fields small { color: var(--commerce-muted); font-size: 11px; font-weight: 400; }
+	.fields .wide { grid-column: 1 / -1; }
+	.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+	.form-footer > span { color: var(--commerce-muted); font-size: 12px; }
+	.address-card { padding: 15px 0; border-top: 1px solid var(--commerce-line); }
+	.address-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--commerce-primary-dark); }
+	.default-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--commerce-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+	.default-toggle input { accent-color: var(--commerce-primary); }
+	.new-address { border-top: 1px solid var(--commerce-line); padding-top: 14px; }
+	.new-address summary { color: var(--commerce-primary-dark); font-weight: 700; cursor: pointer; }
+	.new-address summary i { margin-right: 7px; }
+	.new-address .address-card { padding-bottom: 0; border-top: 0; }
+	.orders-list { display: grid; }
+	.orders-list a { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 14px; padding: 12px 2px; border-top: 1px solid var(--commerce-line); color: inherit; text-decoration: none; }
+	.orders-list a:hover strong:first-child { color: var(--commerce-primary); }
+	.orders-list a > span:first-child { display: grid; gap: 4px; min-width: 0; }
+	.orders-list a > span:first-child strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.orders-list small { color: var(--commerce-muted); font-size: 12px; }
+	.order-status { padding: 5px 9px; border-radius: 99px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 12px; white-space: nowrap; }
+	.select-hint { display: grid; justify-items: center; gap: 10px; min-height: 230px; align-content: center; color: var(--commerce-muted); text-align: center; }
+	.select-hint i { color: var(--commerce-primary); font-size: 30px; }
+	.select-hint strong { color: var(--commerce-ink); font-size: 18px; }
+	@media(max-width:900px) { .members-layout { grid-template-columns: minmax(200px,260px) minmax(0,1fr); gap: 12px; }.panel { padding: 15px; }.orders-list a { grid-template-columns: minmax(0,1fr) auto; }.orders-list .order-status { grid-column: 2; grid-row: 1; }.orders-list a > strong { grid-column: 2; grid-row: 2; text-align: right; } }
+	@media(max-width:680px) { .heading-row,.detail-head { align-items: flex-start; flex-direction: column; }.members-layout { grid-template-columns: 1fr; }.member-list { position: static; max-height: 280px; }.member-detail { gap: 11px; }.fields { grid-template-columns: 1fr; }.fields .wide { grid-column: auto; }.section-head { align-items: flex-start; flex-direction: column; }.form-footer { align-items: stretch; flex-direction: column; }.form-footer button { width: 100%; }.orders-list a { grid-template-columns: minmax(0,1fr) auto; gap: 8px; }.orders-list .order-status { grid-column: 2; grid-row: 1; }.orders-list a > strong { grid-column: 2; grid-row: 2; }.member-search > div { flex-wrap: wrap; }.member-search input { flex-basis: calc(100% - 50px); }.member-search button { flex: 1; } }
+</style>

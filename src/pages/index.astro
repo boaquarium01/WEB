@@ -4,6 +4,19 @@ import ProductGridStagger from '../components/ProductGridStagger.astro';
 import HomeHeroSpotlight from '../components/HomeHeroSpotlight.astro';
 import { getAllCategories, getFeaturedProducts, getHeroSpotlightProducts } from '../data/products';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
+import { getCartItemCount } from '../lib/services/cart';
+
+export const prerender = false;
+
+const user = Astro.locals.user;
+let cartCount = 0;
+if (user) {
+	try {
+		cartCount = await getCartItemCount(user.id);
+	} catch {
+		cartCount = 0;
+	}
+}
 
 const navItems = [
   { name: '首頁', href: '#home' },
@@ -121,10 +134,15 @@ const MAP_EMBED_URL =
             </li>
           </ul>
         </nav>
-        <div class="header-end-spacer" aria-hidden="true"></div>
+        <div class="header-ecommerce">
+          {user ? (
+            <a href="/account" class="home-ecommerce-icon" aria-label="會員中心" title="會員中心"><i class="fa-regular fa-user" aria-hidden="true"></i></a>
+          ) : (
+            <a href="/account/login" class="home-ecommerce-icon" aria-label="會員登入" title="會員登入"><i class="fa-regular fa-user" aria-hidden="true"></i></a>
+          )}
+        </div>
       </div>
     </header>
-
     <div id="mobileMenuBackdrop" class="drawer-backdrop" aria-hidden="true"></div>
     <aside id="mobileMenu" class="drawer" aria-label="側邊選單">
       <div class="drawer-head">
@@ -158,6 +176,18 @@ const MAP_EMBED_URL =
                 ))}
               </ul>
             </details>
+          </li>
+          <li>
+            <a href="/cart" class="mobile-menu-link drawer-link">
+              購物車{cartCount > 0 ? `（${cartCount}）` : ''}
+            </a>
+          </li>
+          <li>
+            {user ? (
+              <a href="/account" class="mobile-menu-link drawer-link">會員中心</a>
+            ) : (
+              <a href="/account/login" class="mobile-menu-link drawer-link">登入 / 註冊</a>
+            )}
           </li>
         </ul>
       </nav>
@@ -806,11 +836,15 @@ const MAP_EMBED_URL =
     list-style: none;
   }
 
-  .header-end-spacer {
-    width: 42px;
-    height: 42px;
+  .header-ecommerce {
+    display: none;
+    align-items: center;
+    gap: 0.35rem;
     flex-shrink: 0;
+    justify-self: end;
   }
+
+  .home-ecommerce-icon{position:relative;display:inline-grid;place-items:center;width:42px;height:42px;border:1px solid var(--aq-line);border-radius:50%;background:rgba(255,255,255,.82);color:var(--aq-ink);font-size:1rem;text-decoration:none;transition:background .18s,border-color .18s,color .18s,transform .18s}.home-ecommerce-icon:hover{transform:translateY(-1px);border-color:var(--aq-primary);background:var(--aq-primary-soft);color:var(--aq-primary-dark)}
 
   .icon-btn {
     display: inline-flex;
@@ -860,7 +894,8 @@ const MAP_EMBED_URL =
       grid-column: 2;
     }
 
-    .header-end-spacer {
+    .header-ecommerce {
+      display: flex;
       grid-column: 3;
     }
   }
@@ -2467,8 +2502,8 @@ const MAP_EMBED_URL =
   .promo-scroll-top-btn {
     position: fixed;
     right: 18px;
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-    z-index: 9998;
+    bottom: calc(154px + env(safe-area-inset-bottom, 0px));
+    z-index: 10000;
     width: 46px;
     height: 46px;
     border: 0;
@@ -2506,7 +2541,7 @@ const MAP_EMBED_URL =
   @media (max-width: 639px) {
     .promo-scroll-top-btn {
       right: 14px;
-      bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(150px + env(safe-area-inset-bottom, 0px));
     }
   }
 

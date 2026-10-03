@@ -3,8 +3,9 @@
  * 需伺服器環境變數 SANITY_API_TOKEN（具 Editor 權限），或由請求 x-admin-token 傳入。
  */
 import { createClient, type SanityClient } from '@sanity/client';
-import imageUrlBuilder from '@sanity/image-url';
-import type { ImageUrlBuilder } from '@sanity/image-url/lib/types/builder';
+import { createImageUrlBuilder } from '@sanity/image-url';
+
+type ImageUrlBuilder = ReturnType<typeof createImageUrlBuilder>;
 import { plainTextToPortableBlocks } from '../portableText';
 import { strapiBlocksToPlainText } from '../strapi/blocks';
 import { dedupePromotionDocuments } from '../sanity/dedupePromotions';
@@ -279,7 +280,7 @@ export async function runSanityDashboardRequest(opts: {
 	}
 
 	const { projectId, dataset } = readEnv();
-	const b = imageUrlBuilder({ projectId, dataset });
+	const b = createImageUrlBuilder({ projectId, dataset });
 
 	const url = new URL(opts.path, 'http://x');
 	const pathname = url.pathname;

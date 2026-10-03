@@ -1,0 +1,281 @@
+---
+import AccountLayout from '../../../layouts/AccountLayout.astro';
+import {
+	createAddressForUser,
+	deleteAddressForUser,
+	listAddressesForUser,
+	updateAddressForUser,
+} from '../../../lib/services/address';
+import { taiwanAddresses } from '../../../data/taiwan-addresses';
+
+export const prerender = false;
+
+const user = Astro.locals.user!;
+let error: string | null = null;
+let message: string | null = null;
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const action = String(form.get('_action') ?? 'create');
+
+	try {
+		if (action === 'delete') {
+			await deleteAddressForUser(user.id, String(form.get('addressId')));
+			message = '已刪除地址';
+		} else if (action === 'default' || action === 'update') {
+			const addressId = String(form.get('addressId') ?? '');
+			await updateAddressForUser(user.id, addressId, action === 'default' ? { isDefault: true } : {
+				label: String(form.get('label') ?? ''),
+				recipientName: String(form.get('recipientName') ?? ''),
+				phone: String(form.get('phone') ?? ''),
+				postalCode: String(form.get('postalCode') ?? ''),
+				city: String(form.get('city') ?? ''),
+				district: String(form.get('district') ?? ''),
+				addressLine: String(form.get('addressLine') ?? ''),
+				isDefault: form.get('isDefault') === 'on',
+			});
+			message = action === 'default' ? '已設為預設地址' : '地址已更新';
+		} else {
+			await createAddressForUser(user.id, {
+				label: String(form.get('label') ?? ''),
+				recipientName: String(form.get('recipientName') ?? ''),
+				phone: String(form.get('phone') ?? ''),
+				postalCode: String(form.get('postalCode') ?? ''),
+				city: String(form.get('city') ?? ''),
+				district: String(form.get('district') ?? ''),
+				addressLine: String(form.get('addressLine') ?? ''),
+				isDefault: form.get('isDefault') === 'on',
+			});
+			message = '已新增地址';
+		}
+	} catch (e) {
+		error = e instanceof Error ? e.message : '操作失敗';
+	}
+}
+
+const rows = await listAddressesForUser(user.id);
+const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉鎮]$/, '');
+---
+
+<AccountLayout title="收件地址｜水博館 V2">
+	<h1>收件地址</h1>
+	<p class="lead">管理常用收件地址，結帳時可快速選取。</p>
+
+	{message && <p class="ok">{message}</p>}
+	{error && <p class="error">{error}</p>}
+
+	<section class="list">
+		{
+			rows.length === 0 ? (
+				<p class="empty">尚未新增地址</p>
+			) : (
+				rows.map((row) => (
+					<article class="card address-card">
+						<header class="address-card-head">
+							<div><strong>{row.recipientName}</strong>{row.label && <span class="address-label">{row.label}</span>}</div>
+							{row.isDefault && <span class="badge">預設地址</span>}
+						</header>
+						<p class="address-text"><span>{row.postalCode}</span>{row.city}{row.district}{row.addressLine}</p>
+						<p class="muted address-phone">{row.phone}</p>
+						<div class="address-actions">
+							{!row.isDefault && <form method="post"><input type="hidden" name="_action" value="default" /><input type="hidden" name="addressId" value={row.id} /><button type="submit" class="secondary">設為預設</button></form>}
+							<details class="edit-address"><summary>編輯</summary>
+								<form method="post" class="form address-form"><input type="hidden" name="_action" value="update" /><input type="hidden" name="addressId" value={row.id} />
+									<label>標籤（選填）<input name="label" value={row.label ?? ''} placeholder="家 / 公司" /></label>
+									<label>收件人<input name="recipientName" value={row.recipientName} required /></label>
+									<label>電話<input type="tel" name="phone" value={row.phone} required /></label>
+									<div class="field-row"><label>縣市<select name="city" class="city-select" required><option value="">請選擇縣市</option>{Object.keys(taiwanAddresses).map((city) => <option value={city} selected={normalizeAreaName(row.city) === normalizeAreaName(city)}>{city}</option>)}</select></label><label>鄉鎮市區<select name="district" class="district-select" data-value={normalizeAreaName(row.district)} required><option value="">請先選縣市</option></select></label></div>
+									<label>郵遞區號<input name="postalCode" value={row.postalCode} inputmode="numeric" maxlength="6" required /></label>
+									<label>詳細地址<input name="addressLine" value={row.addressLine} required /></label>
+									<label class="check"><input type="checkbox" name="isDefault" checked={row.isDefault} /> 設為預設地址</label><button type="submit">儲存變更</button>
+								</form>
+							</details>
+							<form method="post" onsubmit="return confirm('確定刪除此收件地址？')"><input type="hidden" name="_action" value="delete" /><input type="hidden" name="addressId" value={row.id} /><button type="submit" class="danger">刪除</button></form>
+						</div>
+					</article>
+				))
+			)
+		}
+	</section>
+
+	<details class="add-address">
+	<summary><span aria-hidden="true">+</span> 新增地址</summary>
+	<form method="post" class="form address-form">
+		<input type="hidden" name="_action" value="create" />
+		<label>
+			標籤（選填）
+			<input type="text" name="label" placeholder="家 / 公司" />
+		</label>
+		<label>
+			收件人
+			<input type="text" name="recipientName" required />
+		</label>
+		<label>
+			電話
+			<input type="tel" name="phone" required />
+		</label>
+		<label>
+			郵遞區號 <small>選擇行政區後可自動帶入前三碼，也可自行補足六碼</small>
+			<input type="text" name="postalCode" inputmode="numeric" maxlength="6" required />
+		</label>
+		<div class="field-row"><label>縣市<select name="city" class="city-select" required><option value="">請選擇縣市</option>{Object.keys(taiwanAddresses).map((city) => <option value={city}>{city}</option>)}</select></label><label>鄉鎮市區<select name="district" class="district-select" required disabled><option value="">請先選縣市</option></select></label></div>
+		<label>
+			詳細地址
+			<input type="text" name="addressLine" required />
+		</label>
+		<label class="check">
+			<input type="checkbox" name="isDefault" />
+			設為預設地址
+		</label>
+		<button type="submit">新增</button>
+	</form>
+	</details>
+</AccountLayout>
+
+<style>
+	h1 {
+		margin: 0 0 0.5rem;
+	}
+
+	.lead,
+	.muted,
+	.empty {
+		color: var(--muted);
+	}
+
+	.ok {
+		color: #9dffd2;
+	}
+
+	.error {
+		color: #ff8f8f;
+	}
+
+	.list {
+		display: grid;
+		gap: 0.85rem;
+		margin: 1.25rem 0;
+	}
+
+	.card {
+		border: 1px solid var(--line);
+		border-radius: 0.65rem;
+		padding: 0.9rem 1rem;
+		background: rgba(8, 20, 28, 0.35);
+	}
+
+	.card header {
+		display: flex;
+		gap: 0.5rem;
+		align-items: center;
+		margin-bottom: 0.35rem;
+	}
+
+	.badge {
+		font-size: 0.75rem;
+		color: #062018;
+		background: var(--accent);
+		border-radius: 999px;
+		padding: 0.1rem 0.45rem;
+	}
+
+	.form {
+		display: grid;
+		gap: 0.85rem;
+		margin-top: 1rem;
+	}
+
+	label {
+		display: grid;
+		gap: 0.35rem;
+	}
+
+	.check {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+
+	input[type='text'],
+	input[type='tel'] {
+		padding: 0.65rem 0.75rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--line);
+		background: rgba(8, 20, 28, 0.55);
+		color: var(--ink);
+	}
+
+	button {
+		padding: 0.7rem 1rem;
+		border: 0;
+		border-radius: 0.5rem;
+		background: var(--accent);
+		color: #062018;
+		font-weight: 650;
+		cursor: pointer;
+		justify-self: start;
+	}
+
+	.danger {
+		background: transparent;
+		border: 1px solid rgba(255, 140, 140, 0.45);
+		color: #ffb0b0;
+		margin-top: 0.5rem;
+	}
+
+	.card { background: #fff; border-radius: 16px; padding: 1.1rem 1.2rem; }
+	.add-address { margin-top:1.25rem; }
+	.add-address > summary { display:flex; align-items:center; gap:.65rem; width:100%; padding:.9rem 1rem; border:1px dashed #a9c9bc; border-radius:14px; background:#f7fbf8; color:var(--aq-primary-dark); font-weight:750; cursor:pointer; list-style:none; }
+	.add-address > summary::-webkit-details-marker { display:none; }
+	.add-address > summary span { display:grid; place-items:center; width:1.6rem; height:1.6rem; border-radius:50%; background:var(--aq-primary); color:#fff; font-size:1.2rem; line-height:1; }
+	.add-address[open] > summary { border-style:solid; border-color:#d7e5df; background:#fff; }
+	.add-address[open] > summary span { transform:rotate(45deg); }
+	.add-address > .address-form { padding:1rem; border:1px solid #e9e7e1; border-radius:16px; background:#fff; }
+	.address-card-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+	.address-card-head > div { display:flex; align-items:center; flex-wrap:wrap; gap:.55rem; }
+	.address-label { padding:.2rem .55rem; border-radius:999px; background:#edf5f1; color:#315a52; font-size:.78rem; }
+	.address-text { margin:.7rem 0 .25rem; line-height:1.7; }
+	.address-text span { margin-right:.45rem; color:var(--aq-muted); font-variant-numeric:tabular-nums; }
+	.address-phone { margin:.2rem 0 .85rem; }
+	.address-actions { display:flex; align-items:center; flex-wrap:wrap; gap:.55rem; }
+	.address-actions form { margin:0; }
+	.address-actions button { min-height:38px!important; padding:.45rem .8rem!important; }
+	.address-actions .danger { margin:0; border:1px solid #e9b9b5!important; background:#fff!important; color:#a63228!important; }
+	.secondary { border:1px solid #d7e5df!important; background:#f7fbf8!important; color:var(--aq-primary-dark)!important; box-shadow:none!important; }
+	.edit-address summary { padding:.5rem .85rem; border:1px solid #e2e5df; border-radius:10px; color:var(--aq-primary-dark); cursor:pointer; font-weight:700; }
+	.edit-address[open] { flex-basis:100%; }
+	.edit-address .address-form { padding:1rem; border:1px solid #e9e7e1; border-radius:14px; background:#fbfcfa; }
+	.field-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.85rem; }
+	.field-row label { min-width:0; }
+	label small { color:var(--aq-muted); font-size:.76rem; font-weight:400; }
+	select { width:100%; min-height:46px; padding:.7rem .85rem; border:1px solid #dedfd9; border-radius:12px; background:#fff; color:var(--aq-ink); font:inherit; }
+	.check input { width:18px; min-height:18px!important; }
+	@media(max-width:560px) { .field-row { grid-template-columns:1fr; } .address-card-head { align-items:flex-start; } }
+</style>
+
+<script>
+	import { taiwanAddresses, taiwanPostcodes } from '../../../data/taiwan-addresses';
+
+	document.querySelectorAll<HTMLFormElement>('.address-form').forEach((form) => {
+		const city = form.querySelector<HTMLSelectElement>('.city-select');
+		const district = form.querySelector<HTMLSelectElement>('.district-select');
+		const postal = form.querySelector<HTMLInputElement>('input[name="postalCode"]');
+		if (!city || !district || !postal) return;
+
+		const setDistricts = (preferred = '') => {
+			const options = taiwanAddresses[city.value] ?? [];
+			district.replaceChildren(new Option(options.length ? '請選擇鄉鎮市區' : '請先選縣市', ''));
+			const normalize = (value: string) => value.trim().replace(/[市縣區鄉鎮]$/, '');
+			options.forEach((name) => district.add(new Option(name, name, false, normalize(name) === normalize(preferred))));
+			district.disabled = options.length === 0;
+		};
+		setDistricts(district.dataset.value ?? '');
+		const initialPrefix = taiwanPostcodes[`${city.value}|${district.value}`];
+		if (initialPrefix && postal.value.length < 6 && !postal.value.startsWith(initialPrefix)) postal.value = initialPrefix;
+		city.addEventListener('change', () => { setDistricts(); postal.value = ''; });
+		district.addEventListener('change', () => {
+			const prefix = taiwanPostcodes[`${city.value}|${district.value}`];
+			if (prefix) postal.value = prefix;
+		});
+	});
+</script>
