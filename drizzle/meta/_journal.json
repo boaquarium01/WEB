@@ -43,6 +43,13 @@
       "when": 1791000000000,
       "tag": "0005_auth_member_security",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791023968448,
+      "tag": "0006_better_auth_rate_limit_id",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
 	bigint,
 	boolean,
@@ -146,7 +147,8 @@ export const verification = pgTable('verification', {
 
 /** Better Auth's shared rate-limit storage for serverless deployments. */
 export const rateLimit = pgTable('rate_limit', {
-	key: text('key').primaryKey(),
+	id: text('id').primaryKey().$defaultFn(() => randomUUID()),
+	key: text('key').notNull().unique(),
 	count: integer('count').notNull(),
 	lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
 });
