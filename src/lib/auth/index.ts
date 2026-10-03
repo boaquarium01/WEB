@@ -71,6 +71,9 @@ function createAuth() {
 			accountLinking: {
 				enabled: true,
 				disableImplicitLinking: true,
+				// Allow explicit linking from the signed-in security page. This does not
+				// enable email-based auto-merging because implicit linking stays disabled.
+				trustedProviders: ['google', 'line'],
 				allowDifferentEmails: true,
 				allowUnlinkingAll: false,
 			},
