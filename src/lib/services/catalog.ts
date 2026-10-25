@@ -1,24 +1,34 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { findContentVariant, specificationImage, defaultPurchasableSku } from '../sanity/specification-media';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { availableStock } from '../db/inventory';
-import { inventory, productSkus, products } from '../db/schema';
+import { inventory, productPriceTiers, productSkus, products } from '../db/schema';
 import {
 	fetchSanityCategories,
 	fetchSanityProductBySlug,
 	fetchSanityProducts,
 	type ProductContent,
 } from '../sanity';
+import type { QuantityPriceTier } from './quantity-pricing';
 
 export type CatalogSku = {
+	variantKey?: string | null;
+	sourceSku?: string | null;
 	id: string;
 	sku: string;
 	name: string;
 	sellingPrice: number;
 	available: number;
 	isActive: boolean;
+	option1Value?: string;
+	option2Value?: string;
+	optionIds?: string[];
+	optionNames?: string[];
+	imageUrl?: string | null;
 };
 
 export type CatalogProductListItem = {
+	createdAt?: string;
 	productId: string;
 	sanityProductId: string;
 	productType: string;
@@ -30,6 +40,8 @@ export type CatalogProductListItem = {
 	categorySlug: string | null;
 	searchText?: string;
 	sellingPrice: number;
+	priceMin?: number | null;
+	priceMax?: number | null;
 	available: number;
 	inStock: boolean;
 	defaultSkuId: string | null;
@@ -39,20 +51,28 @@ export type CatalogProductDetail = CatalogProductListItem & {
 	body: unknown[] | null;
 	galleryUrls: string[];
 	skus: CatalogSku[];
+	specifications: ProductContent['specifications'];
 	requiresManualConfirmation: boolean;
 	seoTitle: string | null;
 	seoDescription: string | null;
+	minimumPurchaseQuantity: number;
+	priceTiers: QuantityPriceTier[];
 };
 
 type PgProductRow = {
+	createdAt: Date;
 	productId: string;
 	sanityProductId: string;
+	productType: string;
 	slug: string;
 	name: string;
 	sellingPrice: number;
 	requiresManualConfirmation: boolean;
+	minimumPurchaseQuantity: number;
 	skuId: string | null;
 	skuCode: string | null;
+	variantKey: string | null;
+	sourceSku: string | null;
 	skuName: string | null;
 	skuPrice: number | null;
 	skuActive: boolean | null;
@@ -73,17 +93,21 @@ async function loadOnlinePgRows(
 	const rows = await db
 		.select({
 			productId: products.id,
+			createdAt: products.createdAt,
 			sanityProductId: products.sanityProductId,
 			productType: products.productType,
 			slug: products.slug,
 			name: products.name,
 			sellingPrice: products.sellingPrice,
 			requiresManualConfirmation: products.requiresManualConfirmation,
+			minimumPurchaseQuantity: products.minimumPurchaseQuantity,
 			skuId: productSkus.id,
 			skuCode: productSkus.sku,
+			variantKey: productSkus.variantKey,
+			sourceSku: productSkus.sourceSku,
 			skuName: productSkus.name,
 			skuPrice: productSkus.sellingPrice,
-			skuActive: productSkus.isActive,
+			skuActive: sql<boolean>`${productSkus.isActive} AND ${productSkus.saleEnabled}`,
 			onHand: inventory.onHand,
 			reserved: inventory.reserved,
 		})
@@ -109,7 +133,7 @@ function buildSkus(rows: PgProductRow[]): CatalogSku[] {
 
 	for (const row of rows) {
 		if (!row.skuId || !row.skuCode) continue;
-		const available = availableStock(row.onHand ?? -1, row.reserved ?? 0);
+		const available = row.skuActive === false ? 0 : availableStock(row.onHand ?? -1, row.reserved ?? 0);
 		const existing = bySku.get(row.skuId);
 		if (existing) {
 				existing.available = existing.available < 0 || available < 0
@@ -120,6 +144,8 @@ function buildSkus(rows: PgProductRow[]): CatalogSku[] {
 		bySku.set(row.skuId, {
 			id: row.skuId,
 			sku: row.skuCode,
+			variantKey: row.variantKey,
+			sourceSku: row.sourceSku,
 			name: row.skuName ?? row.name,
 			sellingPrice: row.skuPrice ?? row.sellingPrice,
 			available,
@@ -158,11 +184,16 @@ function mergeListItem(
 	const defaultSku = skus[0] ?? null;
 	const first = rows[0]!;
 	const sellingPrice = defaultSku?.sellingPrice ?? first.sellingPrice;
+	const listedPrices = skus.filter((sku) => sku.isActive && sku.sellingPrice > 0).map((sku) => sku.sellingPrice);
+	const priceMin = listedPrices.length ? Math.min(...listedPrices) : null;
+	const priceMax = listedPrices.length ? Math.max(...listedPrices) : null;
 	const available = totalAvailability(skus);
 
 	return {
 		productId: first.productId,
 		sanityProductId: content.sanityProductId,
+		createdAt: content.createdAt ?? first.createdAt.toISOString(),
+		productType: content.productType,
 		slug: content.slug,
 		name: content.name,
 		excerpt: content.excerpt,
@@ -171,6 +202,8 @@ function mergeListItem(
 		categorySlug: content.categorySlug,
 		searchText: portableTextToSearchText(content.body),
 		sellingPrice,
+		priceMin,
+		priceMax,
 		available,
 		inStock: available !== 0,
 		defaultSkuId: defaultSku?.id ?? null,
@@ -222,9 +255,14 @@ async function listCatalogProductsFromPg(
 			const first = rows[0]!;
 			const skus = buildSkus(rows);
 			const available = totalAvailability(skus);
+			const listedPrices = skus.filter((sku) => sku.isActive && sku.sellingPrice > 0).map((sku) => sku.sellingPrice);
+			const priceMin = listedPrices.length ? Math.min(...listedPrices) : null;
+			const priceMax = listedPrices.length ? Math.max(...listedPrices) : null;
 			return {
 				productId: first.productId,
 				sanityProductId: first.sanityProductId,
+				createdAt: first.createdAt.toISOString(),
+				productType: first.productType,
 				slug: first.slug,
 				name: first.name,
 				excerpt: null,
@@ -232,6 +270,8 @@ async function listCatalogProductsFromPg(
 				categoryLabel: null,
 				categorySlug: first.productType,
 				sellingPrice: skus[0]?.sellingPrice ?? first.sellingPrice,
+				priceMin,
+				priceMax,
 				available,
 				inStock: available !== 0,
 				defaultSkuId: skus[0]?.id ?? null,
@@ -253,9 +293,12 @@ export async function getCatalogProductBySlug(
 		if (!matching?.length) return null;
 		const first = matching[0]!;
 		const skus = buildSkus(matching);
+		const db = getDb();
+		const priceTiers = await db.select({ minQuantity: productPriceTiers.minQuantity, maxQuantity: productPriceTiers.maxQuantity, unitPrice: productPriceTiers.unitPrice }).from(productPriceTiers).where(eq(productPriceTiers.productId, first.productId)).orderBy(asc(productPriceTiers.sortOrder));
 		const base: CatalogProductListItem = {
 			productId: first.productId,
 			sanityProductId: first.sanityProductId,
+			productType: first.productType,
 			slug: first.slug,
 			name: first.name,
 			excerpt: null,
@@ -272,7 +315,10 @@ export async function getCatalogProductBySlug(
 			body: null,
 			galleryUrls: [],
 			skus,
+			specifications: [],
 			requiresManualConfirmation: first.requiresManualConfirmation,
+			minimumPurchaseQuantity: first.minimumPurchaseQuantity,
+			priceTiers,
 			seoTitle: null,
 			seoDescription: null,
 		};
@@ -286,13 +332,31 @@ export async function getCatalogProductBySlug(
 
 	const skus = buildSkus(rows);
 	const first = rows[0]!;
+	const db = getDb();
+	const priceTiers = await db.select({ minQuantity: productPriceTiers.minQuantity, maxQuantity: productPriceTiers.maxQuantity, unitPrice: productPriceTiers.unitPrice }).from(productPriceTiers).where(eq(productPriceTiers.productId, first.productId)).orderBy(asc(productPriceTiers.sortOrder));
+	for (const sku of skus) {
+		const variant = findContentVariant(content, sku);
+		if (variant) {
+			sku.optionIds = variant.optionIds;
+			sku.optionNames = variant.optionNames;
+			sku.imageUrl = specificationImage(content, variant.optionIds);
+		}
+	}
+	// Match the administrator's option order instead of PostgreSQL's unspecified row order.
+	const combinationOrder = new Map(content.variants.map((variant, index) => [variant.variantKey, index]));
+	skus.sort((a, b) => (combinationOrder.get(findContentVariant(content, a)?.variantKey ?? '') ?? Number.MAX_SAFE_INTEGER)
+		- (combinationOrder.get(findContentVariant(content, b)?.variantKey ?? '') ?? Number.MAX_SAFE_INTEGER));
 
 	return {
 		...base,
+		defaultSkuId: defaultPurchasableSku(skus, first.minimumPurchaseQuantity)?.id ?? null,
 		body: content.body,
 		galleryUrls: content.galleryUrls,
 		skus,
+		specifications: content.specifications,
 		requiresManualConfirmation: first.requiresManualConfirmation,
+		minimumPurchaseQuantity: first.minimumPurchaseQuantity,
+		priceTiers,
 		seoTitle: content.seoTitle,
 		seoDescription: content.seoDescription,
 	};

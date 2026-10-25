@@ -1,5 +1,5 @@
 import { randomInt } from 'node:crypto';
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { availableStock } from '../db/inventory';
 import {
@@ -13,6 +13,7 @@ import {
 	orders,
 	payments,
 	productSkus,
+	productPriceTiers,
 	products,
 	shippingMethods,
 } from '../db/schema';
@@ -20,6 +21,7 @@ import { ensureCustomerForUser } from './customer';
 import { getAddressForUser, type Address } from './address';
 import { getCartView } from './cart';
 import { getShippingFee } from './shipping';
+import { unitPriceForQuantity, type QuantityPriceTier } from './quantity-pricing';
 
 export type ShippingAddressSnapshot = {
 	addressId: string;
@@ -38,6 +40,7 @@ export type PlaceOrderInput = {
 	addressId: string;
 	shippingMethodId: string;
 	note?: string;
+	cartItemIds?: string[];
 };
 
 export type PlaceOrderResult = {
@@ -101,10 +104,15 @@ export async function placeOrderFromCart(
 ): Promise<PlaceOrderResult> {
 	const addressId = String(input.addressId ?? '').trim();
 	const shippingMethodId = String(input.shippingMethodId ?? '').trim();
+	const selectedCartItemIds = input.cartItemIds?.map((id) => String(id).trim()).filter(Boolean);
 	if (!addressId) {
 		throw new Error('請選擇收件地址');
 	}
 	if (!shippingMethodId) throw new Error('請選擇配送方式');
+	if (selectedCartItemIds && selectedCartItemIds.length === 0) throw new Error('請至少選擇一項商品');
+	if (selectedCartItemIds?.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+		throw new Error('所選商品資料無效，請返回購物車重新選擇');
+	}
 
 	const note = String(input.note ?? '').trim() || null;
 	const address = await getAddressForUser(userId, addressId);
@@ -137,33 +145,59 @@ export async function placeOrderFromCart(
 			throw new Error('找不到購物車');
 		}
 
+		const lineConditions = [eq(cartItems.cartId, cart.id)];
+		if (selectedCartItemIds) lineConditions.push(inArray(cartItems.id, selectedCartItemIds));
 		const lines = await tx
 			.select({
+				cartItemId: cartItems.id,
 				productSkuId: cartItems.productSkuId,
 				quantity: cartItems.quantity,
 				productId: products.id,
 				productName: products.name,
 				sku: productSkus.sku,
-				unitPrice: productSkus.sellingPrice,
-				skuActive: productSkus.isActive,
+				skuName: productSkus.name,
+			unitPrice: productSkus.sellingPrice,
+			minimumPurchaseQuantity: products.minimumPurchaseQuantity,
+				skuActive: sql<boolean>`${productSkus.isActive} AND ${productSkus.saleEnabled}`,
 				productActive: products.isActive,
 				productOnline: products.isOnline,
 			})
 			.from(cartItems)
 			.innerJoin(productSkus, eq(cartItems.productSkuId, productSkus.id))
 			.innerJoin(products, eq(productSkus.productId, products.id))
-			.where(eq(cartItems.cartId, cart.id));
+			.where(and(...lineConditions));
 
 		if (lines.length === 0) {
-			throw new Error('購物車是空的');
+			throw new Error(selectedCartItemIds ? '所選商品已不在購物車，請重新選擇' : '購物車是空的');
+		}
+		if (selectedCartItemIds && lines.length !== new Set(selectedCartItemIds).size) {
+			throw new Error('購物車內容已變更，請返回購物車重新選擇');
+		}
+		const productIds = [...new Set(lines.map((line) => line.productId))];
+		const tiers = productIds.length ? await tx.select({
+			productId: productPriceTiers.productId,
+			minQuantity: productPriceTiers.minQuantity,
+			maxQuantity: productPriceTiers.maxQuantity,
+			unitPrice: productPriceTiers.unitPrice,
+		}).from(productPriceTiers).where(inArray(productPriceTiers.productId, productIds)).orderBy(asc(productPriceTiers.sortOrder)) : [];
+		const tiersByProduct = new Map<string, QuantityPriceTier[]>();
+		for (const tier of tiers) tiersByProduct.set(tier.productId, [...(tiersByProduct.get(tier.productId) ?? []), tier]);
+		const quantityByProduct = new Map<string, number>();
+		for (const line of lines) quantityByProduct.set(line.productId, (quantityByProduct.get(line.productId) ?? 0) + line.quantity);
+		for (const line of lines) {
+			if (quantityByProduct.get(line.productId)! < line.minimumPurchaseQuantity) {
+				throw new Error(`「${line.productName}」最低購買數量為 ${line.minimumPurchaseQuantity} 件`);
+			}
 		}
 
 		let subtotal = 0;
 		const prepared: Array<{
+			cartItemId: string;
 			productId: string;
 			productSkuId: string;
 			productName: string;
 			sku: string;
+			skuName: string;
 			unitPrice: number;
 			quantity: number;
 			lineSubtotal: number;
@@ -193,14 +227,17 @@ export async function placeOrderFromCart(
 				);
 			}
 
-			const unitPrice = line.unitPrice;
+			const productQuantity = quantityByProduct.get(line.productId) ?? line.quantity;
+			const unitPrice = unitPriceForQuantity(line.unitPrice, productQuantity, tiersByProduct.get(line.productId) ?? []);
 			const lineSubtotal = unitPrice * line.quantity;
 			subtotal += lineSubtotal;
 			prepared.push({
+				cartItemId: line.cartItemId,
 				productId: line.productId,
 				productSkuId: line.productSkuId,
 				productName: line.productName,
 				sku: line.sku,
+				skuName: line.skuName,
 				unitPrice,
 				quantity: line.quantity,
 				lineSubtotal,
@@ -253,6 +290,7 @@ export async function placeOrderFromCart(
 				productSkuId: item.productSkuId,
 				productName: item.productName,
 				sku: item.sku,
+				skuNameSnapshot: item.skuName,
 				unitPrice: item.unitPrice,
 				quantity: item.quantity,
 				subtotal: item.lineSubtotal,
@@ -281,9 +319,14 @@ export async function placeOrderFromCart(
 				),
 			);
 
+		await tx.delete(cartItems).where(and(
+			eq(cartItems.cartId, cart.id),
+			inArray(cartItems.id, prepared.map((item) => item.cartItemId)),
+		));
+		const remainingItems = await tx.select({ id: cartItems.id }).from(cartItems).where(eq(cartItems.cartId, cart.id)).limit(1);
 		await tx
 			.update(carts)
-			.set({ status: 'CHECKED_OUT', updatedAt: new Date() })
+			.set({ ...(remainingItems.length === 0 ? { status: 'CHECKED_OUT' as const } : {}), updatedAt: new Date() })
 			.where(eq(carts.id, cart.id));
 
 		return {

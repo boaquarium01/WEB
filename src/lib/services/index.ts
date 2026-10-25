@@ -73,6 +73,7 @@ export {
 } from './inventory';
 export {
 	getAdminDashboardStats,
+	getAdminOperationsReport,
 	listAdminOrders,
 	getAdminOrder,
 	adminConfirmPayment,

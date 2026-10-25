@@ -2,6 +2,7 @@
 
 export const PRODUCT_PROJECTION = /* groq */ `
   _id,
+  _createdAt,
   _type,
   name,
   "slug": slug.current,
@@ -20,6 +21,11 @@ export const PRODUCT_PROJECTION = /* groq */ `
   heroSpotlightActivatedAt,
   image,
   gallery,
+  specificationsEnabled,
+  specifications[]{ _key, name, order, options[]{ _key, name, order, image } },
+  option1Name,
+  option2Name,
+  variants[]{ _key, optionIds, option1Value, option2Value, image },
   seoTitle,
   seoKeywords,
   seoDescription

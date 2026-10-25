@@ -35,7 +35,7 @@ const categories = await getAllCategories();
 	>
 		{productBack ? (
 			<div class="header-inner product-header-inner">
-				<a class="product-back" href={productBack.href} aria-label={`返回${productBack.href === '/' ? '首頁' : productBack.label}`} title={productBack.href === '/' ? '返回首頁' : '返回上一頁'} onclick={productBack.href === '/' ? undefined : "if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) { event.preventDefault(); history.back(); }"}>
+				<a class="product-back" href={productBack.href} aria-label={`返回${productBack.href === '/' ? '首頁' : productBack.label}`} title={productBack.href === '/' ? '返回首頁' : productBack.href === '/cart' ? '返回購物車' : '返回上一頁'} onclick={productBack.href === '/' || productBack.href === '/cart' ? undefined : "if (history.length > 1 && document.referrer && new URL(document.referrer).origin === location.origin) { event.preventDefault(); history.back(); }"}>
 					<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 				</a>
 				<a href="/" class="product-brand">水博館水族</a>
@@ -250,7 +250,7 @@ const categories = await getAllCategories();
 		background: #fff;
 	}
 
-	.legacy-footer-inner{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.5rem}.legacy-footer-inner a{color:var(--aq-primary-dark);font-weight:650;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:4px}.legacy-footer-inner p{margin:0;font-size:.75rem;letter-spacing:.02em}
+	.site-footer.legacy-footer{padding:2rem 1rem;background:inherit}.legacy-footer-inner{display:flex;width:100%;max-width:64rem;margin:0 auto;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;text-align:center}.legacy-footer-inner a{color:var(--aq-primary-dark);font-size:.875rem;font-weight:650;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:4px;transition:color .15s}.legacy-footer-inner a:hover{color:var(--aq-primary)}.legacy-footer-inner p{margin:0;font-size:.75rem;letter-spacing:.02em}
 
 	.site-footer p {
 		margin: 0.25rem 0;

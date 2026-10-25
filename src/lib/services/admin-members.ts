@@ -1,6 +1,6 @@
-import { and, desc, eq, ilike, ne, or } from 'drizzle-orm';
+import { and, desc, eq, ilike, ne, or, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { addresses, customers, user } from '../db/schema';
+import { account, addresses, customers, orders as orderTable, user } from '../db/schema';
 import { listAdminOrders } from './admin-orders';
 
 export async function listAdminMembers(query = '') {
@@ -47,13 +47,28 @@ export async function getAdminMember(userId: string) {
 		.limit(1);
 	if (!member) return null;
 
-	const memberAddresses = member.customerId
-		? await db.select().from(addresses)
-			.where(eq(addresses.customerId, member.customerId))
-			.orderBy(desc(addresses.isDefault), desc(addresses.createdAt))
-		: [];
-	const orders = await listAdminOrders({ userId, limit: 300 });
-	return { ...member, addresses: memberAddresses, orders };
+	const [memberAddresses, memberOrders, [orderSummary], linkedAccounts] = await Promise.all([
+		member.customerId
+			? db.select().from(addresses)
+				.where(eq(addresses.customerId, member.customerId))
+				.orderBy(desc(addresses.isDefault), desc(addresses.createdAt))
+			: Promise.resolve([]),
+		listAdminOrders({ userId, limit: 300 }),
+		db.select({
+			orderCount: sql<number>`count(*)::int`,
+			revenue: sql<number>`coalesce(sum(${orderTable.total}), 0)`,
+		})
+			.from(orderTable)
+			.where(and(eq(orderTable.userId, userId), eq(orderTable.paymentStatus, 'PAID'), sql`${orderTable.status} <> 'CANCELLED'`)),
+		db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, userId)),
+	]);
+	return {
+		...member,
+		addresses: memberAddresses,
+		linkedAccounts,
+		orders: memberOrders,
+		orderSummary: { orderCount: Number(orderSummary?.orderCount ?? 0), revenue: Number(orderSummary?.revenue ?? 0) },
+	};
 }
 
 export async function updateAdminMember(input: {
@@ -63,18 +78,15 @@ export async function updateAdminMember(input: {
 	displayName: string;
 	phone: string;
 	bankAccountLastFive: string;
-	note: string;
 }) {
 	const name = input.name.trim();
 	const email = input.email.trim().toLowerCase();
 	const phone = input.phone.trim();
 	const bankAccountLastFive = input.bankAccountLastFive.trim();
-	const note = input.note.trim();
 	if (!name || name.length > 120) throw new Error('姓名不可空白，且需在 120 字內');
 	if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('請輸入有效的電子郵件');
 	if (phone.length > 40) throw new Error('手機號碼不可超過 40 字');
 	if (bankAccountLastFive && !/^\d{5}$/.test(bankAccountLastFive)) throw new Error('常用轉帳帳號末五碼請輸入 5 位數字');
-	if (note.length > 2000) throw new Error('會員備註不可超過 2000 字');
 
 	const db = getDb();
 	await db.transaction(async (tx) => {
@@ -90,10 +102,17 @@ export async function updateAdminMember(input: {
 			displayName: input.displayName.trim() || null,
 			phone: phone || null,
 			bankAccountLastFive: bankAccountLastFive || null,
-			note: note || null,
 			updatedAt: new Date(),
 		}).where(eq(customers.userId, input.userId));
 	});
+}
+
+export async function updateAdminMemberNote(input: { userId: string; note: string }) {
+	const note = input.note.trim();
+	if (note.length > 2000) throw new Error('會員備註不可超過 2000 字');
+	const db = getDb();
+	await db.insert(customers).values({ userId: input.userId }).onConflictDoNothing({ target: customers.userId });
+	await db.update(customers).set({ note: note || null, updatedAt: new Date() }).where(eq(customers.userId, input.userId));
 }
 
 export async function saveAdminMemberAddress(input: {

@@ -16,6 +16,8 @@ import {
 	orderStatusLabel,
 	paymentStatusLabel,
 } from '../../../../../lib/services/order';
+import { sendAuthEmail } from '../../../../../lib/email/adapter';
+import { isSyntheticProviderEmail } from '../../../../../lib/auth/policies.js';
 
 export const prerender = false;
 
@@ -26,6 +28,14 @@ if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
 const base = getAdminBasePath();
 const user = Astro.locals.user!;
 const orderNumber = String(Astro.params.orderNumber ?? '').trim();
+	const htmlEscapes: Record<string, string> = {
+	'&': '&amp;',
+	'<': '&lt;',
+	'>': '&gt;',
+	'"': '&quot;',
+	"'": '&#39;',
+};
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => htmlEscapes[character]);
 
 let error: string | null = null;
 let message: string | null = null;
@@ -43,7 +53,64 @@ if (Astro.request.method === 'POST') {
 			message = '已確認付款，訂單進入處理中。';
 		} else if (action === 'mark_shipped') {
 			await adminMarkShipped(orderNumber, user.id);
-			message = '已標記出貨，並扣減庫存。';
+			const shippedOrder = await getAdminOrder(orderNumber);
+			if (!shippedOrder) throw new Error('找不到出貨訂單');
+			if (!shippedOrder.customerEmail || !shippedOrder.customerEmailVerified || isSyntheticProviderEmail(shippedOrder.customerEmail)) {
+				message = '已標記出貨並扣減庫存；顧客沒有可寄送的已驗證電子郵件，因此未寄出通知。';
+			} else {
+				const address = shippedOrder.shippingAddress;
+				const orderUrl = new URL(`/account/orders/${encodeURIComponent(shippedOrder.orderNumber)}`, Astro.url.origin).toString();
+				const itemLines = shippedOrder.items.map((item) => {
+					const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
+					return `• ${item.productName}${specification} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}`;
+				});
+				try {
+					const sent = await sendAuthEmail({
+						to: shippedOrder.customerEmail,
+						subject: `${address.recipientName}您好，水博館水族訂單已出貨｜${shippedOrder.orderNumber}`,
+						text: [
+							`${address.recipientName}您好：`,
+							'',
+							`感謝您的訂購！您的訂單 ${shippedOrder.orderNumber} 已標記出貨。`,
+							'商品已交由配送，請留意收件。',
+							...(address.shippingMethodName ? [`配送方式：${address.shippingMethodName}`] : []),
+							`收件人：${address.recipientName}`,
+							`收件地址：${address.postalCode} ${address.city}${address.district}${address.addressLine}`,
+							'',
+							'【訂單明細】',
+							...itemLines,
+							'',
+							`商品小計：${formatTwd(shippedOrder.subtotal)}`,
+							`運費：${formatTwd(shippedOrder.shippingFee)}`,
+							...(shippedOrder.discount > 0 ? [`折扣：-${formatTwd(shippedOrder.discount)}`] : []),
+							`應付總額：${formatTwd(shippedOrder.total)}`,
+							'',
+							`查看訂單：${orderUrl}`,
+							'',
+							'感謝您支持水博館水族，祝您順心！',
+						].join('\n'),
+						html: [
+							`<p>${escapeHtml(address.recipientName)}您好：</p>`,
+							`<p>感謝您的訂購！您的訂單 <strong>${escapeHtml(shippedOrder.orderNumber)}</strong> 已標記出貨。商品已交由配送，請留意收件。</p>`,
+							...(address.shippingMethodName ? [`<p>配送方式：${escapeHtml(address.shippingMethodName)}</p>`] : []),
+							`<p>收件人：${escapeHtml(address.recipientName)}<br>收件地址：${escapeHtml(`${address.postalCode} ${address.city}${address.district}${address.addressLine}`)}</p>`,
+							`<h3>訂單明細</h3><ul>${shippedOrder.items.map((item) => {
+								const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
+								return `<li>${escapeHtml(item.productName)}${escapeHtml(specification)} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}</li>`;
+							}).join('')}</ul>`,
+							`<p>商品小計：${formatTwd(shippedOrder.subtotal)}<br>運費：${formatTwd(shippedOrder.shippingFee)}${shippedOrder.discount > 0 ? `<br>折扣：-${formatTwd(shippedOrder.discount)}` : ''}<br><strong>應付總額：${formatTwd(shippedOrder.total)}</strong></p>`,
+							`<p><a href="${escapeHtml(orderUrl)}">查看訂單進度</a></p>`,
+							'<p>感謝您支持水博館水族，祝您順心！</p>',
+						].join('\n'),
+					});
+					message = sent
+						? '已標記出貨、扣減庫存，並寄出顧客出貨通知。'
+						: '已標記出貨並扣減庫存；郵件服務尚未設定，未寄出顧客通知。';
+				} catch (emailError) {
+					console.error(`Failed to send shipment email for order ${shippedOrder.orderNumber}:`, emailError);
+					message = '已標記出貨並扣減庫存，但出貨通知寄送失敗。';
+				}
+			}
 		} else if (action === 'complete') {
 			await adminCompleteOrder(orderNumber);
 			message = '訂單已完成。';
@@ -63,7 +130,11 @@ if (!order) {
 
 const addr = order.shippingAddress;
 const payment = order.payments[0];
-const submissions = payment?.submissions ?? [];
+const submissions = [...(payment?.submissions ?? [])].sort((a, b) => b.submittedAt.getTime() - a.submittedAt.getTime());
+const primarySubmission = (payment?.status === 'PAID' ? submissions.find((submission) => submission.verifiedAt) : null) ?? submissions[0];
+const previousSubmissions = submissions.filter((submission) => submission.id !== primarySubmission?.id);
+const paymentHeadingStatus = payment ? (payment.status === 'PAID' ? '已核對' : paymentStatusLabel(payment.status)) : null;
+const compactPaymentTime = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 const memberOrdersHref = order.customerEmail
 	? `${base}/shop/orders?userId=${encodeURIComponent(order.userId)}`
 	: null;
@@ -133,14 +204,16 @@ const canCancel = [
 
 <AdminLayout title={`訂單 ${order.orderNumber}｜水博館水族`}>
 	<header class="head page-heading order-heading">
-		<a class="back-link" href={`${base}/shop/orders`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回訂單管理</a>
-		<div class="heading-row"><div><p class="eyebrow">訂單明細</p><h1>{order.orderNumber}</h1></div></div>
-		<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
-		<p class="current-summary"><span>建立於 {formatDateTime(order.createdAt)}</span></p>
+		<a class="commerce-back-link" href={`${base}/shop/orders`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回訂單管理</a>
+		<div class="order-identity">
+			<div class="order-title-row"><h1>{order.orderNumber}</h1><span class={`order-status status--${order.status.toLowerCase()}`}>{orderStatusLabel(order.status)}</span></div>
+			<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
+			<p class="current-summary"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>下單時間　{formatDateTime(order.createdAt)}</span></p>
+		</div>
 		<div class="actions-bar">
-			{canConfirm && <form method="post"><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-primary">確認付款</button></form>}
-			{canShip && <form method="post"><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-primary">標記出貨</button></form>}
-			{canComplete && <form method="post"><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-primary">完成訂單</button></form>}
+			{canConfirm && <form method="post"><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-payment">確認付款</button></form>}
+			{canShip && <form method="post"><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-shipping">標記出貨</button></form>}
+			{canComplete && <form method="post"><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-complete">完成訂單</button></form>}
 			{canCancel && <form method="post" onsubmit="return confirm('確定取消此訂單？');"><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
 		</div>
 	</header>
@@ -160,73 +233,52 @@ const canCancel = [
 	<div class="order-panels">
 	<section class="panel delivery-panel">
 		<div class="section-heading"><h2>收件資訊</h2><button class="copy-address" type="button" data-copy={copyAddress}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製資訊</button></div>
-		<div class="address-details"><strong>{addr.recipientName}</strong><span>{addr.phone}</span>{addr.shippingMethodName && <span>配送方式：{addr.shippingMethodName}</span>}<span>{addr.postalCode} {addr.city}{addr.district}{addr.addressLine}</span>{order.note && <span>備註：{order.note}</span>}</div>
+		<div class="address-details"><strong>{addr.recipientName}</strong><span>{addr.phone}</span>{addr.shippingMethodName && <span>配送方式：{addr.shippingMethodName}</span>}<span>{addr.postalCode} {addr.city}{addr.district}{addr.addressLine}</span>{order.note && <span class="order-note"><b>備註</b><span>{order.note}</span></span>}</div>
 	</section>
 
 	<section class="panel payment-panel">
-		<h2>付款／末五碼</h2>
+		<div class="section-heading payment-heading"><h2>付款／末五碼</h2>{paymentHeadingStatus && <span class:list={['badge', { ok: payment?.status === 'PAID' }]}>{paymentHeadingStatus}</span>}</div>
 		{
 			payment ? (
-				<p>
-					{payment.method === 'BANK_TRANSFER' ? '銀行轉帳' : payment.method} · {formatTwd(payment.amount)} ·{' '}
-					{paymentStatusLabel(payment.status)}
-					{payment.paidAt && (
-						<>
-							{' '}
-							· 確認於{' '}
-							{payment.paidAt.toLocaleString('zh-TW', {
-								timeZone: 'Asia/Taipei',
-							})}
-						</>
-					)}
-				</p>
+				<div class="payment-summary">
+					<p>{payment.method === 'BANK_TRANSFER' ? '銀行轉帳' : payment.method}<strong>{formatTwd(payment.amount)}</strong></p>
+					{payment.paidAt && <small class="muted" title={formatDateTime(payment.paidAt)}>核對 {compactPaymentTime(payment.paidAt)}</small>}
+				</div>
 			) : (
 				<p class="muted">無付款紀錄</p>
 			)
 		}
-		{
-			submissions.length > 0 ? (
-				<ul class="subs">
-					{submissions.map((s) => (
-						<li>
-							<span class="mono">{s.bankLastFive}</span>
-							<span>{formatTwd(s.amount)}</span>
-							<span class="muted">
-								{s.submittedAt.toLocaleString('zh-TW', {
-									timeZone: 'Asia/Taipei',
-								})}
-							</span>
-							{s.verifiedAt ? (
-								<span class="badge ok">已核對</span>
-							) : (
-								<span class="badge">待核對</span>
-							)}
-						</li>
-					))}
-				</ul>
-			) : (
-				<p class="muted">顧客尚未回報末五碼</p>
-			)
-		}
+		{primarySubmission ? (
+			<div class="payment-reference">
+				<span>末五碼 <strong class="mono">{primarySubmission.bankLastFive}</strong></span>
+				{primarySubmission.amount !== payment?.amount && <span>回報金額 {formatTwd(primarySubmission.amount)}</span>}
+				{!payment?.paidAt && <time class="muted" datetime={primarySubmission.submittedAt.toISOString()} title={formatDateTime(primarySubmission.submittedAt)}>回報 {compactPaymentTime(primarySubmission.submittedAt)}</time>}
+			</div>
+		) : <p class="muted">顧客尚未回報末五碼</p>}
+		{previousSubmissions.length > 0 && <details class="payment-history">
+			<summary>其他回報紀錄（{previousSubmissions.length}）</summary>
+			<ul class="subs">{previousSubmissions.map((submission) => <li>
+				<span class="mono">{submission.bankLastFive}</span><span>{formatTwd(submission.amount)}</span>
+				<time class="muted" datetime={submission.submittedAt.toISOString()} title={formatDateTime(submission.submittedAt)}>{compactPaymentTime(submission.submittedAt)}</time>
+				<span class:list={['badge', { ok: Boolean(submission.verifiedAt) }]}>{submission.verifiedAt ? '已核對' : '待核對'}</span>
+			</li>)}</ul>
+		</details>}
 	</section>
 	</div>
 
 	<section class="panel item-panel">
 		<h2>商品明細 <span>{order.items.length} 項</span></h2>
-		<ul class="lines">
-			{
-				order.items.map((item) => (
-					<li>
-						<span>
-							{item.productName}
-							<small>
-								{item.sku} × {item.quantity}
-							</small>
-						</span>
-						<strong>{formatTwd(item.subtotal)}</strong>
-					</li>
-				))
-			}
+		<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
+		<ul class="lines order-lines">
+			{order.items.map((item) => <li>
+				<span class="order-product">{item.productName}
+					{item.skuName?.trim() && item.skuName.trim() !== item.productName.trim() && <small>規格：{item.skuName}</small>}
+					{!item.skuName?.trim() && <small>規格：未記錄</small>}
+				</span>
+				<span class="order-unit-price" aria-label="單價">{formatTwd(item.unitPrice)}</span>
+				<span class="order-quantity" aria-label="數量">{item.quantity}</span>
+				<strong class="order-line-total" aria-label="總計">{formatTwd(item.subtotal)}</strong>
+			</li>)}
 		</ul>
 		<dl class="totals">
 			<div>
@@ -260,8 +312,6 @@ const canCancel = [
 </script>
 
 <style>
-	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
-	.eyebrow span { color: var(--commerce-primary); }
 	.heading-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 	.order-date { display: inline-flex; align-items: center; gap: 8px; color: var(--commerce-muted); font-size: 11px; white-space: nowrap; }
 	.crumb { margin-bottom: 18px; }
@@ -348,8 +398,13 @@ const canCancel = [
 		font-weight: 650;
 		cursor: pointer;
 	}
-	.btn-primary { appearance: none; padding: 0.62rem 0.95rem; border: 1px solid var(--commerce-primary); border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
-	.btn-primary:hover { border-color: var(--commerce-primary-dark); background: var(--commerce-primary-dark); }
+	.btn-payment,.btn-shipping { appearance: none; padding: 0.62rem 0.95rem; border-radius: 9px; color: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+	.btn-payment { border: 1px solid #c47b24; background: #c47b24; }
+	.btn-payment:hover { border-color: #a96516; background: #a96516; }
+	.btn-shipping { border: 1px solid var(--commerce-primary); background: var(--commerce-primary); }
+	.btn-shipping:hover { border-color: var(--commerce-primary-dark); background: var(--commerce-primary-dark); }
+	.btn-complete { appearance: none; padding: 0.62rem 0.95rem; border: 1px solid #21834b; border-radius: 9px; background: #21834b; color: #fff; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
+	.btn-complete:hover { border-color: #17683a; background: #17683a; }
 
 	.panel {
 		background: #fff;
@@ -436,21 +491,27 @@ const canCancel = [
 	.totals .grand {
 		font-weight: 700;
 	}
-	.back-link { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; padding: 9px 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #526b70; font-size: 14px; font-weight: 700; text-decoration: none; }
-	.order-heading .heading-row { align-items: center; }
-	.order-heading h1 { font-size: clamp(26px, 3vw, 36px); }
-	.order-heading .eyebrow { margin-bottom: 5px; font-size: 13px; letter-spacing: .04em; }
+	.order-heading > .commerce-back-link { margin-bottom: 14px; }
+	.order-identity { padding: 14px 16px; border: 1px solid var(--commerce-line); border-radius: 13px; background: #fff; }
+	.order-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.order-heading h1 { font-size: clamp(24px, 3vw, 32px); line-height: 1.2; }
+	.order-status { display: inline-flex; align-items: center; min-height: 30px; padding: 5px 11px; border-radius: 999px; background: #edf3f2; color: #526b70; font-size: 12px; font-weight: 750; white-space: nowrap; }
+	.order-status.status--pending_payment { background: #fff2dc; color: #9b6417; }
+	.order-status.status--payment_submitted { background: #e9f1ff; color: #456aa9; }
+	.order-status.status--paid,.order-status.status--processing { background: #e4f4f2; color: var(--commerce-primary-dark); }
+	.order-status.status--shipped { background: #e8f0ff; color: #4d75bd; }
+	.order-status.status--completed { background: #e9f6ef; color: #26724f; }
+	.order-status.status--cancelled { background: #fff0ee; color: #ad4a40; }
 	.current-status { display: inline-flex; align-items: center; padding: 9px 14px; border-radius: 999px; background: #fff2dc; color: #9b6417; font-size: 15px; font-weight: 750; white-space: nowrap; }
 	.current-status.complete { background: #e9f6ef; color: #26724f; }
 	.current-status.cancelled { background: #fff0ee; color: #ad4a40; }
-	.customer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+	.customer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #edf1ef; }
 	.meta { margin: 0; flex-wrap: wrap; font-size: 14px; }
 	.meta strong { color: #40575c; }
 	.member-orders-link { display: inline-flex; align-items: center; gap: 7px; color: var(--commerce-primary-dark); font-size: 14px; font-weight: 700; text-decoration: none; }
-	.current-summary { display: flex; justify-content: space-between; gap: 12px; margin: 12px 0 0; color: #536c70; font-size: 14px; }
-	.current-summary span { color: #76888a; font-size: 13px; }
-	.actions-bar { margin: 15px 0 18px; }
-	.btn-primary,.btn-danger { min-height: 42px; padding: 9px 15px; font-size: 14px; }
+	.current-summary { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: #76888a; font-size: 13px; }
+	.actions-bar { margin: 12px 0 18px; }
+	.btn-payment,.btn-shipping,.btn-danger,.btn-complete { min-height: 42px; padding: 9px 15px; font-size: 14px; }
 	.status-panel { margin-bottom: 16px; }
 	.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 	.section-heading h2 { margin: 0; font-size: 21px; }
@@ -467,5 +528,33 @@ const canCancel = [
 	.lines li { font-size: 15px; }
 	.lines small { margin-top: 4px; font-size: 13px; }
 	.totals { font-size: 15px; }
-	@media (max-width: 720px) { .heading-row { align-items: flex-start; }.customer-row,.current-summary { align-items: flex-start; flex-direction: column; }.order-progress { grid-template-columns: 1fr; gap: 12px; padding-top: 0; }.order-progress li { grid-template-columns: 28px minmax(0,1fr); grid-template-rows: 26px auto; justify-items: stretch; align-items: center; column-gap: 10px; row-gap: 3px; text-align: left; }.order-progress li:not(:last-child)::after { top: 27px; bottom: -25px; left: 13px; right: auto; width: 2px; height: auto; }.order-progress li .progress-marker { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }.order-progress li strong { grid-column: 2; grid-row: 1; align-self: end; }.order-progress li time { grid-column: 2; grid-row: 2; min-height: 0; white-space: normal; }.order-panels { grid-template-columns: 1fr; gap: 0; }.actions-bar { gap: 8px; }.actions-bar form,.actions-bar button { width: 100%; } }
+	@media (max-width: 720px) { .heading-row { align-items: flex-start; }.order-identity { padding: 12px; }.customer-row { align-items: flex-start; flex-direction: column; gap: 8px; }.current-summary { align-items: flex-start; }.order-progress { grid-template-columns: 1fr; gap: 12px; padding-top: 0; }.order-progress li { grid-template-columns: 28px minmax(0,1fr); grid-template-rows: 26px auto; justify-items: stretch; align-items: center; column-gap: 10px; row-gap: 3px; text-align: left; }.order-progress li:not(:last-child)::after { top: 27px; bottom: -25px; left: 13px; right: auto; width: 2px; height: auto; }.order-progress li .progress-marker { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }.order-progress li strong { grid-column: 2; grid-row: 1; align-self: end; }.order-progress li time { grid-column: 2; grid-row: 2; min-height: 0; white-space: normal; }.order-panels { grid-template-columns: 1fr; gap: 0; }.actions-bar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }.actions-bar form,.actions-bar button { width: 100%; }.actions-bar form button { min-height: 44px; } }
+
+	.address-details .order-note { display:flex; align-items:baseline; gap:8px; margin-top:3px; padding:8px 10px; border-left:3px solid #d4a14a; border-radius:6px; background:#fff6e5; color:#805a25; overflow-wrap:anywhere; }
+	.order-note > b { flex:none; font-size:13px; }
+	.order-note > span { min-width:0; font-weight:600; }
+	.payment-heading { margin-bottom:10px; }
+	.payment-heading > .badge { flex:none; font-weight:700; white-space:nowrap; }
+	.payment-summary p { display:flex; align-items:baseline; flex-wrap:wrap; gap:8px; margin:0; font-size:15px; }
+	.payment-summary strong { color:var(--commerce-primary-dark); font-weight:700; font-variant-numeric:tabular-nums; }
+	.payment-summary > small { display:block; margin-top:4px; font-size:12px; }
+	.subs time { font-size:12px; font-variant-numeric:tabular-nums; }
+
+	.payment-reference { display:flex; flex-wrap:wrap; align-items:center; gap:5px 12px; margin-top:6px; color:#52666a; font-size:14px; }
+	.payment-reference strong { margin-left:4px; color:var(--commerce-primary-dark); font-weight:700; }
+	.payment-reference time { font-size:12px; }
+	.payment-history { margin-top:10px; font-size:13px; }
+	.payment-history summary { cursor:pointer; color:#60757a; }
+	.order-items-header,.lines.order-lines li { display:grid; grid-template-columns:minmax(0,1fr) 100px 70px 100px; align-items:center; column-gap:.75rem; }
+	.order-items-header { padding:.35rem 0 .6rem; border-bottom:1px solid var(--commerce-line); color:#60757a; font-size:.78rem; font-weight:700; }
+	.order-items-header span:not(:first-child),.order-unit-price,.order-quantity,.order-line-total { text-align:center; }
+	.lines.order-lines li { padding:14px 0; }
+	.order-product { min-width:0; overflow-wrap:anywhere; line-height:1.55; }
+	.order-product small { display:block; font-size:.75rem; color:#718482; }
+	.order-unit-price,.order-quantity,.order-line-total { min-width:0; font-variant-numeric:tabular-nums; white-space:nowrap; }
+	@media(max-width:520px) {
+		.order-items-header,.lines.order-lines li { grid-template-columns:minmax(0,1fr) 66px 38px 72px; column-gap:.35rem; }
+		.order-items-header { font-size:.7rem; }
+		.order-unit-price,.order-quantity,.order-line-total { font-size:.75rem; }
+	}
 </style>

@@ -63,12 +63,14 @@ const { items, compact = false } = Astro.props as Props;
                 {product.categoryLabel}
               </p>
             ) : null}
-            <h2 class="mb-1 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
+            <h2 class="mb-1 line-clamp-2 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
               {product.name}
             </h2>
-            <p class="line-clamp-2 text-[0.75rem] leading-relaxed text-[var(--aq-muted)] sm:text-[0.8125rem]">
-              {product.excerpt}
-            </p>
+            {compact && product.excerpt.trim() && product.excerpt.trim() !== product.name.trim() ? (
+              <p class="line-clamp-2 text-[0.75rem] leading-relaxed text-[var(--aq-muted)] sm:text-[0.8125rem]">
+                {product.excerpt}
+              </p>
+            ) : null}
             {(product.priceLabel || product.stockLabel) ? (
               <div class="mt-3 flex items-baseline justify-between gap-2 border-t border-[color-mix(in_srgb,var(--aq-ink)_8%,transparent)] pt-2.5">
                 {product.priceLabel ? <span class="text-sm font-bold text-[var(--aq-primary-dark)]">{product.priceLabel}</span> : null}

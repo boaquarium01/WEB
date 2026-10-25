@@ -20,7 +20,7 @@
     "db:seed:inventory": "node scripts/seed-inventory.mjs",
     "db:studio": "drizzle-kit studio",
     "typecheck": "astro check",
-    "test": "node --test src/lib/auth/policies.test.mjs",
+    "test": "node --import tsx --test src/lib/auth/policies.test.mjs src/lib/sanity/specifications.test.ts",
     "sync:products": "tsx scripts/sync-products.ts",
     "studio": "sanity dev --host --port 3334",
     "sanity:migrate-from-v1": "node scripts/migrate-sanity-from-v1.mjs"

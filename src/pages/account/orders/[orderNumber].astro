@@ -3,16 +3,10 @@ import AccountLayout from '../../../layouts/AccountLayout.astro';
 import { formatTwd } from '../../../lib/services/catalog';
 import type { ShippingAddressSnapshot } from '../../../lib/services/checkout';
 import {
-	canCancelOrder,
 	canSubmitBankLastFive,
 	getOrderForUser,
 	orderStatusLabel,
-	paymentStatusLabel,
 } from '../../../lib/services/order';
-import {
-	cancelOrderForUser,
-	shippingStatusLabel,
-} from '../../../lib/services/order-management';
 import {
 	getBankTransferInfo,
 	submitBankTransferLastFive,
@@ -26,8 +20,6 @@ const customer = await getCustomerByUserId(user.id);
 const orderNumber = String(Astro.params.orderNumber ?? '').trim();
 
 let error: string | null = null;
-let message: string | null = null;
-
 if (Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
 	const action = String(form.get('_action') ?? '');
@@ -35,14 +27,11 @@ if (Astro.request.method === 'POST') {
 		if (action === 'submit_last_five') {
 			await submitBankTransferLastFive(user.id, {
 				orderNumber,
+				submissionId: String(form.get('submissionId') ?? ''),
 				bankLastFive: String(form.get('bankLastFive') ?? ''),
-				amount: Number(form.get('amount')),
 				note: String(form.get('note') ?? ''),
 			});
-			message = '已送出轉帳末五碼，我們會盡快核對付款。';
-		} else if (action === 'cancel_order') {
-			await cancelOrderForUser(user.id, orderNumber);
-			message = '訂單已取消，預留庫存已釋放。';
+			return Astro.redirect(`/account/orders/${encodeURIComponent(orderNumber)}`);
 		}
 	} catch (e) {
 		error = e instanceof Error ? e.message : '操作失敗';
@@ -60,52 +49,57 @@ if (!order) {
 const addr = order.shippingAddress as ShippingAddressSnapshot;
 const payment = order.payments[0];
 const submissions = payment?.submissions ?? [];
+const latestSubmission = submissions[0] ?? null;
 const bank = getBankTransferInfo();
 const showSubmitForm = canSubmitBankLastFive(order.status);
-const showCancel = canCancelOrder(order.status);
+const showCancellationContact = order.status === 'PENDING_PAYMENT' || order.status === 'PAYMENT_SUBMITTED';
 const pageTitle =
 	order.status === 'CANCELLED'
 		? '訂單已取消'
 		: order.status === 'PENDING_PAYMENT'
 			? '訂單已建立'
 			: '訂單詳情';
+const orderStages = ['建立', '付款', '備貨', '出貨', '完成'];
+const activeStageByStatus: Record<string, number> = {
+	PENDING_PAYMENT: 0,
+	PAYMENT_SUBMITTED: 1,
+	PAID: 2,
+	PROCESSING: 2,
+	SHIPPED: 3,
+	COMPLETED: 4,
+};
+const activeStage = activeStageByStatus[order.status] ?? -1;
+const statusDescriptions: Record<string, string> = {
+	PENDING_PAYMENT: '訂單已建立，請完成轉帳付款，並回報轉出帳號末五碼，方便我們核對。',
+	PAYMENT_SUBMITTED: '已收到您回報的付款資料，我們正在核對入帳；核對完成後會安排備貨。',
+	PAID: '款項已確認，接下來會為您安排備貨。',
+	PROCESSING: '商品正在備貨中，備妥後會安排出貨。',
+	SHIPPED: '訂單已出貨，請留意物流配送進度。',
+	COMPLETED: '訂單已完成，感謝您的支持！',
+	CANCELLED: '訂單已取消；若您已完成轉帳，請聯繫我們協助確認款項。',
+};
+const statusDescription = statusDescriptions[order.status] ?? '您可以在此查看訂單處理進度。';
 ---
 
 <AccountLayout title={`訂單 ${order.orderNumber}｜水博館水族`}>
 	<header class="head">
-		<p class="crumb">
-			<a href="/account">會員中心</a> /
-			<a href="/account/orders">訂單</a> / {order.orderNumber}
-		</p>
 		<h1>{pageTitle}</h1>
-		<p class="lead">
-			訂單編號 <strong>{order.orderNumber}</strong> ·{' '}
-			{orderStatusLabel(order.status)}
-			{
-				payment && (
-					<>
-						{' '}
-						· 付款 {paymentStatusLabel(payment.status)}
-					</>
-				)
-			}
-			{' '}
-			· 出貨 {shippingStatusLabel(order.shippingStatus)}
-		</p>
-		<p class="lead muted-sm">
-			建立於{' '}
-			{order.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
-		</p>
+		<div class:list={['order-status-note', order.status === 'CANCELLED' && 'is-cancelled']} role="status">
+			<i class:list={['fa-solid', order.status === 'CANCELLED' ? 'fa-circle-exclamation' : 'fa-circle-info']} aria-hidden="true"></i>
+			<div><strong>{orderStatusLabel(order.status)}</strong><p>{statusDescription}</p></div>
+		</div>
+		<div class="order-progress" aria-label="訂單進度">
+			{orderStages.map((stage, index) => <div class:list={['progress-step', index < activeStage && 'complete', index === activeStage && 'current']}><span class="progress-dot">{index < activeStage ? <i class="fa-solid fa-check" aria-hidden="true"></i> : index + 1}</span><span>{stage}</span>{index < orderStages.length - 1 && <i class="progress-connector" aria-hidden="true"></i>}</div>)}
+		</div>
+		{order.status === 'CANCELLED' && <p class="cancelled-status">此訂單已取消</p>}
 	</header>
 
-	{message && <p class="banner ok">{message}</p>}
 	{error && <p class="banner error">{error}</p>}
 
 	{
 		order.status !== 'CANCELLED' && (
-			<section class="panel">
-				<h2>銀行轉帳資訊</h2>
-				<p>付款方式：銀行轉帳</p>
+			<details class="panel collapsible-panel" open={activeStage < 2}>
+				<summary class="panel-title-row collapsible-panel__summary"><h2>銀行轉帳資訊</h2><i class="fa-solid fa-chevron-down collapsible-panel__chevron" aria-hidden="true"></i></summary>
 				<p>
 					應付金額：<strong>{formatTwd(order.total)}</strong>
 				</p>
@@ -123,22 +117,24 @@ const pageTitle =
 						<dd class="mono">{bank.accountNumber}</dd>
 					</div>
 				</dl>
-				<p class="hint">
-					{bank.noteHint}建議備註：<strong>{order.orderNumber}</strong>
-				</p>
-			</section>
+				<div class="transfer-reference">
+					<p class="transfer-reference__message"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>請備註訂單編號，方便對帳，感謝合作！</p>
+					<div class="copy-order-number"><span class="copy-order-label">訂單編號</span><strong class="mono">{order.orderNumber}</strong><button type="button" class="copy-order-button" data-copy-order-number={order.orderNumber}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製編號</button><span class="copy-feedback" data-copy-feedback aria-live="polite"></span></div>
+				</div>
+			</details>
 		)
 	}
 
 	{
 		showSubmitForm && (
-			<section class="panel">
+			<section class="panel transfer-report-panel" data-transfer-report hidden={submissions.length > 0}>
 				<h2>回報轉帳末五碼</h2>
 				<p class="hint">
 					完成轉帳後，請填寫您轉出帳號的末五碼，方便我們核對入帳。確認付款由門市／後台處理。
 				</p>
 				<form method="post" class="submit-form">
 					<input type="hidden" name="_action" value="submit_last_five" />
+					<input type="hidden" name="submissionId" value={latestSubmission?.id ?? ''} />
 					<label>
 						轉帳帳號末五碼
 						<input
@@ -149,29 +145,19 @@ const pageTitle =
 							maxlength="5"
 							minlength="5"
 							required
-							value={customer?.bankAccountLastFive ?? ''}
+							value={latestSubmission?.bankLastFive ?? customer?.bankAccountLastFive ?? ''}
 							placeholder="12345"
 							autocomplete="off"
 						/>
 					</label>
 					<label>
-						轉帳金額（TWD）
-						<input
-							type="number"
-							name="amount"
-							min="1"
-							step="1"
-							required
-							value={order.total}
-						/>
-					</label>
-					<label>
 						備註（選填）
-						<input type="text" name="note" placeholder="例如：已於今晚轉帳" />
+						<input type="text" name="note" value={latestSubmission?.note ?? ''} placeholder="例如：已於今晚轉帳" />
 					</label>
-					<button type="submit" class="btn-primary">
-						送出末五碼
-					</button>
+					<div class="form-actions">
+						<button type="submit" class="btn-primary">{latestSubmission ? '儲存修改' : '送出末五碼'}</button>
+						{latestSubmission && <button type="button" class="cancel-transfer-button" data-cancel-transfer>取消</button>}
+					</div>
 				</form>
 			</section>
 		)
@@ -179,27 +165,26 @@ const pageTitle =
 
 	{
 		submissions.length > 0 && (
-			<section class="panel">
-				<h2>已送出的末五碼</h2>
+			<details class="panel collapsible-panel" open={activeStage < 2}>
+				<summary class="panel-title-row collapsible-panel__summary">
+					<div class="panel-title-content"><h2>我的帳號末五碼</h2>{latestSubmission && (latestSubmission.verifiedAt ? <span class="badge ok">已核對</span> : <span class="badge">待核對</span>)}</div>
+					<i class="fa-solid fa-chevron-down collapsible-panel__chevron" aria-hidden="true"></i>
+				</summary>
 				<ul class="subs">
-					{submissions.map((s) => (
+					{latestSubmission && (
 						<li>
-							<span class="mono">{s.bankLastFive}</span>
-							<span>{formatTwd(s.amount)}</span>
+							<span class="mono">{latestSubmission.bankLastFive}</span>
+							<span>{formatTwd(latestSubmission.amount)}</span>
 							<span class="muted">
-								{s.submittedAt.toLocaleString('zh-TW', {
+								{latestSubmission.submittedAt.toLocaleString('zh-TW', {
 									timeZone: 'Asia/Taipei',
 								})}
 							</span>
-							{s.verifiedAt ? (
-								<span class="badge ok">已核對</span>
-							) : (
-								<span class="badge">待核對</span>
-							)}
+							{showSubmitForm && !latestSubmission.verifiedAt && <button type="button" class="edit-transfer-button" data-edit-transfer>編輯</button>}
 						</li>
-					))}
+					)}
 				</ul>
-			</section>
+			</details>
 		)
 	}
 
@@ -219,17 +204,18 @@ const pageTitle =
 
 	<section class="panel">
 		<h2>商品明細</h2>
-		<ul class="lines">
+		<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
+		<ul class="lines order-lines">
 			{
 				order.items.map((item) => (
 					<li>
-						<span>
+						<span class="order-product">
 							{item.productName}
-							<small>
-								{item.sku} × {item.quantity}
-							</small>
+							{item.skuName && item.skuName !== item.productName && <small>規格：{item.skuName}</small>}
 						</span>
-						<strong>{formatTwd(item.subtotal)}</strong>
+						<span class="order-unit-price">{formatTwd(item.unitPrice)}</span>
+						<span class="order-quantity">{item.quantity}</span>
+						<strong class="order-line-total">{formatTwd(item.subtotal)}</strong>
 					</li>
 				))
 			}
@@ -259,26 +245,50 @@ const pageTitle =
 	</section>
 
 	{
-		showCancel && (
-			<section class="panel danger-panel">
-				<h2>取消訂單</h2>
-				<p class="hint">
-					僅能在確認付款前取消。取消後會釋放預留庫存，且無法復原。
-				</p>
-				<form method="post" onsubmit="return confirm('確定取消此訂單？');">
-					<input type="hidden" name="_action" value="cancel_order" />
-					<button type="submit" class="btn-danger">取消訂單</button>
-				</form>
+		showCancellationContact && (
+			<section class="panel cancellation-contact">
+				<div><h2>訂單有疑問嗎？</h2><p class="hint">請聯絡我們，由門市協助確認訂單狀態。</p></div>
+				<a class="line-contact-button" href="https://lin.ee/nG8kcR2" target="_blank" rel="noopener noreferrer"><i class="fa-brands fa-line" aria-hidden="true"></i>聯絡我們</a>
 			</section>
 		)
 	}
 
-	<div class="actions">
-		<a class="btn-secondary" href="/account/orders">全部訂單</a>
-		<a class="btn-secondary" href="/products">繼續購物</a>
-		<a class="btn-primary" href="/account">回會員中心</a>
-	</div>
+	<p class="created-at">建立於 {order.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}</p>
 </AccountLayout>
+
+<script>
+	const copyOrderButton = document.querySelector<HTMLButtonElement>('[data-copy-order-number]');
+	const copyFeedback = document.querySelector<HTMLElement>('[data-copy-feedback]');
+	copyOrderButton?.addEventListener('click', async () => {
+		try {
+			await navigator.clipboard.writeText(copyOrderButton.dataset.copyOrderNumber ?? '');
+			if (copyFeedback) copyFeedback.textContent = '已複製';
+		} catch {
+			if (copyFeedback) copyFeedback.textContent = '無法複製，請手動選取編號';
+		}
+	});
+	const editTransferButton = document.querySelector<HTMLButtonElement>('[data-edit-transfer]');
+	const transferReport = document.querySelector<HTMLElement>('[data-transfer-report]');
+	const cancelTransferButton = document.querySelector<HTMLButtonElement>('[data-cancel-transfer]');
+	const transferForm = document.querySelector<HTMLFormElement>('[data-transfer-report] .submit-form');
+	editTransferButton?.addEventListener('click', () => {
+		if (!transferReport) return;
+		transferReport.hidden = false;
+		transferReport.querySelector<HTMLInputElement>('input[name="bankLastFive"]')?.focus();
+		transferReport.scrollIntoView({ behavior: 'smooth', block: 'center' });
+	});
+	cancelTransferButton?.addEventListener('click', () => {
+		if (!transferReport) return;
+		transferReport.querySelector<HTMLFormElement>('.submit-form')?.reset();
+		transferReport.hidden = true;
+	});
+	transferForm?.addEventListener('submit', () => {
+		const submitButton = transferForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+		if (!submitButton) return;
+		submitButton.disabled = true;
+		submitButton.textContent = '送出中…';
+	});
+</script>
 
 <style>
 	.head {
@@ -321,11 +331,6 @@ const pageTitle =
 		margin-bottom: 0.85rem;
 	}
 
-	.banner.ok {
-		background: var(--aq-primary-soft);
-		color: var(--aq-primary-dark);
-	}
-
 	.banner.error {
 		background: rgba(180, 35, 24, 0.08);
 		color: var(--aq-danger);
@@ -339,9 +344,17 @@ const pageTitle =
 		margin-bottom: 0.85rem;
 	}
 
-	.danger-panel {
-		border-color: rgba(180, 35, 24, 0.28);
+	.cancellation-contact {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: center;
+		column-gap: 1rem;
+		padding: 0.8rem 1rem;
 	}
+	.cancellation-contact h2{margin:0 0 .2rem;font-size:.95rem}
+	.cancellation-contact .hint{margin:0;font-size:.8rem}
+	.line-contact-button{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;padding:.5rem .8rem;border-radius:9px;background:#06c755;color:#fff!important;font-size:.84rem;font-weight:700;text-decoration:none}
+	.line-contact-button:hover{background:#05b94e}
 
 	.panel p {
 		margin: 0.3rem 0;
@@ -382,6 +395,10 @@ const pageTitle =
 		margin-top: 0.75rem;
 		max-width: 22rem;
 	}
+	.form-actions{display:flex;gap:.6rem}
+	.form-actions>button{flex:1}
+	.cancel-transfer-button{border:1px solid var(--aq-line)!important;background:#fff!important;color:var(--aq-primary-dark)!important;box-shadow:none!important}
+	.cancel-transfer-button:hover{border-color:#b9d8d0!important;background:#f4f9f7!important}
 
 	.submit-form label {
 		display: grid;
@@ -405,8 +422,8 @@ const pageTitle =
 	}
 
 	.subs li {
-		display: flex;
-		flex-wrap: wrap;
+		display: grid;
+		grid-template-columns: auto auto minmax(0,1fr) auto;
 		gap: 0.65rem;
 		align-items: center;
 		padding: 0.55rem 0;
@@ -487,4 +504,55 @@ const pageTitle =
 		gap: 0.65rem;
 		margin-top: 0.5rem;
 	}
+
+	.order-items-header,.order-lines li{display:grid;grid-template-columns:minmax(0,1fr) 100px 70px 100px;align-items:center;column-gap:.75rem}
+	.order-items-header{padding:.35rem 0 .6rem;border-bottom:1px solid var(--aq-line);color:var(--aq-muted);font-size:.78rem;font-weight:700}
+	.order-items-header span:not(:first-child),.order-unit-price,.order-quantity,.order-line-total{text-align:center}
+	.order-lines li{padding:.75rem 0}
+	.order-product{min-width:0}
+	.order-unit-price,.order-quantity{color:var(--aq-muted);font-size:.88rem}
+	.order-line-total{white-space:nowrap}
+
+	.panel-title-row{display:flex;align-items:center;justify-content:space-between;gap:1rem}
+	.panel-title-row h2{margin:0}
+	.collapsible-panel__summary{list-style:none;cursor:pointer}
+	.collapsible-panel__summary::-webkit-details-marker{display:none}
+	.collapsible-panel__summary h2{margin:0}
+	.panel-title-content{display:flex;min-width:0;align-items:center;gap:.55rem}
+	.collapsible-panel__chevron{flex:none;color:var(--aq-muted);font-size:.85rem;transition:transform .16s ease}
+	.collapsible-panel[open]>.collapsible-panel__summary{margin-bottom:.85rem;padding-bottom:.75rem;border-bottom:1px solid var(--aq-line)}
+	.collapsible-panel[open]>.collapsible-panel__summary .collapsible-panel__chevron{transform:rotate(180deg)}
+	.edit-transfer-button{padding:.4rem .7rem;border:1px solid var(--aq-line);border-radius:8px;background:#fff;color:var(--aq-primary-dark);font:inherit;font-size:.8rem;font-weight:700;cursor:pointer}
+	.edit-transfer-button:hover{border-color:var(--aq-primary);background:var(--aq-primary-soft)}
+
+	.order-progress{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin:1.25rem 0 .4rem}
+	.order-status-note{display:flex;align-items:flex-start;gap:.65rem;margin:.8rem 0 0;padding:.8rem .9rem;border:1px solid #d5e9e3;border-radius:11px;background:#f1f8f5;color:var(--aq-primary-dark);line-height:1.55}
+	.order-status-note>i{flex:none;margin-top:.2rem;color:var(--aq-primary)}
+	.order-status-note strong{display:block;margin-bottom:.12rem;font-size:.88rem}
+	.order-status-note p{margin:0;color:#4f6962;font-size:.86rem}
+	.order-status-note.is-cancelled{border-color:#f0d5d1;background:#fff5f3;color:#9d4038}
+	.order-status-note.is-cancelled>i{color:#b94c40}
+	.order-status-note.is-cancelled p{color:#795a57}
+	.progress-step{position:relative;display:flex;flex-direction:column;align-items:center;gap:.45rem;color:var(--aq-muted);font-size:.8rem}
+	.progress-dot{z-index:1;display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--aq-line);border-radius:50%;background:#fff;color:var(--aq-muted);font-size:.75rem}
+	.progress-connector{position:absolute;top:14px;left:calc(50% + 18px);width:calc(100% - 36px);height:1px;background:var(--aq-line)}
+	.progress-step.complete,.progress-step.current{color:var(--aq-primary-dark);font-weight:700}
+	.progress-step.complete .progress-dot,.progress-step.current .progress-dot{border-color:var(--aq-primary);background:var(--aq-primary);color:#fff}
+	.progress-step.complete .progress-connector{background:var(--aq-primary)}
+	.cancelled-status{margin:.75rem 0 0;color:var(--aq-danger);font-weight:700}
+	.transfer-reference{margin-top:1rem;padding:.9rem 1rem;border:1px solid #d6e9e4;border-radius:12px;background:linear-gradient(135deg,#f1f8f6,#f8fbfa)}
+	.transfer-reference__message{display:flex;align-items:flex-start;gap:.5rem;margin:0;color:var(--aq-primary-dark);font-size:.9rem;font-weight:700;line-height:1.5}
+	.transfer-reference__message i{flex:none;margin-top:.15rem;color:var(--aq-primary)}
+	.copy-order-number{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:.7rem;padding:.6rem .7rem;border:1px solid #e2ebe8;border-radius:9px;background:#fff}
+	.copy-order-label{color:var(--aq-muted);font-size:.78rem;font-weight:650}
+	.copy-order-number strong{font-size:1rem;letter-spacing:.02em}
+	.copy-order-button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:.4rem;margin-left:auto;padding:.45rem .8rem;border:1px solid var(--aq-primary);border-radius:8px;background:var(--aq-primary);color:#fff;font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
+	.copy-order-button:hover{border-color:var(--aq-primary-dark);background:var(--aq-primary-dark)}
+	.copy-feedback{color:var(--aq-primary-dark);font-size:.8rem}
+	.created-at{margin:1rem 0 0;text-align:right;color:var(--aq-muted);font-size:.82rem}
+	@media(max-width:520px){.order-progress{margin:1rem 0 .25rem}.progress-step{font-size:.7rem}.progress-dot{width:26px;height:26px}.progress-connector{top:12px;left:calc(50% + 15px);width:calc(100% - 30px)}.created-at{text-align:left}}
+	@media(max-width:520px){.cancellation-contact{grid-template-columns:1fr;row-gap:.6rem}.line-contact-button{justify-self:start}}
+	@media(max-width:520px){.order-items-header,.order-lines li{grid-template-columns:minmax(0,1fr) 66px 38px 72px;column-gap:.35rem}.order-items-header{font-size:.7rem}.order-unit-price,.order-quantity,.order-line-total{font-size:.75rem}}
+	@media(max-width:520px){.transfer-reference{margin-top:.8rem;padding:.72rem}.transfer-reference__message{font-size:.84rem}.copy-order-number{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .6rem;margin-top:.55rem;padding:.55rem}.copy-order-label{grid-column:1/-1}.copy-order-number strong{grid-column:1;grid-row:2;min-width:0;font-size:.92rem;overflow-wrap:anywhere}.copy-order-button{grid-column:2;grid-row:2;min-height:36px;margin:0;padding:.4rem .6rem;font-size:.76rem}.copy-feedback{grid-column:1/-1}}
+	@media(max-width:520px){.subs li{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .6rem}.subs li>.muted{grid-column:1;grid-row:2;overflow-wrap:anywhere}.subs li>.edit-transfer-button{grid-column:2;grid-row:2;min-height:36px!important;padding:.4rem .65rem!important;font-size:.78rem}}
 </style>

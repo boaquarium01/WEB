@@ -1,8 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { productSkus, products } from '../db/schema';
+import { findDefaultProductSku, isSpecificationSku } from './product-sku-identity';
 import {
 	fetchSanityProducts,
+	fetchSanityProductById,
 	shouldRequireManualConfirmation,
 	type ProductContent,
 } from '../sanity';
@@ -16,10 +18,18 @@ export type ProductSyncResult = {
 	errors: Array<{ sanityProductId: string; message: string }>;
 };
 
+function syncFieldChanges<T extends object>(expected: T, current: object): Partial<T> {
+  return Object.fromEntries(Object.entries(expected).filter(([key, value]) => value !== (current as Record<string, unknown>)[key])) as Partial<T>;
+}
+
 function defaultSkuCode(slug: string, sanityProductId: string): string {
 	const safe = slug.replace(/[^a-zA-Z0-9_-]/g, '').toUpperCase() || 'ITEM';
 	const shortId = sanityProductId.replace(/^drafts\./, '').slice(-6).toUpperCase();
 	return `SKU-${safe}-${shortId}`;
+}
+
+function variantSkuName(optionNames: string[]): string {
+	return optionNames.join(' / ');
 }
 
 /**
@@ -32,9 +42,16 @@ function defaultSkuCode(slug: string, sanityProductId: string): string {
  * - Always ensure at least one SKU row exists
  * - Does not modify Sanity schema or write back to Sanity
  */
-export async function syncProductsFromSanity(): Promise<ProductSyncResult> {
+export async function syncProductsFromSanity(sanityProductId?: string): Promise<ProductSyncResult> {
 	const db = getDb();
-	const items = await fetchSanityProducts();
+	let items: ProductContent[];
+	if (sanityProductId) {
+		const item = await fetchSanityProductById(sanityProductId, { fresh: true });
+		if (!item) throw new Error('找不到要同步的商品');
+		items = [item];
+	} else {
+		items = await fetchSanityProducts();
+	}
 
 	const result: ProductSyncResult = {
 		fetched: items.length,
@@ -107,33 +124,104 @@ async function syncOneProduct(
 
 		result.created += 1;
 
-		await db.insert(productSkus).values({
-			productId: created.id,
-			sku: defaultSkuCode(item.slug, item.sanityProductId),
-			name: item.name,
-			unit: 'pcs',
-			sellingPrice: 0,
-			isActive: item.isEnabled,
-			updatedAt: now,
-		});
-		result.skuCreated += 1;
+		if (item.variants.length) {
+			await db.insert(productSkus).values(item.variants.map((variant) => ({
+				productId: created.id,
+				sku: variant.sku,
+				variantKey: variant.variantKey,
+				sourceSku: variant.sku,
+				name: variantSkuName(variant.optionNames),
+				unit: 'pcs',
+				sellingPrice: 0,
+				isActive: item.isEnabled,
+				updatedAt: now,
+			})));
+			result.skuCreated += item.variants.length;
+		} else {
+			await db.insert(productSkus).values({
+				productId: created.id,
+				sku: defaultSkuCode(item.slug, item.sanityProductId),
+				name: item.name,
+				unit: 'pcs',
+				sellingPrice: 0,
+				isActive: item.isEnabled,
+				updatedAt: now,
+			});
+			result.skuCreated += 1;
+		}
 		return;
 	}
 
-	await db
-		.update(products)
-		.set({
-			name: item.name,
-			slug: item.slug,
-			productType: item.productType,
-			isActive: item.isEnabled,
-			isOnline: item.isEnabled,
-			// Do NOT overwrite sellingPrice / requiresManualConfirmation
-			updatedAt: now,
-		})
-		.where(eq(products.id, existing.id));
+	const productPatch = syncFieldChanges({ name: item.name, slug: item.slug, productType: item.productType, isActive: item.isEnabled, isOnline: item.isEnabled }, existing);
+	if (Object.keys(productPatch).length) {
+		await db.update(products).set({ ...productPatch, updatedAt: now }).where(eq(products.id, existing.id));
+		result.updated += 1;
+	}
 
-	result.updated += 1;
+	if (item.variants.length) {
+		const currentSkus = await db
+			.select()
+			.from(productSkus)
+			.where(eq(productSkus.productId, existing.id));
+		const claimedIds = new Set<string>();
+		for (const variant of item.variants) {
+			const sku = currentSkus.find((candidate) => candidate.variantKey === variant.variantKey)
+				?? currentSkus.find((candidate) => candidate.sourceSku === variant.sku)
+				?? currentSkus.find((candidate) => candidate.sku === variant.sku);
+			if (sku) {
+				claimedIds.add(sku.id);
+				const patch = syncFieldChanges({ variantKey: variant.variantKey, sourceSku: variant.sku, name: variantSkuName(variant.optionNames), isActive: item.isEnabled }, sku);
+				if (Object.keys(patch).length) await db.update(productSkus).set({ ...patch, updatedAt: now }).where(eq(productSkus.id, sku.id));
+			} else {
+				const [createdSku] = await db.insert(productSkus).values({
+					productId: existing.id,
+					sku: variant.sku,
+					variantKey: variant.variantKey,
+					sourceSku: variant.sku,
+					name: variantSkuName(variant.optionNames),
+					unit: 'pcs',
+					sellingPrice: 0,
+					isActive: item.isEnabled,
+					updatedAt: now,
+				}).returning({ id: productSkus.id });
+				if (createdSku) claimedIds.add(createdSku.id);
+				result.skuCreated += 1;
+			}
+		}
+		for (const oldSku of currentSkus) {
+			if (!claimedIds.has(oldSku.id) && oldSku.isActive) {
+				await db.update(productSkus).set({ isActive: false, updatedAt: now }).where(eq(productSkus.id, oldSku.id));
+			}
+		}
+		return;
+	}
+
+	const configuredSkus = await db
+		.select()
+		.from(productSkus)
+		.where(eq(productSkus.productId, existing.id));
+	const oldVariantSkus = configuredSkus.filter(isSpecificationSku);
+	if (oldVariantSkus.length) {
+		await db.transaction(async (tx) => {
+			const lockedSkus = await tx.select().from(productSkus).where(eq(productSkus.productId, existing.id)).for('update');
+			const code = defaultSkuCode(item.slug, item.sanityProductId);
+			const fallback = findDefaultProductSku(lockedSkus, code);
+			if (fallback) {
+				const patch = syncFieldChanges({ name: item.name, isActive: item.isEnabled }, fallback);
+				if (Object.keys(patch).length) await tx.update(productSkus).set({ ...patch, updatedAt: now }).where(eq(productSkus.id, fallback.id));
+			}
+			else {
+				await tx.insert(productSkus).values({ productId: existing.id, sku: code, sourceSku: code, name: item.name, unit: 'pcs', sellingPrice: existing.sellingPrice, isActive: item.isEnabled, updatedAt: now });
+				result.skuCreated += 1;
+			}
+			for (const oldSku of lockedSkus.filter(isSpecificationSku)) {
+				if (oldSku.isActive) {
+					await tx.update(productSkus).set({ isActive: false, updatedAt: now }).where(eq(productSkus.id, oldSku.id));
+				}
+			}
+		});
+		return;
+	}
 
 	const [sku] = await db
 		.select()
@@ -153,14 +241,7 @@ async function syncOneProduct(
 		});
 		result.skuCreated += 1;
 	} else {
-		await db
-			.update(productSkus)
-			.set({
-				name: item.name,
-				isActive: item.isEnabled,
-				// Keep sku code + sellingPrice as PG source of truth
-				updatedAt: now,
-			})
-			.where(eq(productSkus.id, sku.id));
+		const patch = syncFieldChanges({ name: item.name, isActive: item.isEnabled }, sku);
+		if (Object.keys(patch).length) await db.update(productSkus).set({ ...patch, updatedAt: now }).where(eq(productSkus.id, sku.id));
 	}
 }

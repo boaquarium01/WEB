@@ -44,6 +44,7 @@ export const productType = defineType({
     { name: 'basic', title: '基本資訊' },
     { name: 'display', title: '顯示/排序' },
     { name: 'images', title: '圖片' },
+    { name: 'variants', title: '商品規格' },
     { name: 'seo', title: 'SEO' }
   ],
   // 陣列順序＝Studio「全部欄位」由上而下；與 groups 順序一致：基本 → 顯示/排序 → 圖片 → SEO
@@ -189,6 +190,84 @@ export const productType = defineType({
         })
       ],
       options: { layout: 'grid' }
+    }),
+    defineField({
+      name: 'specificationsEnabled',
+      title: '啟用商品規格',
+      type: 'boolean',
+      initialValue: false,
+      group: 'variants',
+    }),
+    defineField({
+      name: 'specifications',
+      title: '商品規格',
+      description: '最多兩組規格，每組最多十個選項；僅第一組規格可設定選項圖片。',
+      type: 'array',
+      group: 'variants',
+      validation: (Rule) => Rule.max(2).custom((groups) => {
+        const specifications = groups as Array<{ options?: Array<{ image?: unknown }> }> | undefined;
+        return specifications?.slice(1).some((group) => group.options?.some((option) => option.image))
+          ? '僅規格 1 可設定圖片，請移除規格 2 的圖片' : true;
+      }),
+      of: [defineArrayMember({
+        type: 'object',
+        fields: [
+          defineField({ name: 'name', title: '規格名稱', type: 'string', validation: (Rule) => Rule.required().max(30) }),
+          defineField({ name: 'order', title: '排序', type: 'number', hidden: true }),
+          defineField({ name: 'options', title: '規格選項', type: 'array', validation: (Rule) => Rule.min(1).max(10), of: [defineArrayMember({
+            type: 'object',
+            fields: [
+              defineField({ name: 'name', title: '選項文字', type: 'string', validation: (Rule) => Rule.required().max(60) }),
+              defineField({ name: 'order', title: '排序', type: 'number', hidden: true }),
+              defineField({ name: 'image', title: '選項圖片（選填）', type: 'image', options: { hotspot: true },
+                hidden: ({ document, parent, value }) => {
+                  // Keep legacy images visible for removal in Studio; block new images on tier 2.
+                  if (value) return false;
+                  const groups = document?.specifications as Array<{ options?: Array<{ _key?: string }> }> | undefined;
+                  return (groups?.findIndex((group) => group.options?.some((option) => option._key === parent?._key)) ?? 0) > 0;
+                },
+              }),
+            ],
+          })] }),
+        ],
+      })],
+    }),
+    defineField({
+      name: 'option1Name',
+      title: '規格 1 名稱',
+      description: '例如：色溫。填寫後，請在下方每個規格組合填入對應選項。',
+      type: 'string',
+      group: 'variants',
+      hidden: true,
+      validation: (Rule) => Rule.max(30)
+    }),
+    defineField({
+      name: 'option2Name',
+      title: '規格 2 名稱（選填）',
+      description: '例如：長度；不需要第二種規格時留白。',
+      type: 'string',
+      group: 'variants',
+      hidden: true,
+      validation: (Rule) => Rule.max(30)
+    }),
+    defineField({
+      name: 'variants',
+      title: '規格組合',
+      description: '每列是一個可購買的 SKU；在後台電商區設定各列的價格和庫存。規格列請使用不重複的組合。',
+      type: 'array',
+      group: 'variants',
+      of: [defineArrayMember({
+        type: 'object',
+        fields: [
+          defineField({ name: 'optionIds', title: '對應選項 ID', type: 'array', of: [{ type: 'string' }], validation: (Rule) => Rule.required().min(1).max(2) }),
+          defineField({ name: 'option1Value', title: '舊規格名稱（相容資料）', type: 'string', hidden: true }),
+          defineField({ name: 'option2Value', title: '舊規格名稱（相容資料）', type: 'string', hidden: true }),
+        ],
+        preview: {
+          select: { title: '_key' },
+          prepare: ({ title }: { title?: string }) => ({ title: title || '規格組合' })
+        }
+      })]
     }),
     // —— SEO ——
     defineField({

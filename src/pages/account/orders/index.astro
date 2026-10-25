@@ -3,25 +3,24 @@ import AccountLayout from '../../../layouts/AccountLayout.astro';
 import { formatTwd } from '../../../lib/services/catalog';
 import {
 	listOrdersForUser,
-	shippingStatusLabel,
 } from '../../../lib/services/order-management';
-import {
-	orderStatusLabel,
-	paymentStatusLabel,
-} from '../../../lib/services/order';
+import { orderStatusLabel } from '../../../lib/services/order';
 
 export const prerender = false;
 
 const user = Astro.locals.user!;
 const rows = await listOrdersForUser(user.id);
+const orderTime = (date: Date) => {
+	const parts = new Intl.DateTimeFormat('en-CA', {
+		timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
+		hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+	}).formatToParts(date);
+	const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? '';
+	return `${part('year')}/${part('month')}/${part('day')} ${part('hour')}:${part('minute')}`;
+};
 ---
 
 <AccountLayout title="我的訂單｜水博館水族">
-	<header class="head">
-		<p class="crumb"><a href="/account/orders">會員中心</a> / 訂單</p>
-		<h1>我的訂單</h1>
-	</header>
-
 	{
 		rows.length === 0 ? (
 			<div class="empty">
@@ -34,24 +33,16 @@ const rows = await listOrdersForUser(user.id);
 			<ul class="list">
 				{rows.map((row) => (
 					<li>
-						<a
-							class="card"
-							href={`/account/orders/${encodeURIComponent(row.orderNumber)}`}
-						>
+						<a class="card" href={`/account/orders/${encodeURIComponent(row.orderNumber)}`}>
 							<div class="top">
-								<strong class="mono">{row.orderNumber}</strong>
-								<span class="status">{orderStatusLabel(row.status)}</span>
+								<strong class="product-title">{row.items[0]?.productName ?? '商品訂單'}</strong>
+								<span class={`status status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span>
 							</div>
-							<p class="meta">
-								{row.createdAt.toLocaleString('zh-TW', {
-									timeZone: 'Asia/Taipei',
-								})}
-								· {row.itemCount} 件 · {formatTwd(row.total)}
-							</p>
-							<p class="meta">
-								付款 {paymentStatusLabel(row.paymentStatus)} · 出貨{' '}
-								{shippingStatusLabel(row.shippingStatus)}
-							</p>
+							{row.items.length > 1 && <span class="more-items">檢視其他商品<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>}
+							<div class="bottom">
+								<time datetime={row.createdAt.toISOString()}>{orderTime(row.createdAt)}</time>
+								<strong>訂單金額：{formatTwd(row.total)}</strong>
+							</div>
 						</a>
 					</li>
 				))}
@@ -61,31 +52,6 @@ const rows = await listOrdersForUser(user.id);
 </AccountLayout>
 
 <style>
-	.head {
-		margin-bottom: 1rem;
-	}
-
-	.crumb {
-		margin: 0 0 0.35rem;
-		color: var(--aq-muted);
-		font-size: 0.9rem;
-	}
-
-	.crumb a {
-		text-decoration: none;
-		color: var(--aq-primary);
-	}
-
-	h1 {
-		margin: 0;
-		font-size: 1.6rem;
-	}
-
-	.lead {
-		margin: 0.4rem 0 0;
-		color: var(--aq-muted);
-	}
-
 	.empty {
 		background: #fff;
 		border: 1px solid var(--aq-line);
@@ -103,13 +69,14 @@ const rows = await listOrdersForUser(user.id);
 	}
 
 	.card {
-		display: block;
+		display: grid;
+		gap: .65rem;
 		background: #fff;
 		border: 1px solid var(--aq-line);
 		border-radius: var(--aq-radius);
 		padding: 1rem 1.1rem;
-		text-decoration: none;
 		color: inherit;
+		text-decoration: none;
 		transition: border-color 0.15s ease;
 	}
 
@@ -117,28 +84,77 @@ const rows = await listOrdersForUser(user.id);
 		border-color: var(--aq-primary);
 	}
 
+	.card:focus-visible {
+		outline: 3px solid var(--aq-primary);
+		outline-offset: 2px;
+	}
+
 	.top {
 		display: flex;
 		justify-content: space-between;
-		gap: 0.75rem;
-		align-items: baseline;
-		flex-wrap: wrap;
+		gap: .65rem;
+		align-items: center;
+		min-width: 0;
 	}
 
-	.mono {
-		font-variant-numeric: tabular-nums;
-		letter-spacing: 0.02em;
+	.product-title {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 1rem;
+		font-weight: 700;
 	}
 
 	.status {
-		font-size: 0.88rem;
+		flex: none;
+		padding: .3rem .65rem;
+		border-radius: 999px;
+		border: 1px solid transparent;
+		font-size: 0.82rem;
 		font-weight: 650;
+		white-space: nowrap;
+	}
+	.card .status.status--pending_payment { background: #fff4e5; border-color: #f2d7ab; color: #8a5209; }
+	.card .status.status--payment_submitted { background: #edf3ff; border-color: #d1ddfb; color: #36599b; }
+	.card .status.status--paid { background: #e8f6ee; border-color: #c8e8d3; color: #236c43; }
+	.card .status.status--processing { background: #e8f5f9; border-color: #c7e4ed; color: #176176; }
+	.card .status.status--shipped { background: #efedff; border-color: #d8d3fa; color: #51488f; }
+	.card .status.status--completed { background: #e4f4eb; border-color: #bee2cb; color: #1e6840; }
+	.card .status.status--cancelled { background: #fff0ef; border-color: #f1cfcb; color: #a23c35; }
+
+	.more-items {
+		display: inline-flex;
+		align-items: center;
+		gap: .4rem;
+		width: fit-content;
 		color: var(--aq-primary-dark);
+		font-size: .84rem;
+		font-weight: 650;
+		text-decoration: none;
 	}
 
-	.meta {
-		margin: 0.35rem 0 0;
+	.bottom {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: .6rem;
+		padding-top: .55rem;
+		border-top: 1px solid #edf0ed;
 		color: var(--aq-muted);
-		font-size: 0.9rem;
+		font-size: .76rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.bottom strong {
+		color: var(--aq-ink);
+		font-size: .78rem;
+		white-space: nowrap;
+	}
+
+	@media(max-width:420px){
+		.card{padding:.9rem}
+		.bottom{gap:.3rem;font-size:.72rem}
+		.bottom strong{font-size:.72rem}
 	}
 </style>

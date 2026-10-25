@@ -89,8 +89,8 @@ function createAuth() {
 				if (isSyntheticProviderEmail(user.email)) return;
 				await sendAuthEmail({
 					to: user.email,
-					subject: '水博館水族會員密碼重設',
-					text: `您好，請使用以下連結重設密碼（連結一小時內有效）：\n\n${url}\n\n若非您本人操作，請忽略此信。`,
+					subject: '重設您的水博館水族會員密碼',
+					text: `您好，我們收到重設水博館水族會員密碼的請求。請點選下方連結，在一小時內設定新密碼：\n\n${url}\n\n若連結已逾期，請重新申請密碼重設。完成重設前，您的原密碼仍可使用。若您未提出此請求，請忽略此信。`,
 				});
 			},
 		},
@@ -104,7 +104,7 @@ function createAuth() {
 				await sendAuthEmail({
 					to: user.email,
 					subject: '驗證您的水博館水族會員 Email',
-					text: `您好，請於一小時內使用以下連結驗證 Email：\n\n${url}\n\n若非您本人操作，請忽略此信。`,
+					text: `您好，感謝您註冊水博館水族會員。請點選下方連結，在一小時內完成 Email 驗證；驗證完成後即可登入會員中心：\n\n${url}\n\n若連結已逾期，請回到登入頁重新寄送驗證信。若您未申請註冊，請忽略此信。`,
 				});
 			},
 		},
@@ -116,7 +116,7 @@ function createAuth() {
 			customRules: {
 				'/sign-in/email': { window: 60, max: 5 },
 				'/sign-up/email': { window: 60, max: 5 },
-				'/request-password-reset': { window: 60, max: 3 },
+				'/request-password-reset': { window: 60, max: 1 },
 				'/send-verification-email': { window: 60, max: 3 },
 				'/sign-in/social': { window: 60, max: 10 },
 			},

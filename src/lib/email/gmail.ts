@@ -4,6 +4,7 @@ type GmailMessage = {
 	to: string;
 	subject: string;
 	text: string;
+	html?: string;
 };
 
 function safeHeader(value: string, label: string): string {
@@ -31,16 +32,40 @@ function toBase64Lines(value: string): string {
 function createRawMessage(message: GmailMessage, from: string): string {
 	const to = safeHeader(message.to.trim(), 'To');
 	const subject = safeHeader(message.subject, 'Subject');
-	const mime = [
+	const headers = [
 		`From: ${formatFrom(from)}`,
 		`To: ${to}`,
 		`Subject: ${encodeHeader(subject)}`,
 		'MIME-Version: 1.0',
-		'Content-Type: text/plain; charset=UTF-8',
-		'Content-Transfer-Encoding: base64',
-		'',
-		toBase64Lines(message.text),
-	].join('\r\n');
+	];
+	let mime: string;
+	if (message.html) {
+		const boundary = `----=_Aquarium_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+		mime = [
+			...headers,
+			`Content-Type: multipart/alternative; boundary="${boundary}"`,
+			'',
+			`--${boundary}`,
+			'Content-Type: text/plain; charset=UTF-8',
+			'Content-Transfer-Encoding: base64',
+			'',
+			toBase64Lines(message.text),
+			`--${boundary}`,
+			'Content-Type: text/html; charset=UTF-8',
+			'Content-Transfer-Encoding: base64',
+			'',
+			toBase64Lines(message.html),
+			`--${boundary}--`,
+		].join('\r\n');
+	} else {
+		mime = [
+			...headers,
+			'Content-Type: text/plain; charset=UTF-8',
+			'Content-Transfer-Encoding: base64',
+			'',
+			toBase64Lines(message.text),
+		].join('\r\n');
+	}
 	return Buffer.from(mime, 'utf8').toString('base64url');
 }
 

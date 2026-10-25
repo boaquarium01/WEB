@@ -13,17 +13,33 @@ const providers = { google: Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SE
 const hasCredential = accounts.some((item) => item.providerId === 'credential');
 ---
 <AccountLayout title="登入與安全｜水博館水族">
-	<h1>登入與安全</h1>
-	<p class="lead">管理這個會員帳號可使用的登入方式。</p>
-	{oauthError && <p class="error">授權未完成或已取消。請確認該登入方式尚未綁定其他會員後再試。</p>}
-	<section class="panel"><h2>已綁定登入方式</h2><ul id="account-list" class="list">
-		{accounts.map((item) => <li class="card" data-account-id={item.id}><strong>{item.providerId === 'credential' ? 'Email 與密碼' : item.providerId === 'google' ? 'Google' : item.providerId === 'line' ? 'LINE' : item.providerId}</strong>{item.providerId !== 'credential' && <button type="button" class="danger unlink">解除綁定</button>}</li>)}
-	</ul>
-	<div class="actions">{providers.google && !accounts.some((a)=>a.providerId==='google') && <button type="button" class="link-social" data-provider="google">綁定 Google</button>}{providers.line && !accounts.some((a)=>a.providerId==='line') && <button type="button" class="link-social" data-provider="line">綁定 LINE</button>}</div>
-	{!providers.google && !providers.line && <p class="muted">Google 與 LINE 尚未完成伺服器端憑證設定。</p>}</section>
-	<section class="panel"><h2>{hasCredential ? '修改密碼' : '設定 Email 密碼'}</h2><form id="password-form" class="form" data-has-credential={String(hasCredential)}>{hasCredential && <label>目前密碼<input type="password" name="currentPassword" autocomplete="current-password" required /></label>}<label>新密碼<input type="password" name="newPassword" minlength="8" autocomplete="new-password" required /></label><button type="submit">{hasCredential ? '更新密碼' : '設定密碼'}</button></form><p id="security-status" role="status" aria-live="polite"></p><p><a href="/account/forgot-password">忘記密碼／重設密碼</a></p></section>
-	<section class="panel"><h2>其他裝置</h2><p>可讓目前登入以外的所有裝置重新登入。</p><button id="revoke-sessions" class="danger" type="button">登出所有其他裝置</button></section>
-	<section class="panel"><h2>登出</h2><p>結束目前這個裝置的會員登入狀態。</p><form action="/api/account/logout" method="post"><button class="danger" type="submit">登出此裝置</button></form></section>
+	<div class="security-page">
+		<header class="security-heading"><span class="security-heading-icon"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i></span><div><h1>登入與安全</h1><p>管理這個會員帳號可使用的登入方式。</p></div></header>
+		{oauthError && <p class="error security-error">授權未完成或已取消。請確認該登入方式尚未綁定其他會員後再試。</p>}
+		<p id="security-status" class="security-status" role="status" aria-live="polite"></p>
+		<section class="panel security-panel">
+			<header class="section-heading"><div><h2>登入方式</h2><p>可使用以下方式登入會員中心。</p></div><span class="count-pill">{accounts.length} 種</span></header>
+			<ul id="account-list" class="provider-list">
+				{accounts.map((item) => {
+					const providerName = item.providerId === 'credential' ? 'Email 與密碼' : item.providerId === 'google' ? 'Google' : item.providerId === 'line' ? 'LINE' : item.providerId;
+					const icon = item.providerId === 'credential' ? 'fa-envelope' : item.providerId === 'google' ? 'fa-google' : item.providerId === 'line' ? 'fa-line' : 'fa-key';
+					const iconPrefix = item.providerId === 'credential' ? 'fa-solid' : 'fa-brands';
+					return <li class="provider-row" data-account-id={item.id}><span class:list={['provider-icon', `provider-icon--${item.providerId}`]}><i class={`${iconPrefix} ${icon}`} aria-hidden="true"></i></span><span class="provider-name">{providerName}<small>已綁定</small></span>{item.providerId !== 'credential' && <button type="button" class="danger unlink">解除綁定</button>}</li>;
+				})}
+			</ul>
+			<div class="bind-actions">{providers.google && !accounts.some((a)=>a.providerId==='google') && <button type="button" class="link-social" data-provider="google"><i class="fa-brands fa-google" aria-hidden="true"></i>綁定 Google</button>}{providers.line && !accounts.some((a)=>a.providerId==='line') && <button type="button" class="link-social" data-provider="line"><i class="fa-brands fa-line" aria-hidden="true"></i>綁定 LINE</button>}</div>
+			{!providers.google && !providers.line && <p class="muted setup-note">Google 與 LINE 尚未完成設定。</p>}
+		</section>
+		<section class="panel security-panel">
+			<header class="section-heading"><div><h2>{hasCredential ? '修改密碼' : '設定 Email 密碼'}</h2><p>{hasCredential ? '請輸入目前密碼，再設定新的密碼。' : '新增密碼後，也可以使用 Email 登入。'}</p></div><span class="section-icon"><i class="fa-solid fa-lock" aria-hidden="true"></i></span></header>
+			<form id="password-form" class="form password-form" data-has-credential={String(hasCredential)}>{hasCredential && <label>目前密碼<input type="password" name="currentPassword" autocomplete="current-password" required /></label>}<label>新密碼<input type="password" name="newPassword" minlength="8" autocomplete="new-password" required /></label><button type="submit">{hasCredential ? '更新密碼' : '設定密碼'}</button></form>
+			<a class="reset-link" href="/account/forgot-password">忘記密碼或需要重設？</a>
+		</section>
+		<section class="panel security-panel device-panel">
+			<header class="section-heading"><div><h2>登入裝置</h2><p>管理其他裝置的登入狀態。</p></div><span class="section-icon"><i class="fa-solid fa-mobile-screen-button" aria-hidden="true"></i></span></header>
+			<div class="device-actions"><form action="/api/account/logout" method="post"><button class="primary-action" type="submit">登出此裝置</button></form><button id="revoke-sessions" class="secondary-action" type="button">登出所有其他裝置</button></div>
+		</section>
+	</div>
 </AccountLayout>
 <script>
 	import { authClient } from '../../lib/auth/client';
@@ -34,3 +50,45 @@ const hasCredential = accounts.some((item) => item.providerId === 'credential');
 	document.getElementById('password-form')?.addEventListener('submit',async(event)=>{event.preventDefault();const data=new FormData(event.currentTarget as HTMLFormElement);try{const result=hasCredential?await authClient.changePassword({currentPassword:String(data.get('currentPassword')),newPassword:String(data.get('newPassword')),revokeOtherSessions:true}):await authClient.setPassword({newPassword:String(data.get('newPassword'))});status.textContent=result.error?'密碼更新失敗，請確認資料後再試。':'密碼已更新。';}catch{status.textContent='密碼更新失敗，請確認資料後再試。';}});
 	document.getElementById('revoke-sessions')?.addEventListener('click',async()=>{const result=await authClient.revokeSessions();if(result.error){status.textContent='登出失敗，請稍後再試。';return;}status.textContent='已登出其他裝置。';});
 </script>
+
+<style>
+	.security-page{display:grid;gap:1rem;max-width:760px;margin:0 auto}
+	.security-heading{display:flex;align-items:center;gap:.8rem;margin:0 0 .15rem}
+	.security-heading-icon,.section-icon,.provider-icon{display:grid;place-items:center;flex:none;border-radius:13px;background:#eaf5f1;color:var(--aq-primary-dark)}
+	.security-heading-icon{width:46px;height:46px;font-size:1.1rem}
+	.security-heading h1{margin:0;color:var(--aq-ink);font-size:clamp(1.35rem,4vw,1.7rem)}
+	.security-heading p,.section-heading p{margin:.25rem 0 0;color:var(--aq-muted);font-size:.88rem;line-height:1.5}
+	.security-panel{padding:1.15rem!important;border:1px solid #e5eae6!important;border-radius:18px!important}
+	.section-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.9rem}
+	.section-heading h2{margin:0;font-size:1.05rem}
+	.count-pill{flex:none;padding:.3rem .65rem;border-radius:999px;background:#edf5f1;color:var(--aq-primary-dark);font-size:.76rem;font-weight:700}
+	.provider-list{display:grid;gap:.55rem;margin:0;padding:0;list-style:none}
+	.provider-row{display:flex;align-items:center;gap:.7rem;min-width:0;padding:.75rem;border:1px solid #e8eeea;border-radius:14px;background:#fbfcfb}
+	.provider-icon{width:40px;height:40px;font-size:1rem}
+	.provider-icon--google{background:#f1f5fb;color:#4285f4}.provider-icon--line{background:#e9f8ee;color:#06a84f}.provider-icon--credential{background:#edf5f1;color:var(--aq-primary-dark)}
+	.provider-name{display:grid;gap:.15rem;min-width:0;color:var(--aq-ink);font-weight:700}
+	.provider-name small{color:var(--aq-muted);font-size:.74rem;font-weight:500}
+	.provider-name{flex:1}
+	.provider-row button,.device-actions button{flex:none;min-height:40px;padding:.5rem .75rem;border-radius:10px;font-size:.83rem}
+	.provider-row .unlink{width:86px;margin-left:auto;border:1px solid #efcfcc!important;background:#fff8f7!important;color:#a63228!important;box-shadow:none!important}
+	.provider-row .unlink:hover:not(:disabled){border-color:#e4aaa4!important;background:#fff0ee!important}
+	.bind-actions{display:flex;flex-wrap:wrap;gap:.55rem;margin-top:.75rem}
+	.bind-actions button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:.5rem;flex:1 1 180px}
+	.setup-note{margin:.7rem 0 0;font-size:.84rem}
+	.password-form{gap:.85rem!important;margin:.75rem 0!important}
+	.password-form label{gap:.45rem}
+	.password-form input{min-height:48px}
+	.password-form button{min-height:46px;width:100%}
+	.reset-link{display:inline-flex;min-height:40px;align-items:center;color:var(--aq-primary-dark);font-size:.88rem;font-weight:650}
+	.device-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem}
+	.device-actions form{margin:0}
+	.device-actions button{width:100%;height:100%}
+	.device-actions .secondary-action{border:1px solid #d7e5df!important;background:#f7fbf8!important;color:var(--aq-primary-dark)!important;box-shadow:none!important}
+	.device-actions .secondary-action:hover:not(:disabled){background:#edf5f1!important}
+	.device-actions .primary-action{border:0!important;background:var(--aq-primary)!important;color:#fff!important;box-shadow:0 6px 16px rgba(21,106,102,.17)!important}
+	.device-actions .primary-action:hover:not(:disabled){background:var(--aq-primary-dark)!important}
+	.security-status:empty{display:none}
+	.security-status{margin:0;padding:.7rem .85rem;border-radius:12px;background:#edf5f1;color:var(--aq-primary-dark);font-size:.88rem}
+	.security-error{margin:0}
+	@media(max-width:520px){.security-page{gap:.75rem}.security-heading-icon{width:42px;height:42px}.security-panel{padding:.9rem!important;border-radius:16px!important}.provider-row{gap:.55rem;padding:.65rem}.provider-icon{width:36px;height:36px}.provider-row .unlink{width:86px;min-width:86px;padding:.45rem .35rem;font-size:.78rem}.device-actions{grid-template-columns:1fr}.bind-actions{display:grid;grid-template-columns:1fr 1fr}.bind-actions button{min-width:0;flex:auto;padding:.65rem .45rem;font-size:.84rem}}
+</style>

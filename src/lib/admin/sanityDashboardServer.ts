@@ -10,6 +10,9 @@ import { plainTextToPortableBlocks } from '../portableText';
 import { strapiBlocksToPlainText } from '../strapi/blocks';
 import { dedupePromotionDocuments } from '../sanity/dedupePromotions';
 import { readSanityProjectDataset } from '../sanity/env';
+import { mergeSpecificationGallery } from '../sanity/specification-media';
+import type { SanityImageAsset, SanitySpecification } from '../sanity/types';
+import { generateSpecificationCombinations, normalizeSpecifications } from '../sanity/specifications';
 
 const API_VERSION = '2025-03-18';
 
@@ -91,6 +94,23 @@ function mapProductRow(doc: Record<string, unknown>, b: ImageUrlBuilder) {
 	const gallery = Array.isArray(doc.gallery)
 		? (doc.gallery as unknown[]).map((g) => thumbFromSanityImage(g, b)).filter(Boolean)
 		: [];
+	let specifications: Record<string, unknown>[] = Array.isArray(doc.specifications)
+		? (doc.specifications as Record<string, unknown>[]).map((specification) => ({
+			...specification,
+			options: Array.isArray(specification.options) ? (specification.options as Record<string, unknown>[]).map((option) => ({ ...option, image: thumbFromSanityImage(option.image, b) })) : [],
+		}))
+		: [];
+	const variants = Array.isArray(doc.variants)
+		? (doc.variants as Record<string, unknown>[]).map((variant) => ({
+			...variant,
+		}))
+		: [];
+	if (!specifications.length && typeof doc.option1Name === 'string' && doc.option1Name.trim()) {
+		const option1Values = [...new Set(variants.map((variant) => String(variant.option1Value ?? '').trim()).filter(Boolean))];
+		const option2Values = [...new Set(variants.map((variant) => String(variant.option2Value ?? '').trim()).filter(Boolean))];
+		specifications = [{ _key: 'legacy_spec_1', name: doc.option1Name, order: 0, options: option1Values.map((name, i) => ({ _key: `legacy_1_${i}`, name, order: i, image: null })) }];
+		if (typeof doc.option2Name === 'string' && doc.option2Name.trim() && option2Values.length) specifications.push({ _key: 'legacy_spec_2', name: doc.option2Name, order: 1, options: option2Values.map((name, i) => ({ _key: `legacy_2_${i}`, name, order: i, image: null })) });
+	}
 	const mergedForList = [];
 	if (img) mergedForList.push(img);
 	for (const x of gallery) {
@@ -115,6 +135,9 @@ function mapProductRow(doc: Record<string, unknown>, b: ImageUrlBuilder) {
 		seoDescription: doc.seoDescription,
 		image: img,
 		gallery: gallery.length ? gallery : undefined,
+		variants,
+		specifications,
+		specificationsEnabled: doc.specificationsEnabled ?? Boolean(doc.option1Name),
 		_listThumbs: mergedForList,
 		category: catId
 			? {
@@ -147,6 +170,11 @@ const PRODUCT_FETCH = `*[_type == "product" && defined(slug.current)] | order(na
   seoDescription,
   image,
   gallery,
+  specificationsEnabled,
+  specifications[]{ _key, name, order, options[]{ _key, name, order, image } },
+  option1Name,
+  option2Name,
+  variants[]{ _key, optionIds, option1Value, option2Value, image },
   "category": category->{ _id, name, "slug": slug.current }
 }`;
 
@@ -304,8 +332,20 @@ export async function runSanityDashboardRequest(opts: {
 			return { status: 200, body: { data: rows } };
 		}
 		if (pathname.startsWith('/api/products')) {
-			const docs = await client.fetch(PRODUCT_FETCH);
-			const rows = (docs as Record<string, unknown>[]).map((d) => mapProductRow(d, b));
+			const detailId = pathname.match(/^\/api\/products\/([^/]+)$/)?.[1];
+			if (detailId) {
+				const query = PRODUCT_FETCH.replace('*[_type == "product" && defined(slug.current)] | order(name asc)', '*[_type == "product" && _id == $id][0]');
+				const doc = await client.fetch<Record<string, unknown> | null>(query, { id: decodeURIComponent(detailId) });
+				return doc ? { status: 200, body: { data: mapProductRow(doc, b) } } : { status: 404, body: { error: { message: '找不到商品' } } };
+			}
+			const listOnly = url.searchParams.get('view') === 'list-index';
+			const query = listOnly ? `*[_type == "product" && defined(slug.current)] | order(name asc) {
+				_id, name, slug, enabled, sortOrder, featured, heroSpotlight, image,
+				specificationsEnabled, option1Name, variants[]{ _key },
+				"category": category->{ _id, name, "slug": slug.current }
+			}` : PRODUCT_FETCH;
+			const docs = await client.fetch(query);
+			const rows = (docs as Record<string, unknown>[]).map((d) => ({ ...mapProductRow(d, b), ...(listOnly ? { __listOnly: true } : {}) }));
 			return { status: 200, body: { data: rows } };
 		}
 		if (pathname.startsWith('/api/categories')) {
@@ -342,14 +382,14 @@ export async function runSanityDashboardRequest(opts: {
 
 	const idMatch = pathname.match(/^\/api\/(promotions|products|categories)\/([^/?]+)$/);
 	if (idMatch && method === 'DELETE') {
-		const id = decodeURIComponent(idMatch[2]);
+		const id = decodeURIComponent(idMatch[2]!);
 		await client.delete(id);
 		return { status: 200, body: { data: { id } } };
 	}
 
 	if (idMatch && method === 'PUT') {
 		const model = idMatch[1];
-		const id = decodeURIComponent(idMatch[2]);
+		const id = decodeURIComponent(idMatch[2]!);
 		const payload = parseJson();
 		const data = (payload as { data?: Record<string, unknown> }).data ?? {};
 
@@ -368,6 +408,7 @@ export async function runSanityDashboardRequest(opts: {
 		if (model === 'categories') {
 			const patch: Record<string, unknown> = {};
 			if (data.name != null) patch.name = data.name;
+
 			if (data.slug != null) patch.slug = { _type: 'slug', current: String(data.slug) };
 			if (data.orderRank != null) patch.orderRank = data.orderRank;
 			await client.patch(id).set(patch).commit();
@@ -395,6 +436,54 @@ export async function runSanityDashboardRequest(opts: {
 				patch.seoKeywords = normalizeSeoKeywords(data.seoKeywords);
 			}
 			if (data.seoDescription != null) patch.seoDescription = data.seoDescription;
+			let previousMedia: { gallery?: SanityImageAsset[]; specifications?: SanitySpecification[] } | null = null;
+			if (data.specificationsEnabled != null) patch.specificationsEnabled = Boolean(data.specificationsEnabled);
+			if (data.specificationsEnabled === false) {
+				patch.specifications = [];
+				patch.variants = [];
+				patch.option1Name = '';
+				patch.option2Name = '';
+			} else if (Object.prototype.hasOwnProperty.call(data, 'specifications')) {
+				try {
+					const specifications = normalizeSpecifications(data.specifications);
+					if (data.specificationsEnabled === true && specifications.length === 0) throw new Error('啟用商品規格時，至少新增一組規格');
+					const combinations = generateSpecificationCombinations(specifications);
+					const previous = await client.fetch<Record<string, unknown> | null>(
+						`*[_id == $id][0]{ gallery, specifications[]{ _key, options[]{ _key, name, image } }, variants[]{ _key, optionIds, option1Value, option2Value } }`, { id },
+					);
+					previousMedia = previous as { gallery?: SanityImageAsset[]; specifications?: SanitySpecification[] } | null;
+					const oldSpecs = Array.isArray(previous?.specifications) ? previous.specifications as Array<Record<string, unknown>> : [];
+					const oldVariants = Array.isArray(previous?.variants) ? previous.variants as Array<Record<string, unknown>> : [];
+					const legacySpecs = oldSpecs.length ? oldSpecs : specifications;
+					const oldKeyByIds = new Map<string, string>();
+					for (const oldVariant of oldVariants) {
+						let ids = Array.isArray(oldVariant.optionIds) ? oldVariant.optionIds.map(String) : [];
+						if (!ids.length) {
+							const legacyValues = [String(oldVariant.option1Value ?? '').trim(), String(oldVariant.option2Value ?? '').trim()].filter(Boolean);
+						ids = legacyValues.map((value, index) => {
+							const oldOptions = Array.isArray(legacySpecs[index]?.options) ? legacySpecs[index]!.options as Array<Record<string, unknown>> : [];
+							if (oldSpecs.length) return String(oldOptions.find((option) => String(option.name ?? '').trim() === value)?._key ?? '');
+							const oldValues = [...new Set(oldVariants.map((variant) => String((index === 0 ? variant.option1Value : variant.option2Value) ?? '').trim()).filter(Boolean))];
+							const currentOptions = specifications[index]?.options ?? [];
+							return currentOptions[oldValues.indexOf(value)]?._key ?? '';
+						}).filter(Boolean);
+					}
+					if (ids.length) oldKeyByIds.set([...ids].sort().join('|'), String(oldVariant._key ?? ''));
+				}
+				const stableCombinations = combinations.map((combo) => ({ ...combo, _key: oldKeyByIds.get([...combo.optionIds].sort().join('|')) || combo._key }));
+					patch.specifications = specifications;
+					patch.variants = stableCombinations.map((combo) => {
+						const oldVariant = oldVariants.find((variant) => String(variant._key ?? '') === combo._key);
+						return {
+							_type: 'object', _key: combo._key, optionIds: combo.optionIds,
+							...(oldVariant?.option1Value ? { option1Value: oldVariant.option1Value } : {}),
+							...(oldVariant?.option2Value ? { option2Value: oldVariant.option2Value } : {}),
+						};
+					});
+				} catch (error) {
+					return { status: 400, body: { error: { message: error instanceof Error ? error.message : '規格資料錯誤' } } };
+				}
+			}
 			const catRef = data.category as string | number | null | undefined;
 			if (catRef != null && String(catRef).trim()) {
 				patch.category = { _type: 'reference', _ref: String(catRef).trim() };
@@ -411,6 +500,10 @@ export async function runSanityDashboardRequest(opts: {
 				const galRaw = Array.isArray(data.gallery) ? data.gallery : [];
 				patch.gallery = mixedImageRefs(galRaw);
 			}
+			if (Array.isArray(patch.specifications) || Object.prototype.hasOwnProperty.call(data, "gallery")) {
+				const media = previousMedia ?? await client.fetch<{ gallery?: SanityImageAsset[]; specifications?: SanitySpecification[] }>(`*[_id == $id][0]{ gallery, specifications[]{ options[]{ image } } }`, { id });
+				patch.gallery = mergeSpecificationGallery((patch.gallery ?? media?.gallery ?? []) as SanityImageAsset[], (patch.specifications ?? media?.specifications ?? []) as SanitySpecification[]);
+			}
 			if (data.slug != null) patch.slug = { _type: 'slug', current: String(data.slug) };
 
 			if (Object.keys(patch).length || unsetPaths.length) {
@@ -420,7 +513,7 @@ export async function runSanityDashboardRequest(opts: {
 				await mut.commit();
 			}
 			const doc = await client.fetch(
-				`*[_id == $id][0]{ _id, name, slug, excerpt, body, enabled, sortOrder, featured, featuredSortOrder, heroSpotlight, heroSpotlightActivatedAt, seoTitle, seoKeywords, seoDescription, image, gallery, "category": category->{ _id, name, "slug": slug.current } }`,
+`*[_id == $id][0]{ _id, name, slug, excerpt, body, enabled, sortOrder, featured, featuredSortOrder, heroSpotlight, heroSpotlightActivatedAt, seoTitle, seoKeywords, seoDescription, image, gallery, specificationsEnabled, specifications[]{ _key, name, order, options[]{ _key, name, order, image } }, variants[]{ _key, optionIds }, "category": category->{ _id, name, "slug": slug.current } }`,
 				{ id }
 			);
 			return { status: 200, body: { data: mapProductRow(doc as Record<string, unknown>, b) } };
@@ -449,14 +542,15 @@ export async function runSanityDashboardRequest(opts: {
 			seoTitle: data.seoTitle != null ? String(data.seoTitle) : '',
 			seoKeywords: normalizeSeoKeywords(data.seoKeywords),
 			seoDescription: data.seoDescription != null ? String(data.seoDescription) : '',
-			gallery: mixedImageRefs(Array.isArray(data.gallery) ? data.gallery : [])
+			gallery: mixedImageRefs(Array.isArray(data.gallery) ? data.gallery : []),
+			specificationsEnabled: Boolean(data.specificationsEnabled)
 		};
 		const imgId = data.image as string | number | undefined;
 		if (imgId != null && String(imgId).trim()) doc.image = refImageFromId(imgId);
 
-		const created = await client.create(doc);
+		const created = await client.create(doc as { _type: string; [key: string]: unknown });
 		const row = await client.fetch(
-			`*[_id == $id][0]{ _id, name, slug, excerpt, body, enabled, sortOrder, featured, featuredSortOrder, heroSpotlight, heroSpotlightActivatedAt, seoTitle, seoKeywords, seoDescription, image, gallery, "category": category->{ _id, name, "slug": slug.current } }`,
+			`*[_id == $id][0]{ _id, name, slug, excerpt, body, enabled, sortOrder, featured, featuredSortOrder, heroSpotlight, heroSpotlightActivatedAt, seoTitle, seoKeywords, seoDescription, image, gallery, specificationsEnabled, specifications[]{ _key, name, order, options[]{ _key, name, order, image } }, variants[]{ _key, optionIds }, "category": category->{ _id, name, "slug": slug.current } }`,
 			{ id: created._id }
 		);
 		return { status: 201, body: { data: mapProductRow(row as Record<string, unknown>, b) } };

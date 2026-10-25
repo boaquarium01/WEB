@@ -1,4 +1,6 @@
+---
 /** Keep V1's canonical catalog route while preserving search/filter parameters. */
 export const prerender = false;
 
 return Astro.redirect(`/products/1${Astro.url.search}`);
+---

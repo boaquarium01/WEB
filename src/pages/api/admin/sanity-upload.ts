@@ -4,6 +4,8 @@ import { createImageUrlBuilder } from '@sanity/image-url';
 import { readEnv, readSanityWriteToken } from '../../../lib/admin/sanityDashboardServer';
 
 const API_VERSION = '2025-03-18';
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 function resolveToken(request: Request): string {
 	const env = readSanityWriteToken();
@@ -55,6 +57,18 @@ export const POST: APIRoute = async ({ request }) => {
 
 	for (const entry of entries) {
 		if (!(entry instanceof File) || entry.size === 0) continue;
+		if (!ALLOWED_IMAGE_TYPES.has(entry.type.toLowerCase())) {
+			return new Response(JSON.stringify({ error: { message: `${entry.name || '圖片'} 格式不支援，請使用 JPG、PNG、WebP 或 GIF` } }), {
+				status: 400,
+				headers: { 'Content-Type': 'application/json; charset=utf-8' }
+			});
+		}
+		if (entry.size > MAX_IMAGE_BYTES) {
+			return new Response(JSON.stringify({ error: { message: `${entry.name || '圖片'} 超過 20MB` } }), {
+				status: 400,
+				headers: { 'Content-Type': 'application/json; charset=utf-8' }
+			});
+		}
 		const buffer = Buffer.from(await entry.arrayBuffer());
 		const asset = await client.assets.upload('image', buffer, {
 			filename: entry.name || 'upload.jpg'

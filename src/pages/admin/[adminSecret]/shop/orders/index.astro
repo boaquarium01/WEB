@@ -4,7 +4,10 @@ import {
 	getAdminBasePath,
 	isValidAdminSecretParam,
 } from '../../../../../lib/admin/path';
-import { listAdminOrders } from '../../../../../lib/services/admin-orders';
+import {
+	getAdminOrderStatusCounts,
+	listAdminOrders,
+} from '../../../../../lib/services/admin-orders';
 import { formatTwd } from '../../../../../lib/services/catalog';
 import {
 	orderStatusLabel,
@@ -19,49 +22,104 @@ if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
 }
 
 const base = getAdminBasePath();
-const status = Astro.url.searchParams.get('status')?.trim() || undefined;
+const params = Astro.url.searchParams;
+const statusOptions = new Set(['PAYMENT_REVIEW', 'AWAITING_SHIPMENT', 'PENDING_PAYMENT', 'PAYMENT_SUBMITTED', 'PROCESSING', 'SHIPPED', 'COMPLETED', 'CANCELLED']);
+const sortOptions = new Set(['newest', 'oldest', 'amount_desc', 'amount_asc', 'customer']);
+const rawStatus = params.get('status')?.trim() ?? '';
+const status = statusOptions.has(rawStatus) ? rawStatus : undefined;
 const memberUserId = Astro.url.searchParams.get('userId')?.trim() || undefined;
-const query = Astro.url.searchParams.get('q')?.trim() ?? '';
-const allRows = await listAdminOrders({ status, userId: memberUserId, limit: memberUserId ? 300 : 150 });
-const needle = query.toLocaleLowerCase('zh-Hant');
-const rows = needle
-	? allRows.filter((row) => [row.orderNumber, row.customerName, row.customerEmail].some((value) => String(value ?? '').toLocaleLowerCase('zh-Hant').includes(needle)))
-	: allRows;
+const query = params.get('q')?.trim() ?? '';
+const rawSort = params.get('sort')?.trim() ?? '';
+const sort = sortOptions.has(rawSort) ? rawSort : 'newest';
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+const parseDateStart = (value: string | null) => {
+	if (!value || !datePattern.test(value)) return undefined;
+	const [year, month, day] = value.split('-').map(Number);
+	const calendarDate = new Date(Date.UTC(year, month - 1, day));
+	if (calendarDate.getUTCFullYear() !== year || calendarDate.getUTCMonth() !== month - 1 || calendarDate.getUTCDate() !== day) return undefined;
+	const parsed = new Date(`${value}T00:00:00+08:00`);
+	return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
+const dateFrom = params.get('dateFrom')?.trim() ?? '';
+const dateTo = params.get('dateTo')?.trim() ?? '';
+const createdAfter = parseDateStart(dateFrom || null);
+const dateToStart = parseDateStart(dateTo || null);
+const createdBefore = dateToStart ? new Date(dateToStart.getTime() + 86_400_000) : undefined;
+const advancedFiltersOpen = sort !== 'newest' || Boolean(createdAfter || createdBefore);
+const filterState = {
+	...(memberUserId ? { userId: memberUserId } : {}),
+	...(createdAfter ? { dateFrom } : {}),
+	...(createdBefore ? { dateTo } : {}),
+	...(query ? { q: query } : {}),
+	...(sort !== 'newest' ? { sort } : {}),
+};
+function orderListUrl(nextStatus: string | null = status ?? null) {
+	const search = new URLSearchParams({ ...filterState, ...(nextStatus ? { status: nextStatus } : {}) });
+	return `${base}/shop/orders${search.size ? `?${search.toString()}` : ''}`;
+}
+const resetParams = new URLSearchParams(memberUserId ? { userId: memberUserId } : {});
+const resetUrl = `${base}/shop/orders${resetParams.size ? `?${resetParams.toString()}` : ''}`;
+const statusCounts = await getAdminOrderStatusCounts(memberUserId);
+const orderRows = await listAdminOrders({
+	status,
+	userId: memberUserId,
+	createdAfter,
+	createdBefore,
+	query,
+	limit: memberUserId ? 300 : 150,
+});
+const rows = [...orderRows].sort((a, b) => {
+	switch (sort) {
+		case 'oldest': return a.createdAt.getTime() - b.createdAt.getTime();
+		case 'amount_desc': return b.total - a.total;
+		case 'amount_asc': return a.total - b.total;
+		case 'customer': return String(a.customerName ?? '').localeCompare(String(b.customerName ?? ''), 'zh-Hant') || b.createdAt.getTime() - a.createdAt.getTime();
+		default: return b.createdAt.getTime() - a.createdAt.getTime();
+	}
+});
+const formatOrderTime = (date: Date) => date.toLocaleString('zh-TW', {
+	timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+});
 
 const filters = [
-	{ value: '', label: '全部' },
-	{ value: 'PAYMENT_REVIEW', label: '待付款／核對' },
-	{ value: 'AWAITING_SHIPMENT', label: '待出貨' },
-	{ value: 'PENDING_PAYMENT', label: '待付款' },
-	{ value: 'PAYMENT_SUBMITTED', label: '已回報付款' },
-	{ value: 'PROCESSING', label: '處理中' },
-	{ value: 'SHIPPED', label: '已出貨' },
-	{ value: 'COMPLETED', label: '已完成' },
-	{ value: 'CANCELLED', label: '已取消' },
+	{ value: '', label: '全部', count: statusCounts.all },
+	{ value: 'PAYMENT_REVIEW', label: '付款待處理', count: statusCounts.PAYMENT_REVIEW },
+	{ value: 'AWAITING_SHIPMENT', label: '待出貨', count: statusCounts.AWAITING_SHIPMENT },
+	{ value: 'SHIPPED', label: '已出貨', count: statusCounts.SHIPPED },
+	{ value: 'COMPLETED', label: '已完成', count: statusCounts.COMPLETED },
+	{ value: 'CANCELLED', label: '已取消', count: statusCounts.CANCELLED },
 ];
 ---
 
 <AdminLayout title="訂單管理｜水博館水族">
-	<header class="head page-heading">
-		<p class="eyebrow">目前顯示 {rows.length} 筆訂單</p>
-		<div class="heading-row"><div><h1>{memberUserId ? `${allRows[0]?.customerName ?? '會員'}的訂單紀錄` : '訂單管理'}</h1><p class="lead">依狀態整理近期訂單，快速確認付款與出貨進度。</p></div><span class="result-count">顯示 {rows.length} 筆{!memberUserId && <small>最近 150 筆中</small>}</span></div>
-		<nav class="filters">
+	<header class="head page-heading order-list-heading">
+		<div class="heading-row"><h1>{memberUserId ? `${rows[0]?.customerName ?? '會員'}的訂單紀錄` : '訂單管理'}</h1></div>
+		<nav class="filters" aria-label="依訂單狀態篩選">
 			{
 				filters.map((f) => (
 					<a
-						href={`${base}/shop/orders?${new URLSearchParams({ ...(f.value ? { status: f.value } : {}), ...(memberUserId ? { userId: memberUserId } : {}) }).toString()}`}
+						href={orderListUrl(f.value || null)}
 						class:list={[{ active: (status ?? '') === f.value }]}
 					>
-						{f.label}
-					</a>
+						<span>{f.label}</span><span class="filter-count">{f.count > 999 ? '999+' : f.count}</span>
+			</a>
 				))
 			}
 		</nav>
-		<form class="order-search" method="get" action={`${base}/shop/orders`}>
+		<form class="order-filters" method="get" action={`${base}/shop/orders`}>
 			{status && <input type="hidden" name="status" value={status} />}
 			{memberUserId && <input type="hidden" name="userId" value={memberUserId} />}
-			<label for="order-search">搜尋訂單</label>
-			<div><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="order-search" type="search" name="q" value={query} placeholder="訂單編號、顧客姓名或電子郵件" /><button type="submit">搜尋</button>{query && <a href={`${base}/shop/orders${status ? `?status=${status}` : ''}`}>清除</a>}</div>
+			<div class="order-filter-primary">
+				<label class="order-search-field"><span class="visually-hidden">搜尋訂單</span><input type="search" name="q" value={query} placeholder="訂單編號、顧客姓名或電子郵件" /></label>
+				<button class="filter-search-button" type="submit"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>搜尋</span></button>
+				<button class="filter-toggle" type="button" aria-expanded={advancedFiltersOpen ? 'true' : 'false'} aria-controls="order-advanced-filters"><span>排序／日期</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></button>
+			</div>
+			<div class="order-advanced-filters" id="order-advanced-filters" hidden={!advancedFiltersOpen}>
+				<label class="filter-field"><span>排序方式</span><select name="sort" value={sort}><option value="newest">下單時間：新到舊</option><option value="oldest">下單時間：舊到新</option><option value="amount_desc">訂單金額：高到低</option><option value="amount_asc">訂單金額：低到高</option><option value="customer">顧客姓名</option></select></label>
+				<label class="filter-field"><span>下單日期（起）</span><input type="date" name="dateFrom" value={createdAfter ? dateFrom : ''} /></label>
+				<label class="filter-field"><span>下單日期（迄）</span><input type="date" name="dateTo" value={createdBefore ? dateTo : ''} /></label>
+				<a class="filter-reset" href={resetUrl}>清除篩選</a>
+			</div>
 		</form>
 	</header>
 
@@ -69,7 +127,7 @@ const filters = [
 		rows.length === 0 ? (
 			<div class="empty"><i class="fa-regular fa-clipboard" aria-hidden="true"></i><strong>沒有符合條件的訂單</strong><span>{query ? '試試其他訂單編號或顧客資料。' : '符合此狀態的新訂單會顯示在這裡。'}</span></div>
 		) : (
-			<div class="table-wrap">
+			<div class="table-wrap order-list-pwa">
 				<table>
 					<thead>
 						<tr>
@@ -83,26 +141,40 @@ const filters = [
 						</tr>
 					</thead>
 					<tbody>
-						{rows.map((row) => (
-							<tr>
-								<td>
-									<a
-										class="mono order-number"
+						{rows.map((row, index) => (
+							<tr data-order-row class:list={[{ 'is-order-hidden': index >= 10 }]}>
+							<td>
+								<a
+									class="mono order-number"
 										href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}
 									>
-										{row.orderNumber}
-									</a>
-									<small>{row.itemCount} 件</small>
+									{row.orderNumber}
+								</a>
+								<small class="order-item-count">{row.itemCount} 件商品</small>
+								<div class="order-time-customer"><time class="mobile-order-time" datetime={row.createdAt.toISOString()}>{formatOrderTime(row.createdAt)}</time><span class="mobile-customer-name">{row.customerName ?? '—'}</span></div>
+								<a class="mobile-order-card-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} aria-label={`查看訂單 ${row.orderNumber}`}></a>
+							</td>
+							<td>
+								<strong class="customer-name">{row.customerName ?? '—'}</strong>
+								<small>{row.customerEmail ?? ''}</small>
+								{row.items[0] && <div class="order-product order-item-summary"><div class="order-item-feature"><strong class="order-item-name">{row.items[0].productName}</strong><span class="order-item-unit-price">{formatTwd(row.items[0].unitPrice)}</span>{row.items[0].skuName && <small class="order-item-spec">{row.items[0].skuName}</small>}<span class="order-item-quantity">×{row.items[0].quantity}</span></div>{row.itemLineCount > 1 && <small class="order-more-items">另有 {row.itemLineCount - 1} 項商品，查看更多</small>}</div>}
+							</td>
+								<td><span class={`status-chip status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span></td>
+								<td class="payment-status">{paymentStatusLabel(row.paymentStatus)}</td>
+								<td class="shipping-status">{shippingStatusLabel(row.shippingStatus)}</td>
+								<td class="order-amount">
+									<span class="desktop-order-total">{formatTwd(row.total)}</span>
+									<div class="order-actions">
+										<div class="mobile-order-total-group"><strong class="mobile-order-total">{formatTwd(row.total)}</strong><small class="mobile-order-count">共 {row.itemLineCount} 項・{row.itemCount} 件</small></div>
+										<div class="order-action-buttons">
+											{row.status === 'PAYMENT_SUBMITTED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認已收到這筆訂單的款項？');"><input type="hidden" name="_action" value="confirm_payment" /><button class="row-action row-action--payment" type="submit">確認付款</button></form>}
+											{['PAID', 'PROCESSING'].includes(row.status) && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成出貨？');"><input type="hidden" name="_action" value="mark_shipped" /><button class="row-action row-action--shipping" type="submit">標記出貨</button></form>}
+											{row.status === 'SHIPPED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成？');"><input type="hidden" name="_action" value="complete" /><button class="row-action row-action--complete" type="submit">完成訂單</button></form>}
+											<a class="row-action" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>查看</a>
+										</div>
+									</div>
 								</td>
-								<td>
-									{row.customerName ?? '—'}
-									<small>{row.customerEmail ?? ''}</small>
-								</td>
-								<td><span class="status-chip">{orderStatusLabel(row.status)}</span></td>
-								<td>{paymentStatusLabel(row.paymentStatus)}</td>
-								<td>{shippingStatusLabel(row.shippingStatus)}</td>
-								<td class="order-amount">{formatTwd(row.total)}</td>
-								<td class="mono">
+								<td class="mono order-date">
 									{row.createdAt.toLocaleString('zh-TW', {
 										timeZone: 'Asia/Taipei',
 									})}
@@ -111,60 +183,111 @@ const filters = [
 						))}
 					</tbody>
 				</table>
+				<button class="load-more-orders" type="button" hidden>查看更多</button>
 			</div>
 		)
 	}
 </AdminLayout>
 
+<style is:inline>
+	@media (max-width: 700px) {
+		.commerce-content .order-list-pwa.table-wrap { overflow: visible; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+		.commerce-content .order-list-pwa table,.commerce-content .order-list-pwa tbody { display: block; width: 100%; }
+		.commerce-content .order-list-pwa thead { display: none; }
+		.commerce-content .order-list-pwa tbody { display: grid; gap: 10px; }
+		.commerce-content .order-list-pwa tbody tr { position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "order status" "customer customer" "actions actions"; gap: 7px 10px; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; box-shadow: 0 12px 34px rgba(28,67,70,.055); cursor: pointer; }
+		.commerce-content .order-list-pwa tbody td { display: block; min-width: 0; padding: 0; border: 0; font-size: 13px; vertical-align: middle; }
+		.commerce-content .order-list-pwa tbody td:nth-child(1) { position: static; grid-area: order; align-self: center; }
+		.commerce-content .order-list-pwa tbody td:nth-child(2) { grid-area: customer; }
+		.commerce-content .order-list-pwa tbody td:nth-child(3) { grid-area: status; justify-self: end; align-self: center; }
+		.commerce-content .order-list-pwa tbody td:nth-child(4),.commerce-content .order-list-pwa tbody td:nth-child(5),.commerce-content .order-list-pwa tbody td:nth-child(7) { display: none; }
+		.commerce-content .order-list-pwa tbody td:nth-child(6) { grid-area: actions; }
+		.commerce-content .order-list-pwa .desktop-order-total { display: none; }
+		.commerce-content .order-list-pwa .order-number,.commerce-content .order-list-pwa .order-item-count { display: none; }
+		.commerce-content .order-list-pwa .order-time-customer { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }
+		.commerce-content .order-list-pwa .mobile-order-time { display: block; margin: 0; color: #183d45; font-size: 16px; line-height: 1.2; font-weight: 800; font-variant-numeric: tabular-nums; }
+		.commerce-content .order-list-pwa .mobile-customer-name { display: inline; color: #52676b; font-size: 14px; font-weight: 700; }
+		.commerce-content .order-list-pwa .status-chip { padding: 6px 10px; font-size: 11px; font-weight: 750; }
+		.commerce-content .order-list-pwa .customer-name,.commerce-content .order-list-pwa td > small { display: none; }
+		.commerce-content .order-list-pwa td small { overflow-wrap: anywhere; }
+		.commerce-content .order-list-pwa .order-product { display: block; margin-top: 6px; padding-top: 6px; border-top: 1px solid #edf1ef; color: #34535a; }
+		.commerce-content .order-list-pwa .order-item-feature { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: auto auto; align-items: baseline; gap: 4px 8px; }
+		.commerce-content .order-list-pwa .order-item-name { grid-column: 1; grid-row: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; }
+		.commerce-content .order-list-pwa .order-item-unit-price { grid-column: 2; grid-row: 1; white-space: nowrap; font-size: 12px; font-weight: 700; }
+		.commerce-content .order-list-pwa .order-item-spec { grid-column: 1; grid-row: 2; margin: 0; color: var(--commerce-muted); font-size: 10px; }
+		.commerce-content .order-list-pwa .order-item-quantity { grid-column: 2; grid-row: 2; justify-self: end; white-space: nowrap; font-size: 11px; }
+		.commerce-content .order-list-pwa .order-more-items { margin-top: 5px; color: var(--commerce-primary); text-align: right; font-size: 10px; }
+		.commerce-content .order-list-pwa .order-amount { display: block; white-space: normal; }
+		.commerce-content .order-list-pwa .order-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding-top: 8px; border-top: 1px solid #edf1ef; }
+		.commerce-content .order-list-pwa .mobile-order-total-group { display: grid; align-self: center; gap: 2px; min-width: 0; }
+		.commerce-content .order-list-pwa .mobile-order-total { display: block; color: #193b43; font-size: 18px; line-height: 1.25; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+		.commerce-content .order-list-pwa .mobile-order-count { color: var(--commerce-muted); font-size: 10px; white-space: nowrap; }
+		.commerce-content .order-list-pwa .order-action-buttons { position: relative; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; }
+		.commerce-content .order-list-pwa .order-action-buttons form { margin: 0; }
+		.commerce-content .order-list-pwa .mobile-order-card-link { position: absolute; inset: 0; z-index: 2; display: block; border-radius: 14px; }
+		.commerce-content .order-list-pwa .row-action { display: inline-flex; min-height: 36px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #34535a; font: inherit; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; cursor: pointer; }
+		.commerce-content .order-list-pwa .row-action--payment { border-color: #c47b24; background: #c47b24; color: #fff; }
+		.commerce-content .order-list-pwa .row-action--shipping { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
+		.commerce-content .order-list-pwa .row-action--complete { border-color: #21834b; background: #21834b; color: #fff; }
+		.commerce-content .order-list-pwa tbody tr.is-order-hidden { display: none !important; }
+	}
+</style>
+
 <style>
-	.head {
-		margin-bottom: 1rem;
-	}
-	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 9px; font-weight: 800; letter-spacing: .15em; }
-	.eyebrow span { color: var(--commerce-primary); }
-	.heading-row { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
-	.result-count { display: grid; justify-items: end; color: var(--commerce-primary-dark); font-size: 14px; font-weight: 750; }
-	.result-count small { color: var(--commerce-muted); font-size: 9px; font-weight: 500; }
+	.head { margin-bottom: 1rem; }
+	.heading-row { display: flex; align-items: center; gap: 16px; }
 
-	h1 {
-		margin: 0;
-	}
-
-	.lead {
-		color: var(--aq-muted);
-		margin: 0.35rem 0 0.75rem;
-	}
+	h1 { margin: 0; }
 
 	.filters {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
-		margin-top: 18px;
+		gap: 8px;
+		margin-top: 16px;
 	}
 
 	.filters a {
-		text-decoration: none;
-		font-size: 10px;
-		font-weight: 650;
-		padding: 0.42rem 0.78rem;
+		display: inline-flex;
+		min-height: 40px;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		padding: 0 16px;
 		border: 1px solid var(--aq-line);
 		border-radius: 999px;
-		color: var(--aq-muted);
 		background: #fff;
+		color: var(--aq-muted);
+		font-size: 13px;
+		font-weight: 700;
+		text-decoration: none;
+		white-space: nowrap;
+		transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 	}
 
 	.filters a.active,
 	.filters a:hover {
 		border-color: var(--aq-primary);
+		background: var(--commerce-primary-soft);
 		color: var(--aq-primary);
 	}
-	.order-search { margin-top: 14px; }
-	.order-search label { display: block; margin-bottom: 6px; color: #74858a; font-size: 10px; font-weight: 700; }
-	.order-search > div { max-width: 570px; min-height: 42px; display: flex; align-items: center; gap: 9px; padding: 4px 5px 4px 12px; border: 1px solid #dce6e3; border-radius: 10px; background: #fff; }
-	.order-search i { color: #8fa09f; font-size: 12px; }
-	.order-search input { flex: 1; min-width: 0; padding: 7px 2px; border: 0; outline: 0 !important; font-size: 11px; }
-	.order-search button { padding: 8px 13px; border: 0; border-radius: 7px; background: var(--commerce-primary); color: white; font-size: 10px; font-weight: 700; cursor: pointer; }
-	.order-search a { padding: 0 8px; color: #7b8b8c; font-size: 10px; text-decoration: none; }
+	.filter-count { display: inline-flex; min-width: 22px; height: 22px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 6px; border-radius: 999px; background: #edf3f1; color: #687b7e; font-size: 11px; font-weight: 750; font-variant-numeric: tabular-nums; }
+	.filters a.active .filter-count { background: #fff; color: var(--commerce-primary-dark); }
+	.order-filters { position: relative; margin-top: 14px; padding: 10px; border: 1px solid var(--commerce-line); border-radius: 13px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.order-filter-primary { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; align-items: center; }
+	.order-search-field { min-width: 0; }
+	.order-search-field .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+	.order-search-field input,.filter-field input,.filter-field select { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #dce6e3; border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; font-size: 12px; font-weight: 500; }
+	.order-search-field input::placeholder { color: #9aa9aa; }
+	.order-search-field input:focus,.filter-field input:focus,.filter-field select:focus { outline: 3px solid #087e781b; border-color: var(--commerce-primary); }
+	.filter-search-button,.filter-toggle { display: inline-flex; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid var(--commerce-primary); border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+	.filter-toggle { border-color: var(--commerce-line); background: #fff; color: #607579; }
+	.filter-toggle i { font-size: 10px; transition: transform .15s ease; }
+	.filter-toggle[aria-expanded="true"] i { transform: rotate(180deg); }
+	.order-advanced-filters { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 10px; align-items: end; margin-top: 10px; padding-top: 10px; border-top: 1px solid #edf1ef; }
+	.order-advanced-filters[hidden] { display: none; }
+	.filter-field { display: grid; min-width: 0; gap: 5px; color: #687b7e; font-size: 11px; font-weight: 700; }
+	.filter-field select { font-size: 11px; }
+	.filter-reset { display: inline-flex; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 9px; color: #607579; font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; }
 
 	.empty { display: grid; justify-items: center; gap: 7px; padding: 40px 15px; border: 1px dashed var(--commerce-line); border-radius: 14px; background: #fff; color: var(--commerce-muted); }
 	.empty i { color: #9db8b3; font-size: 24px; }
@@ -214,7 +337,63 @@ const filters = [
 		font-size: 0.8rem;
 	}
 	.order-number { color: var(--commerce-primary-dark); text-decoration: none; font-weight: 750; }
-	.status-chip { display: inline-block; padding: 4px 8px; border-radius: 999px; background: #edf5f2; color: #4b766f; font-size: 9px; font-weight: 700; white-space: nowrap; }
+	.order-item-count { margin-top: 4px; }
+	.mobile-order-time,.mobile-amount-label,.mobile-customer-name,.mobile-order-card-link,.mobile-order-total-group,.order-actions,.order-product,.mobile-order-actions { display: none; }
+	.customer-name { font-size: inherit; }
+	.order-product strong { display: block; font-size: 12px; }
+	.order-product small { margin-top: 3px; }
+	.status-chip { display: inline-block; padding: 5px 9px; border: 1px solid #d8e9e3; border-radius: 999px; background: #edf5f2; color: #4b766f; font-size: 11px; font-weight: 750; white-space: nowrap; }
+	.status-chip.status--pending_payment { border-color: #f2d7ab; background: #fff4e5; color: #8a5209; }
+	.status-chip.status--payment_submitted { border-color: #d1ddfb; background: #edf3ff; color: #36599b; }
+	.status-chip.status--paid { border-color: #c8e8d3; background: #e8f6ee; color: #236c43; }
+	.status-chip.status--processing { border-color: #c7e4ed; background: #e8f5f9; color: #176176; }
+	.status-chip.status--shipped { border-color: #d8d3fa; background: #efedff; color: #51488f; }
+	.status-chip.status--completed { border-color: #bee2cb; background: #e4f4eb; color: #1e6840; }
+	.status-chip.status--cancelled { border-color: #f1cfcb; background: #fff0ef; color: #a23c35; }
 	.order-amount { font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
-	@media (max-width: 700px) { .heading-row { align-items: start; }.result-count { display: none; }.order-search > div { gap: 5px; }.order-search input { font-size: 10px; } }
+	.load-more-orders { display: none; }
+	@media (max-width: 700px) {
+		.filters { display: grid; grid-template-columns: repeat(auto-fit,minmax(96px,1fr)); gap: 7px; }
+		.order-list-heading .filters { margin-top: 0; }
+		.filters a { width: 100%; min-height: 38px; box-sizing: border-box; justify-content: space-between; gap: 5px; padding-inline: 9px; font-size: 11px; }
+		.filter-count { min-width: 20px; height: 20px; font-size: 10px; }
+		.order-filters { padding: 8px; }
+		.order-filter-primary { grid-template-columns: minmax(0,1fr) auto auto; gap: 6px; }
+		.filter-search-button,.filter-toggle { min-height: 40px; padding-inline: 9px; font-size: 11px; }
+		.filter-toggle { gap: 5px; }
+		.order-search-field input { font-size: 11px; }
+		.order-advanced-filters { grid-template-columns: 1fr 1fr; gap: 9px; }
+		.order-advanced-filters .filter-field:first-child,.filter-reset { grid-column: span 2; }
+		.filter-field { font-size: 10px; }
+		.load-more-orders { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: center; margin-top: 10px; border: 1px solid var(--commerce-line); border-radius: 11px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
+		.load-more-orders[hidden] { display: none; }
+	}
 </style>
+
+<script>
+	const toggle = document.querySelector<HTMLButtonElement>('.filter-toggle');
+	const advancedFilters = document.querySelector<HTMLDivElement>('#order-advanced-filters');
+	toggle?.addEventListener('click', () => {
+		if (!advancedFilters) return;
+		const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+		toggle.setAttribute('aria-expanded', String(!isOpen));
+		advancedFilters.hidden = isOpen;
+	});
+	advancedFilters?.querySelectorAll<HTMLSelectElement | HTMLInputElement>('[name="sort"], [name="dateFrom"], [name="dateTo"]').forEach((field) => {
+		field.addEventListener('change', () => field.form?.requestSubmit());
+	});
+	const orderRows = Array.from(document.querySelectorAll<HTMLTableRowElement>('[data-order-row]'));
+	const loadMoreButton = document.querySelector<HTMLButtonElement>('.load-more-orders');
+	let visibleOrderCount = 10;
+	const updateVisibleOrders = () => {
+		const isMobile = window.matchMedia('(max-width: 700px)').matches;
+		orderRows.forEach((row, index) => row.classList.toggle('is-order-hidden', isMobile && index >= visibleOrderCount));
+		if (loadMoreButton) loadMoreButton.hidden = !isMobile || orderRows.length <= visibleOrderCount;
+	};
+	loadMoreButton?.addEventListener('click', () => {
+		visibleOrderCount = Math.min(visibleOrderCount + 10, orderRows.length);
+		updateVisibleOrders();
+	});
+	window.addEventListener('resize', updateVisibleOrders);
+	updateVisibleOrders();
+</script>

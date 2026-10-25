@@ -1,6 +1,5 @@
 ---
-import Layout from '../../../layouts/Layout.astro';
-import { SITE_TITLE_SHORT } from '../../../config/site';
+import AdminLayout from '../../../layouts/AdminLayout.astro';
 import { readStrapiAdminBaseUrl } from '../../../lib/strapi/env';
 import { readAdminBackend } from '../../../lib/admin/adminBackend';
 import { getAdminBasePath } from '../../../lib/admin/path';
@@ -20,146 +19,108 @@ const schemas = {
 };
 
 const defs = {
-  promotion: { label: '促銷分頁', api: '/api/promotions', title: 'title' },
-  product: { label: '商品列表', api: '/api/products', title: 'name' },
-  category: { label: '分類管理', api: '/api/categories', title: 'name' }
+  promotion: { label: '促銷', api: '/api/promotions', title: 'title' },
+  product: { label: '商品', api: '/api/products', title: 'name' },
+  category: { label: '分類', api: '/api/categories', title: 'name' }
 };
 
 const base = readStrapiAdminBaseUrl() || 'http://localhost:1337';
 const adminBackend = readAdminBackend();
 /** 官網前台 origin（供「官網預覽／QR」）；可用 PUBLIC_SITE_URL 覆寫；未設則由瀏覽器用目前網站 origin */
 const publicSiteBase = String(import.meta.env.PUBLIC_SITE_URL ?? '').replace(/\/+$/, '');
-const shopAdminHref = `${getAdminBasePath()}/shop`;
+const adminBasePath = getAdminBasePath();
+const shopAdminHref = `${adminBasePath}/shop`;
+const shopProductsHref = `${shopAdminHref}/products`;
 ---
 
-<Layout title={`後台管理｜${SITE_TITLE_SHORT}`} description="員工後台">
-  <main
+<AdminLayout title="商品管理｜水博館水族官方網站後台" description="官網內容、圖片、價格與庫存整合管理">
+  <div
     class="adminx"
     data-schemas={JSON.stringify(schemas)}
     data-defs={JSON.stringify(defs)}
     data-base={base}
     data-admin-backend={adminBackend}
     data-public-site-base={publicSiteBase}
+    data-shop-products-href={shopProductsHref}
   >
-    <div class="mobile-sanity-bar">
-      <button type="button" id="mobileSanityMenuBtn" class="mobile-sanity-bar__iconbtn" aria-label="回首頁選單">
-        <i class="fa-solid fa-bars" aria-hidden="true"></i>
-      </button>
-      <span class="mobile-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
-      <div class="mobile-sanity-bar__mid">
-        <div class="mobile-sanity-bar__textcol">
-          <span class="mobile-sanity-bar__title">水博館官網後台</span>
-          <span id="sectionLabelMobile" class="mobile-sanity-bar__section" aria-live="polite">促銷分頁</span>
-        </div>
-        <span id="titleStatus" class="title-status title-status--in-mid">準備中</span>
-      </div>
-    </div>
-
-    <div class="desktop-sanity-bar" aria-label="後台標題列">
-      <span class="desktop-sanity-bar__logo" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
-      <span class="desktop-sanity-bar__title">水博館官網後台</span>
-      <nav class="desktop-sanity-bar__nav" aria-label="後台切換">
-        <a class="desktop-sanity-bar__navlink is-active" href="#" aria-current="page">官網內容</a>
-        <a class="desktop-sanity-bar__navlink" href={shopAdminHref}>電商後台</a>
-      </nav>
-      <span id="titleStatusDesktop" class="title-status title-status--desktop">準備中</span>
-    </div>
-
-    <header class="topbar">
-      <div class="center-nav">
-        <div class="center-nav__meta">
-          <span id="sectionLabelDesktop" class="section-label section-label--desktop" aria-live="polite">促銷分頁</span>
-        </div>
-        <div id="modelTabs" class="tabs"></div>
-      </div>
-      <div class="actions">
-        <button id="simpleModeToggle" class="mode-btn is-on action-btn" type="button" aria-pressed="true" aria-label="切換簡易或完整編輯模式">
-          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
-          <span class="action-btn__label">簡易</span>
-        </button>
-        <button id="refreshBtn" type="button" class="action-btn action-btn--solid" aria-label="重整清單">
-          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
-          <span class="action-btn__label">重整</span>
-        </button>
-        <button id="newBtn" type="button" class="action-btn action-btn--solid" aria-label="新增一筆">
-          <i class="fa-solid fa-plus" aria-hidden="true"></i>
-          <span class="action-btn__label">新增</span>
-        </button>
-        <button id="openFrontendBtn" type="button" class="action-btn action-btn--solid action-btn--frontend" hidden aria-label="在瀏覽器中開啟官網對應頁面（預覽）">
-          <i class="fa-solid fa-globe" aria-hidden="true"></i>
-          <span class="action-btn__label">預覽</span>
-        </button>
-        <button id="showQrBtn" type="button" class="action-btn action-btn--solid action-btn--qrcode" hidden aria-label="顯示前台網址 QR Code">
-          <i class="fa-solid fa-qrcode" aria-hidden="true"></i>
-          <span class="action-btn__label">QR</span>
-        </button>
-        <button id="saveBtn" type="button" class="action-btn action-btn--solid" aria-label="儲存變更">
-          <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
-          <span class="action-btn__label">儲存</span>
-        </button>
-      </div>
-    </header>
-
-    <section id="mobileHub" class="mobile-hub" aria-label="管理選單首頁">
-      <nav class="mobile-hub__list">
-        <a class="mobile-hub__row mobile-hub__row--shop" href={shopAdminHref}>
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-cart-shopping"></i></span>
-          <span class="mobile-hub__label">電商後台</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </a>
-        <button type="button" class="mobile-hub__row mobile-hub__row--primary" data-hub="products-all">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-box-open"></i></span>
-          <span class="mobile-hub__label">全部商品</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="promo-weekly">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
-          <span class="mobile-hub__label">每週新進魚隻 🐠</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="promo-special">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-tags"></i></span>
-          <span class="mobile-hub__label">預定優惠</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="promo-equipment">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-screwdriver-wrench"></i></span>
-          <span class="mobile-hub__label">器材促銷</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="products-by-category">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-arrow-down-wide-short"></i></span>
-          <span class="mobile-hub__label">調整分類內順序</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-        <button type="button" class="mobile-hub__row" data-hub="categories-sort">
-          <span class="mobile-hub__icon" aria-hidden="true"><i class="fa-solid fa-folder-tree"></i></span>
-          <span class="mobile-hub__label">分類管理</span>
-          <span class="mobile-hub__chev" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
-        </button>
-      </nav>
-    </section>
-
     <section class="workspace">
       <aside class="listpane">
         <div class="listpane__filters">
           <select id="categoryFilter" class="search search--category" style="display:none;">
-            <option value="">全部分類</option>
+            <option value="">分類</option>
           </select>
-          <div class="search-wrap">
+          <button id="editCategoriesBtn" type="button" class="category-edit-entry" style="display:none;">
+            <i class="fa-solid fa-folder-tree" aria-hidden="true"></i><span>編輯分類</span>
+          </button>
+          <select id="productListSort" class="search search--sort" aria-label="商品排序" style="display:none;">
+            <option value="default">排序</option>
+            <option value="name-asc">名稱↑</option>
+            <option value="price-asc">價格↑</option>
+            <option value="price-desc">價格↓</option>
+            <option value="stock-asc">庫存↑</option>
+            <option value="stock-desc">庫存↓</option>
+          </select>
+          <select id="productStatusFilter" class="search search--status" aria-label="商品狀態篩選" style="display:none;">
+            <option value="all">狀態</option>
+            <option value="enabled">上架</option>
+            <option value="disabled">未上架</option>
+            <option value="sellable">販售</option>
+            <option value="unsellable">禁售</option>
+          </select>
+          <button id="searchToggle" class="search-toggle" type="button" aria-label="展開搜尋" aria-expanded="false" aria-controls="productSearchField"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
+          <div id="productSearchField" class="search-wrap">
             <span class="search-icon" aria-hidden="true"><i class="fa-solid fa-magnifying-glass"></i></span>
-            <input id="searchInput" class="search search--with-icon" placeholder="搜尋目前清單..." />
+            <input id="searchInput" type="search" aria-label="搜尋目前清單" class="search search--with-icon" placeholder="搜尋目前清單..." />
           </div>
         </div>
         <div id="listCount" class="count">載入中...</div>
         <div id="entryList" class="entry-list"></div>
       </aside>
 
+      <header class="topbar">
+        <span id="sectionLabelMobile" hidden></span>
+        <span id="titleStatus" hidden>準備中</span>
+        <span id="titleStatusDesktop" hidden>準備中</span>
+        <div class="center-nav">
+          <div class="center-nav__meta">
+            <span id="sectionLabelDesktop" class="section-label section-label--desktop" aria-live="polite">商品</span>
+          </div>
+          <div id="modelTabs" class="tabs"></div>
+        </div>
+        <div class="actions">
+          <button id="simpleModeToggle" class="mode-btn is-on action-btn" type="button" aria-pressed="true" aria-label="切換簡易或完整編輯模式">
+            <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+            <span class="action-btn__label">簡易</span>
+          </button>
+          <button id="refreshBtn" type="button" class="action-btn action-btn--solid" aria-label="重整清單">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+            <span class="action-btn__label">重整</span>
+          </button>
+          <button id="newBtn" type="button" class="action-btn action-btn--solid" aria-label="新增一筆">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            <span class="action-btn__label">新增</span>
+          </button>
+          <button id="openFrontendBtn" type="button" class="action-btn action-btn--solid action-btn--frontend" hidden aria-label="在瀏覽器中開啟官網對應頁面（預覽）">
+            <i class="fa-solid fa-globe" aria-hidden="true"></i>
+            <span class="action-btn__label">預覽</span>
+          </button>
+          <button id="showQrBtn" type="button" class="action-btn action-btn--solid action-btn--qrcode" hidden aria-label="顯示前台網址 QR Code">
+            <i class="fa-solid fa-qrcode" aria-hidden="true"></i>
+            <span class="action-btn__label">QR</span>
+          </button>
+          <button id="saveBtn" type="button" class="action-btn action-btn--solid" aria-label="儲存變更">
+            <i class="fa-solid fa-floppy-disk" aria-hidden="true"></i>
+            <span class="action-btn__label">儲存</span>
+          </button>
+        </div>
+      </header>
+
       <section class="formpane">
         <div class="formpane__section-head">
           <span id="sectionLabelForm" class="formpane__section-title" aria-live="polite"></span>
         </div>
         <p id="statusText" class="status" style="display:none;">準備中...</p>
+        <section id="productCommercePanel" class="product-commerce-panel" hidden aria-live="polite"></section>
         <form id="formRoot" class="form-grid"></form>
       </section>
     </section>
@@ -210,7 +171,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         </footer>
       </section>
     </div>
-  </main>
+  </div>
 
   <!-- 置於 main 外：全螢幕 fixed 不受 .adminx overflow／寬度影響（RWD 預覽） -->
     <div id="qrModal" class="qr-modal" hidden role="dialog" aria-modal="true" aria-label="前台網址 QR Code">
@@ -242,6 +203,9 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
   <script>
     import { applyBodyScrollLock, releaseBodyScrollLock } from '../../../scripts/scrollLock';
     import { plainTextToStrapiBlocks, strapiBlocksToPlainText } from '../../../lib/strapi/blocks';
+    import { normalizeSpecifications, generateSpecificationCombinations } from '../../../lib/sanity/specifications';
+    import { validateQuantityPriceTiers } from '../../../lib/services/quantity-pricing';
+    import { selectProductEditorSkus } from '../../../lib/services/product-sku-identity';
 
     try {
     const portableBlocksToPlainText = (blocks) => {
@@ -278,8 +242,13 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     const searchInput = document.getElementById('searchInput');
     const entryList = document.getElementById('entryList');
     const categoryFilter = document.getElementById('categoryFilter');
+    const editCategoriesBtn = document.getElementById('editCategoriesBtn');
+    const productListSort = document.getElementById('productListSort');
+    const productStatusFilter = document.getElementById('productStatusFilter');
     const listCount = document.getElementById('listCount');
     const formRoot = document.getElementById('formRoot');
+    const productCommercePanel = document.getElementById('productCommercePanel');
+    const shopProductsHref = root.dataset.shopProductsHref ?? '';
     const statusText = document.getElementById('statusText');
     const titleStatus = document.getElementById('titleStatus');
     const titleStatusDesktop = document.getElementById('titleStatusDesktop');
@@ -290,8 +259,6 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     const imgPreviewBackdrop = document.getElementById('imgPreviewBackdrop');
     const imgPreviewClose = document.getElementById('imgPreviewClose');
     const imgPreviewEl = document.getElementById('imgPreviewEl');
-    const mobileSanityMenuBtn = document.getElementById('mobileSanityMenuBtn');
-    const mobileHub = document.getElementById('mobileHub');
     const catManageModal = document.getElementById('catManageModal');
     const catModalBackdrop = document.getElementById('catModalBackdrop');
     const catModalClose = document.getElementById('catModalClose');
@@ -309,7 +276,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     const productRemoveMsg = document.getElementById('productRemoveMsg');
     const productRemoveCancel = document.getElementById('productRemoveCancel');
     const productRemoveConfirm = document.getElementById('productRemoveConfirm');
-    if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !listCount || !formRoot || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl || !mobileSanityMenuBtn || !mobileHub) {
+    if (!modelTabs || !refreshBtn || !newBtn || !saveBtn || !simpleModeToggle || !searchInput || !entryList || !categoryFilter || !editCategoriesBtn || !productListSort || !productStatusFilter || !listCount || !formRoot || !productCommercePanel || !statusText || !titleStatus || !titleStatusDesktop || !sectionLabelMobile || !sectionLabelForm || !sectionLabelDesktop || !imgPreviewModal || !imgPreviewBackdrop || !imgPreviewClose || !imgPreviewEl) {
       throw new Error('missing ui');
     }
     if (!productRemoveModal || !productRemoveBackdrop || !productRemoveClose || !productRemoveTitle || !productRemoveMsg || !productRemoveCancel || !productRemoveConfirm) {
@@ -327,7 +294,24 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       throw new Error('missing category modal ui');
     }
 
-    const state = { model: 'promotion', entries: [], selectedId: '', selected: {}, categoryOptions: [], simpleMode: true, pendingUploads: {}, dirty: false, saving: false, categorySortMode: false, productSortMode: false };
+    const state = { model: 'product', entries: [], selectedId: '', selected: {}, categoryOptions: [], simpleMode: true, pendingUploads: {}, dirty: false, saving: false, categorySortMode: false, productSortMode: false, commerceLoadSequence: 0, commerceSummarySequence: 0, commerceSummary: new Map() };
+    let productBaseSnapshot = {}, productSpecificationDraft = null, productSalesDraft = null;
+    const productSkuDrafts = new Map();
+    const productSkuPreviewCache = new Map();
+    let productCommerceRows = [], productCommerceSettings = null, productCommerceReady = Promise.resolve();
+    let productSyncPending = false, specificationUploads = 0;
+    let productSelectionSequence = 0;
+    const PRODUCT_LIST_BATCH_SIZE = 25;
+    let productListShown = PRODUCT_LIST_BATCH_SIZE, productListKey = '';
+    let productListObserver = null;
+    const productListMore = document.createElement('button');
+    productListMore.type = 'button'; productListMore.className = 'product-list-more';
+    productListMore.addEventListener('click', () => drawList({ append: true }));
+    const changedFields = (current, original) => Object.fromEntries(Object.entries(current).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(original?.[key])));
+    productCommercePanel.addEventListener('input', () => markDirty());
+    productCommercePanel.addEventListener('change', () => markDirty());
+    productCommercePanel.addEventListener('click', (event) => { if (event.target instanceof Element && event.target.closest('button')) markDirty(); });
+
     const isCategorySortMode = () => state.model === 'category' && state.categorySortMode;
     const isProductSortMode = () => state.model === 'product' && state.productSortMode;
 
@@ -675,6 +659,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           if (sa !== sb) return sa - sb;
           return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
         });
+
       }
       const ptr = new Map();
       for (const k of buckets.keys()) ptr.set(k, 0);
@@ -727,15 +712,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         .replace(/^-+|-+$/g, '')
         .slice(0, 60);
     const isMobileNarrow = () => window.matchMedia('(max-width: 860px)').matches;
-    const isMobileHubHome = () => isMobileNarrow() && root.dataset.mobilePanel === 'home';
-    /** 窄螢幕停留在「管理選單」首頁時，不顯示「已載入 xxx」避免與畫面不符 */
-    function setLoadedStatus() {
-      if (isMobileHubHome()) {
-        setStatus('請選擇項目');
-        return;
-      }
-      setStatus(`已載入 ${defs[state.model].label}`);
-    }
+    function setLoadedStatus() { setStatus(`已載入 ${defs[state.model].label}`); }
     function entryDisplayTitle() {
       const def = defs[state.model];
       const key = String(def?.title ?? '').trim();
@@ -757,25 +734,20 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       sectionLabelDesktop.textContent = lab;
       let barLine = '';
       let formLine = '';
-      if (narrow && panel === 'home') {
-        barLine = '管理選單';
-      } else if (narrow) {
+      if (narrow) {
         formLine = entryDisplayTitle() || lab;
       }
       sectionLabelMobile.textContent = barLine;
       sectionLabelForm.textContent = formLine;
     }
     function setMobilePanel(panel) {
-      root.dataset.mobilePanel = panel;
+      root.dataset.mobilePanel = panel === 'editor' ? 'editor' : 'list';
       const bar = root.querySelector('.mobile-sanity-bar');
       if (bar instanceof HTMLElement) bar.setAttribute('aria-hidden', isMobileNarrow() ? 'false' : 'true');
-      mobileHub.setAttribute('aria-hidden', isMobileNarrow() && panel === 'home' ? 'false' : 'true');
       updateSectionLabels();
-      if (panel === 'home' && isMobileNarrow()) {
-        setStatus('請選擇項目');
-      }
     }
     function confirmDiscardIfDirty() {
+      if (state.saving) return false;
       if (!state.dirty) return true;
       return window.confirm('有更動尚未儲存，確定要離開嗎？');
     }
@@ -790,7 +762,8 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       if (state.dirty) root.setAttribute('data-dirty', 'true');
       else root.removeAttribute('data-dirty');
       if (saveBtn instanceof HTMLButtonElement) {
-        saveBtn.setAttribute('aria-label', state.dirty ? '有待儲存變更，請儲存' : '儲存變更');
+        saveBtn.setAttribute('aria-label', state.dirty ? '儲存，有尚未儲存的變更' : state.model === 'product' ? '儲存' : '儲存變更');
+        saveBtn.title = state.dirty ? '有未儲存的變更，請點此儲存' : '儲存變更';
       }
     }
     function markDirty() {
@@ -843,6 +816,605 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         throw new Error(`HTTP ${res.status} ${path}${msg}`);
       }
       return res.json();
+    }
+
+    async function commerceApi(path, init = {}) {
+      const res = await fetch(path, {
+        ...init,
+        headers: {
+          ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+          ...(init.headers ?? {})
+        }
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(payload?.error?.message ?? `HTTP ${res.status}`);
+      }
+      return payload;
+    }
+
+    function buildCommerceSummary(rows) {
+      const grouped = new Map();
+      const rowsByProduct = new Map();
+      (Array.isArray(rows) ? rows : []).forEach((row) => {
+        const id = String(row.sanityProductId ?? '');
+        const group = rowsByProduct.get(id) ?? []; group.push(row); rowsByProduct.set(id, group);
+      });
+      const editableRows = state.entries.flatMap((product) => selectProductEditorSkus(
+        rowsByProduct.get(kOf(product)) ?? [], Boolean(product.specificationsEnabled),
+        (product.variants ?? []).map((variant) => String(variant._key ?? '')),
+      ));
+      editableRows.forEach((row) => {
+        const id = String(row?.sanityProductId ?? '').trim();
+        if (!id) return;
+        const current = grouped.get(id) ?? { prices: [], stock: 0, unlimited: false, hasSellableSku: false };
+        const price = Number(row?.sellingPrice);
+        const onHand = Number(row?.onHand);
+        if (Number.isFinite(price)) current.prices.push(price);
+        if (onHand < 0) current.unlimited = true;
+        else if (Number.isFinite(onHand)) current.stock += Math.max(0, onHand);
+        if (row.saleEnabled !== false && (onHand < 0 || onHand > 0)) current.hasSellableSku = true;
+        grouped.set(id, current);
+      });
+      const summary = new Map();
+      grouped.forEach((value, id) => {
+        const prices = value.prices.sort((a, b) => a - b);
+        const minPrice = prices.length ? prices[0] : null;
+        const maxPrice = prices.length ? prices[prices.length - 1] : null;
+        const priceText = minPrice == null
+          ? '尚未定價'
+          : minPrice === maxPrice
+            ? `NT$ ${minPrice.toLocaleString('zh-TW')}`
+            : `NT$ ${minPrice.toLocaleString('zh-TW')}–${maxPrice.toLocaleString('zh-TW')}`;
+        summary.set(id, {
+          price: minPrice,
+          stock: value.unlimited ? Number.POSITIVE_INFINITY : value.stock,
+          canSell: value.hasSellableSku,
+          priceText,
+          stockText: value.unlimited ? '庫存 不限量' : `庫存 ${value.stock.toLocaleString('zh-TW')}`
+        });
+      });
+      return summary;
+    }
+
+    async function loadCommerceSummary() {
+      const sequence = ++state.commerceSummarySequence;
+      if (state.model !== 'product') {
+        state.commerceSummary = new Map();
+        return;
+      }
+      try {
+        const payload = await commerceApi('/api/admin/product-commerce');
+        if (sequence !== state.commerceSummarySequence || state.model !== 'product') return;
+        state.commerceSummary = buildCommerceSummary(payload?.rows);
+      } catch {
+        if (sequence === state.commerceSummarySequence) state.commerceSummary = new Map();
+      }
+    }
+
+    function commercePanelHeader() {
+      const header = document.createElement('div');
+      header.className = 'product-commerce-panel__head';
+
+      const titleWrap = document.createElement('div');
+      const title = document.createElement('h3');
+      title.textContent = '銷售資訊';
+      titleWrap.append(title);
+
+      header.append(titleWrap);
+      return header;
+    }
+
+    async function cropSquareImage(file) {
+      const bitmap = await createImageBitmap(file);
+      return new Promise((resolve, reject) => {
+        const overlay = document.createElement('div'); overlay.className = 'product-image-cropper'; overlay.setAttribute('role', 'presentation');
+        const dialog = document.createElement('section'); dialog.className = 'product-image-cropper__dialog'; dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-modal', 'true'); dialog.setAttribute('aria-label', '編輯規格圖片');
+        const head = document.createElement('header'); head.className = 'product-image-cropper__head'; head.innerHTML = '<strong>編輯規格圖片</strong><span>拖曳調整位置，圖片會以正方形儲存</span>';
+        const canvas = document.createElement('canvas'); canvas.className = 'product-image-cropper__canvas'; canvas.width = 360; canvas.height = 360; canvas.setAttribute('aria-label', '圖片裁切預覽');
+        const controls = document.createElement('div'); controls.className = 'product-image-cropper__controls';
+        const zoomLabel = document.createElement('label'); zoomLabel.innerHTML = '<span>縮放</span>'; const zoom = document.createElement('input'); zoom.type = 'range'; zoom.min = '1'; zoom.max = '3'; zoom.step = '0.05'; zoom.value = '1'; zoomLabel.append(zoom);
+        let scale = 1, rotation = 0, flipX = 1, flipY = 1, offsetX = 0, offsetY = 0, drag = null, closed = false, previewMode = false;
+        const redraw = (target = canvas) => {
+          const ctx = target.getContext('2d'); if (!ctx) return;
+          const size = target.width; const rotatedWidth = rotation % 180 ? bitmap.height : bitmap.width; const rotatedHeight = rotation % 180 ? bitmap.width : bitmap.height;
+          const fit = Math.max(size / rotatedWidth, size / rotatedHeight) * scale;
+          ctx.clearRect(0, 0, size, size); ctx.fillStyle = '#eef2f1'; ctx.fillRect(0, 0, size, size);
+          ctx.save(); ctx.translate(size / 2 + offsetX * size / canvas.width, size / 2 + offsetY * size / canvas.height); ctx.rotate(rotation * Math.PI / 180); ctx.scale(flipX, flipY);
+          ctx.drawImage(bitmap, -bitmap.width * fit / 2, -bitmap.height * fit / 2, bitmap.width * fit, bitmap.height * fit); ctx.restore();
+        };
+        const close = (result) => { if (closed) return; closed = true; document.removeEventListener('keydown', onKeydown); bitmap.close(); overlay.remove(); result === undefined ? resolve(null) : resolve(result); };
+        const zoomIn = () => { scale = Number(zoom.value); redraw(); }; zoom.addEventListener('input', zoomIn);
+        const rotate = document.createElement('button'); rotate.type = 'button'; rotate.textContent = '↻ 旋轉 90°'; rotate.onclick = () => { rotation = (rotation + 90) % 360; redraw(); };
+        const horizontal = document.createElement('button'); horizontal.type = 'button'; horizontal.textContent = '⇋ 水平翻轉'; horizontal.onclick = () => { flipX *= -1; redraw(); };
+        const vertical = document.createElement('button'); vertical.type = 'button'; vertical.textContent = '⇵ 垂直翻轉'; vertical.onclick = () => { flipY *= -1; redraw(); };
+        const reset = document.createElement('button'); reset.type = 'button'; reset.textContent = '重設'; reset.onclick = () => { scale = 1; rotation = 0; flipX = 1; flipY = 1; offsetX = 0; offsetY = 0; zoom.value = '1'; redraw(); };
+        const preview = document.createElement('button'); preview.type = 'button'; preview.textContent = '預覽'; preview.onclick = () => { previewMode = !previewMode; dialog.classList.toggle('is-preview', previewMode); preview.textContent = previewMode ? '返回編輯' : '預覽'; };
+        controls.append(zoomLabel, rotate, horizontal, vertical, reset, preview);
+        const foot = document.createElement('footer'); foot.className = 'product-image-cropper__foot';
+        const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'is-secondary'; cancel.textContent = '關閉'; cancel.onclick = () => close(undefined);
+        const save = document.createElement('button'); save.type = 'button'; save.textContent = '儲存圖片'; save.onclick = async () => { try { const output = document.createElement('canvas'); output.width = 640; output.height = 640; redraw(output); const blob = await new Promise((ok, fail) => output.toBlob((value) => value ? ok(value) : fail(new Error('圖片裁切失敗')), 'image/webp', 0.9)); close(new File([blob], `${file.name.replace(/\.[^.]+$/, '')}-square.webp`, { type: 'image/webp' })); } catch (error) { if (!closed) { closed = true; document.removeEventListener('keydown', onKeydown); bitmap.close(); overlay.remove(); } reject(error); } };
+        foot.append(cancel, save); dialog.append(head, canvas, controls, foot); overlay.appendChild(dialog);
+        const onKeydown = (event) => { if (event.key === 'Escape' && !closed) close(undefined); };
+        document.addEventListener('keydown', onKeydown);
+        canvas.addEventListener('pointerdown', (event) => { drag = { x: event.clientX, y: event.clientY }; canvas.setPointerCapture(event.pointerId); });
+        canvas.addEventListener('pointermove', (event) => { if (!drag) return; offsetX += event.clientX - drag.x; offsetY += event.clientY - drag.y; drag = { x: event.clientX, y: event.clientY }; const rotatedWidth = rotation % 180 ? bitmap.height : bitmap.width; const rotatedHeight = rotation % 180 ? bitmap.width : bitmap.height; const fit = Math.max(canvas.width / rotatedWidth, canvas.height / rotatedHeight) * scale; const limitX = Math.max(0, (rotatedWidth * fit - canvas.width) / 2); const limitY = Math.max(0, (rotatedHeight * fit - canvas.height) / 2); offsetX = Math.max(-limitX, Math.min(limitX, offsetX)); offsetY = Math.max(-limitY, Math.min(limitY, offsetY)); redraw(); });
+        canvas.addEventListener('pointerup', () => { drag = null; }); canvas.addEventListener('pointercancel', () => { drag = null; });
+        overlay.addEventListener('click', (event) => { if (event.target === overlay) close(undefined); });
+        document.body.appendChild(overlay); redraw(); save.focus();
+      });
+    }
+
+    function renderVariantEditor() {
+      const editor = document.createElement('section');
+      editor.className = 'product-variant-editor';
+      const title = document.createElement('h4');
+      title.textContent = '規格';
+      const removeIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+      const enabledLabel = document.createElement('label'); enabledLabel.className = 'product-specification-enabled';
+      const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.checked = Boolean(state.selected?.specificationsEnabled);
+      const enabledText = document.createTextNode('啟用規格'); enabledLabel.append(enabled, enabledText);
+      const top = document.createElement('div'); top.className = 'product-variant-editor__top'; top.append(title, enabledLabel);
+      const list = document.createElement('div'); list.className = 'product-specification-groups';
+      const groupActions = document.createElement('div'); groupActions.className = 'product-variant-editor__group-actions';
+      const specifications = (enabled.checked && Array.isArray(state.selected?.specifications) ? state.selected.specifications : []).map((spec, index) => ({
+        _key: String(spec?._key ?? `spec_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`),
+        name: String(spec?.name ?? ''),
+        options: (Array.isArray(spec?.options) ? spec.options : []).map((option, optionIndex) => ({
+          _key: String(option?._key ?? `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`), name: String(option?.name ?? ''),
+          image: option?.image?.id ? String(option.image.id) : '', imageUrl: option?.image?.url ? String(option.image.url) : '',
+        })),
+      }));
+      const createSpecificationDragHandle = (items, item, element, container, label) => {
+        element.dataset.specSortKey = item._key;
+        const handle = document.createElement('button'); handle.type = 'button'; handle.className = 'product-specification-drag';
+        handle.innerHTML = '<span aria-hidden="true">⠿</span>'; handle.setAttribute('aria-label', '拖曳排序' + label);
+        handle.title = '拖曳排序；鍵盤可使用上下方向鍵'; handle.disabled = items.length < 2;
+        handle.addEventListener('keydown', (event) => {
+          if (!['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+          event.preventDefault();
+          const from = items.indexOf(item), to = from + (event.key === 'ArrowUp' ? -1 : 1);
+          if (to < 0 || to >= items.length) return;
+          items.splice(to, 0, items.splice(from, 1)[0]); renderGroups();
+          Array.from(list.querySelectorAll('[data-spec-sort-key]')).find((row) => row.dataset.specSortKey === item._key)?.querySelector('.product-specification-drag')?.focus();
+        });
+        handle.addEventListener('pointerdown', (event) => {
+          if (!event.isPrimary || event.button !== 0 || handle.disabled) return;
+          event.preventDefault(); container.setPointerCapture(event.pointerId);
+          const originY = event.clientY; let dragging = false;
+          const move = (pointer) => {
+            if (pointer.pointerId !== event.pointerId) return;
+            if (!dragging && Math.abs(pointer.clientY - originY) < 5) return;
+            dragging = true; element.classList.add('is-spec-dragging'); handle.setAttribute('aria-pressed', 'true');
+            const siblings = Array.from(container.children).filter((child) => child !== element && child instanceof HTMLElement && child.dataset.specSortKey);
+            const before = siblings.find((child) => { const rect = child.getBoundingClientRect(); return pointer.clientY < rect.top + rect.height / 2; });
+            container.insertBefore(element, before || null);
+            if (pointer.clientY < 80) window.scrollBy(0, -14);
+            else if (pointer.clientY > window.innerHeight - 80) window.scrollBy(0, 14);
+          };
+          const finish = (pointer) => {
+            if (pointer.pointerId !== event.pointerId) return;
+            container.removeEventListener('pointermove', move); container.removeEventListener('pointerup', finish); container.removeEventListener('pointercancel', cancel); container.removeEventListener('lostpointercapture', cancel);
+            if (container.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId);
+            element.classList.remove('is-spec-dragging'); handle.removeAttribute('aria-pressed');
+            if (dragging && pointer.type === 'pointerup') {
+              const ordered = Array.from(container.children).map((child) => items.find((entry) => entry._key === child.dataset.specSortKey)).filter(Boolean);
+              items.splice(0, items.length, ...ordered); renderGroups();
+              Array.from(list.querySelectorAll('[data-spec-sort-key]')).find((row) => row.dataset.specSortKey === item._key)?.querySelector('.product-specification-drag')?.focus();
+            } else if (dragging) renderGroups();
+          };
+          const cancel = (pointer) => finish(pointer);
+          container.addEventListener('pointermove', move); container.addEventListener('pointerup', finish); container.addEventListener('pointercancel', cancel); container.addEventListener('lostpointercapture', cancel);
+        });
+        return handle;
+      };
+      let groupsRendered = false;
+      const renderGroups = () => {
+        if (groupsRendered) markDirty();
+        groupsRendered = true;
+        list.replaceChildren();
+        specifications.forEach((spec, specIndex) => {
+          const card = document.createElement('section'); card.className = 'product-specification-group'; card.classList.toggle('has-option-images', specIndex === 0);
+          const head = document.createElement('div'); head.className = 'product-specification-group__head';
+          const groupLabel = document.createElement('strong'); groupLabel.textContent = `規格 ${specIndex + 1}`;
+          const nameWrap = document.createElement('label'); nameWrap.className = 'product-specification-group__name';
+          const name = document.createElement('input'); name.type = 'text'; name.maxLength = 30; name.placeholder = specIndex === 1 ? '名稱，如尺寸' : '名稱，如顏色'; name.value = spec.name; name.setAttribute('aria-label', `規格 ${specIndex + 1} 名稱`);
+          const nameCount = document.createElement('small'); nameCount.textContent = `${name.value.length}/30`; name.addEventListener('input', () => { spec.name = name.value; nameCount.textContent = `${name.value.length}/30`; refreshSpecificationTable(); }); nameWrap.append(name, nameCount);
+          const removeGroup = document.createElement('button'); removeGroup.type = 'button'; removeGroup.textContent = '刪除規格'; removeGroup.onclick = () => { if (!window.confirm(`刪除「${spec.name || `商品規格 ${specIndex + 1}`}」？相關規格組合會停止販售，歷史訂單資料會保留。`)) return; specifications.splice(specIndex, 1); renderGroups(); };
+          const groupDrag = createSpecificationDragHandle(specifications, spec, card, list, `規格 ${specIndex + 1}`);
+          removeGroup.classList.add('product-specification-delete'); removeGroup.innerHTML = removeIcon; removeGroup.setAttribute('aria-label', `刪除規格 ${specIndex + 1}`);
+          head.append(groupLabel, nameWrap, groupDrag, removeGroup); card.appendChild(head);
+          const options = document.createElement('div'); options.className = 'product-specification-options';
+          spec.options.forEach((option, optionIndex) => {
+            const row = document.createElement('div'); row.className = 'product-specification-option';
+            const nameWrap = document.createElement('label'); nameWrap.className = 'product-specification-option__name';
+            const input = document.createElement('input'); input.type = 'text'; input.maxLength = 60; input.placeholder = specIndex === 1 ? '選項，如一尺' : '選項，如黑色'; input.value = option.name; input.setAttribute('aria-label', `${spec.name || '規格'}選項 ${optionIndex + 1}`);
+            const count = document.createElement('small'); count.textContent = `${input.value.length}/60`; input.addEventListener('input', () => { option.name = input.value; count.textContent = `${input.value.length}/60`; refreshSpecificationTable(); }); nameWrap.append(input, count);
+            const imageControl = document.createElement('button'); imageControl.type = 'button'; imageControl.className = 'product-specification-option__image'; imageControl.setAttribute('aria-label', option.image ? '更換選項圖片' : '上傳選項圖片');
+            if (option.imageUrl) { const preview = document.createElement('img'); preview.alt = ''; preview.src = option.imageUrl; imageControl.appendChild(preview); } else { imageControl.textContent = '＋圖片'; }
+            const upload = document.createElement('input'); upload.type = 'file'; upload.accept = 'image/jpeg,image/png,image/webp,image/gif'; upload.setAttribute('aria-label', '上傳選項圖片');
+            upload.addEventListener('change', async () => { const file = upload.files?.[0]; if (!file) return; if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type) || file.size > 20 * 1024 * 1024) { setStatus('請選擇 JPG、PNG、WebP 或 GIF 圖片（最大 20MB）'); return; } specificationUploads += 1; try { const cropped = await cropSquareImage(file); if (!cropped) return; option.image = String(await uploadOne(cropped)); option.imageUrl = URL.createObjectURL(cropped); renderGroups(); } catch (error) { setStatus(error instanceof Error ? error.message : '圖片上傳失敗'); } finally { specificationUploads -= 1; } });
+            imageControl.onclick = () => upload.click();
+            const clearImage = document.createElement('button'); clearImage.type = 'button'; clearImage.className = 'product-specification-option__clear'; clearImage.textContent = '移除圖片'; clearImage.disabled = !option.image; clearImage.onclick = () => { option.image = ''; option.imageUrl = ''; renderGroups(); };
+            const optionDrag = createSpecificationDragHandle(spec.options, option, row, options, `選項 ${optionIndex + 1}`);
+            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '刪除'; remove.onclick = () => { if (spec.options.length === 1 && enabled.checked && !window.confirm('刪除此選項將停用相關規格組合，歷史訂單資料仍會保留。確定刪除？')) return; spec.options.splice(optionIndex, 1); renderGroups(); };
+            remove.classList.add('product-specification-delete'); remove.innerHTML = removeIcon; remove.setAttribute('aria-label', `刪除選項 ${optionIndex + 1}`);
+            clearImage.innerHTML = removeIcon; clearImage.hidden = !option.image; clearImage.title = '移除圖片'; clearImage.setAttribute('aria-label', `移除「${option.name || '此選項'}」的圖片`);
+            const imageWrap = document.createElement('span'); imageWrap.className = 'product-specification-option__media'; imageWrap.append(imageControl, clearImage); upload.hidden = true;
+            if (specIndex === 0) row.append(imageWrap, nameWrap, optionDrag, remove, upload);
+            else { row.classList.add('is-text-only'); row.append(nameWrap, optionDrag, remove); }
+            options.appendChild(row);
+          });
+          const optionCount = document.createElement('small'); optionCount.className = 'product-specification-group__count'; optionCount.textContent = `${spec.options.length}/10 個選項`;
+          const addOption = document.createElement('button'); addOption.type = 'button'; addOption.className = 'product-variant-editor__add'; addOption.textContent = '＋ 新增選項'; addOption.disabled = spec.options.length >= 10; addOption.onclick = () => { spec.options.push({ _key: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, name: '', image: '', imageUrl: '' }); renderGroups(); };
+          const footer = document.createElement('div'); footer.className = 'product-specification-group__footer'; footer.append(addOption, optionCount);
+          card.append(options, footer); list.appendChild(card);
+        });
+        addGroup.disabled = specifications.length >= 2;
+        addGroup.textContent = specifications.length ? '＋ 新增規格 2' : '＋ 新增規格';
+        groupActions.hidden = !enabled.checked || specifications.length >= 2;
+        if (editor.isConnected) refreshSpecificationTable();
+      };
+      const addGroup = document.createElement('button'); addGroup.type = 'button'; addGroup.className = 'product-variant-editor__add'; addGroup.textContent = specifications.length ? '＋ 新增規格 2' : '＋ 新增規格'; addGroup.disabled = specifications.length >= 2; addGroup.onclick = () => { specifications.push({ _key: `spec_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, name: '', options: [{ _key: `opt_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`, name: '', image: '', imageUrl: '' }] }); renderGroups(); };
+      renderGroups();
+      const updateSpecificationVisibility = () => {
+        const show = enabled.checked;
+        enabledText.textContent = '啟用規格';
+        list.hidden = !show;
+        groupActions.hidden = !show || specifications.length >= 2;
+        editor.classList.toggle('is-specification-enabled', show);
+      };
+      enabled.addEventListener('change', updateSpecificationVisibility);
+      groupActions.appendChild(addGroup);
+
+      enabled.addEventListener('change', () => {
+        if (!enabled.checked && (specifications.length || Boolean(state.selected?.specificationsEnabled))) {
+          if (!window.confirm('停用後會清除規格與選項，改用單一售價和庫存；點「儲存」後生效。歷史訂單會保留。確定停用？')) { enabled.checked = true; updateSpecificationVisibility(); return; }
+          specifications.splice(0); renderGroups();
+        }
+        if (enabled.checked && !specifications.length) addGroup.click();
+        markDirty(); updateSpecificationVisibility(); refreshSpecificationTable();
+      });
+      const readSpecifications = () => ({ specificationsEnabled: enabled.checked, specifications: enabled.checked ? specifications.map((spec) => ({ _key: spec._key, name: spec.name.trim(), options: spec.options.map((option, index) => ({ _key: option._key, name: option.name.trim(), ...(specifications.indexOf(spec) === 0 && option.image ? { image: option.image } : {}) })) })) : [] });
+      productSpecificationDraft = { read: readSpecifications, baseline: readSpecifications(), validate: () => {
+        const value = readSpecifications();
+        if (value.specificationsEnabled && !value.specifications.length) throw new Error('請至少新增一組規格');
+        if (value.specificationsEnabled) normalizeSpecifications(value.specifications);
+      } };
+      editor.append(top, list, groupActions);
+      updateSpecificationVisibility();
+      return editor;
+    }
+    function commerceStateMessage(message, { allowSync = false, error = false } = {}) {
+      productCommercePanel.replaceChildren(commercePanelHeader());
+      const box = document.createElement('div');
+      box.className = `product-commerce-state${error ? ' is-error' : ''}`;
+      const text = document.createElement('span');
+      text.textContent = message;
+      box.appendChild(text);
+      if (allowSync) {
+        const syncBtn = document.createElement('button');
+        syncBtn.type = 'button';
+        syncBtn.innerHTML = '<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i>同步官網商品到電商';
+        syncBtn.onclick = async () => {
+          syncBtn.disabled = true;
+          syncBtn.textContent = '同步中…';
+          try {
+            const payload = await commerceApi('/api/admin/product-commerce', {
+              method: 'POST',
+              body: JSON.stringify({ action: 'sync' })
+            });
+            const result = payload?.result ?? {};
+            setStatus(`商品同步完成：新增 ${Number(result.created ?? 0)}、更新 ${Number(result.updated ?? 0)}`);
+            await loadProductCommerce();
+            await loadCommerceSummary();
+            drawList();
+          } catch (e) {
+            commerceStateMessage(`同步失敗：${e instanceof Error ? e.message : String(e)}`, { allowSync: true, error: true });
+          }
+        };
+        box.appendChild(syncBtn);
+      }
+      productCommercePanel.appendChild(box);
+    }
+
+    function renderProductSalesSettings(sanityProductId, settings, withSpecifications = true) {
+      const panel = document.createElement(withSpecifications ? 'details' : 'section');
+      panel.className = `product-sales-terms${withSpecifications ? '' : ' is-simple'}`;
+      const summary = document.createElement('summary'); summary.textContent = '購買限制・多件優惠';
+      const configured = document.createElement('small');
+      configured.textContent = [Number(settings?.minimumPurchaseQuantity ?? 1) > 1 ? `至少 ${settings.minimumPurchaseQuantity} 件` : '', settings?.priceTiers?.length ? `${settings.priceTiers.length} 組優惠` : ''].filter(Boolean).join(' · ');
+      summary.appendChild(configured);
+      const content = document.createElement('div'); content.className = 'product-sales-terms__content';
+      const minimumWrap = document.createElement('label'); minimumWrap.className = 'product-sales-terms__minimum';
+      const minimumTitle = document.createElement('span'); minimumTitle.innerHTML = '<b>*</b> 最低購買數量';
+      const minimumInput = document.createElement('input'); minimumInput.type = 'number'; minimumInput.min = '1'; minimumInput.max = '999999'; minimumInput.step = '1'; minimumInput.value = String(settings?.minimumPurchaseQuantity ?? 1); minimumInput.setAttribute('aria-label', '最低購買數量');
+      const minimumHelp = document.createElement('small'); minimumHelp.textContent = '同商品各規格合計，庫存不足最低件數時無法下單。';
+      minimumWrap.append(minimumTitle, minimumInput, minimumHelp);
+      const tiersHeading = document.createElement('div'); tiersHeading.className = 'product-price-tiers__heading';
+      const tiersTitle = document.createElement('strong'); tiersTitle.textContent = '多件優惠';
+      const addTier = document.createElement('button'); addTier.type = 'button'; addTier.textContent = '＋ 新增優惠';
+      tiersHeading.append(tiersTitle, addTier);
+      const table = document.createElement('div'); table.className = 'product-price-tiers';
+      const tableHead = document.createElement('div'); tableHead.className = 'product-price-tiers__row is-head';
+      ['編號', '最小購買數量', '最大購買數量', '單價', '操作'].forEach((label) => { const cell = document.createElement('strong'); cell.textContent = label; tableHead.appendChild(cell); });
+      table.appendChild(tableHead);
+      const tiers = (Array.isArray(settings?.priceTiers) ? settings.priceTiers : []).map((tier) => ({ minQuantity: String(tier.minQuantity ?? ''), maxQuantity: tier.maxQuantity == null ? '' : String(tier.maxQuantity), unitPrice: String(tier.unitPrice ?? '') }));
+      const drawTiers = () => {
+        table.querySelectorAll('.product-price-tiers__row:not(.is-head)').forEach((row) => row.remove());
+        tiers.forEach((tier, index) => {
+          const row = document.createElement('div'); row.className = 'product-price-tiers__row';
+          const number = document.createElement('span'); number.textContent = `優惠區間 ${index + 1}`;
+          const min = document.createElement('input'); min.type = 'number'; min.min = '2'; min.step = '1'; min.placeholder = '最小'; min.value = tier.minQuantity; min.setAttribute('aria-label', `優惠區間 ${index + 1} 最小購買數量`); min.addEventListener('input', () => { tier.minQuantity = min.value; });
+          const max = document.createElement('input'); max.type = 'number'; max.min = '2'; max.step = '1'; max.placeholder = '最大（選填）'; max.value = tier.maxQuantity; max.setAttribute('aria-label', `優惠區間 ${index + 1} 最大購買數量`); max.addEventListener('input', () => { tier.maxQuantity = max.value; });
+          const priceWrap = document.createElement('label'); priceWrap.className = 'product-price-tiers__price'; const prefix = document.createElement('span'); prefix.textContent = 'NT$';
+          const price = document.createElement('input'); price.type = 'number'; price.min = '0'; price.step = '1'; price.placeholder = '單價'; price.value = tier.unitPrice; price.setAttribute('aria-label', `優惠區間 ${index + 1} 單價`); price.addEventListener('input', () => { tier.unitPrice = price.value; }); priceWrap.append(prefix, price);
+          const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'product-price-tiers__remove'; remove.textContent = '刪除'; remove.setAttribute('aria-label', `刪除優惠區間 ${index + 1}`); remove.onclick = () => { tiers.splice(index, 1); drawTiers(); };
+          row.append(number, min, max, priceWrap, remove); table.appendChild(row);
+        });
+        addTier.disabled = tiers.length >= 10;
+        table.hidden = tiers.length === 0;
+        hint.hidden = tiers.length === 0;
+      };
+      addTier.onclick = () => { if (tiers.length < 10) { tiers.push({ minQuantity: '', maxQuantity: '', unitPrice: '' }); drawTiers(); } };
+      const hint = document.createElement('small'); hint.className = 'product-price-tiers__hint'; hint.textContent = '同商品各規格合計；優惠區間不可重疊。';
+      const readSales = () => ({ minimumPurchaseQuantity: Number(minimumInput.value), priceTiers: tiers.map((tier) => ({ minQuantity: Number(tier.minQuantity), maxQuantity: tier.maxQuantity === '' ? null : Number(tier.maxQuantity), unitPrice: Number(tier.unitPrice) })) });
+      productSalesDraft = { read: readSales, baseline: readSales(), validate: () => {
+        const value = readSales();
+        if (!Number.isInteger(value.minimumPurchaseQuantity) || value.minimumPurchaseQuantity < 1 || value.minimumPurchaseQuantity > 999999) throw new Error('最低購買數量須為 1 至 999999 的整數');
+        const error = validateQuantityPriceTiers(value.priceTiers); if (error) throw new Error(error);
+      } };
+      drawTiers(); content.append(minimumWrap, tiersHeading, table, hint);
+      if (withSpecifications) panel.appendChild(summary);
+      panel.appendChild(content); return panel;
+    }
+
+    function refreshSpecificationTable() {
+      const editor = productCommercePanel.querySelector('.product-variant-editor');
+      if (!editor || !productSpecificationDraft) return;
+      for (const draft of productSkuDrafts.values()) {
+        productSkuPreviewCache.set(draft.row.variantKey || 'default', { row: draft.row, value: draft.read(), raw: draft.raw(), baseline: draft.baseline });
+      }
+      const specValue = productSpecificationDraft.read();
+      const completeGroups = specValue.specifications.filter((group) => group.name && group.options.some((option) => option.name)).map((group, order) => ({ ...group, order, options: group.options.filter((option) => option.name).map((option, index) => ({ ...option, order: index })) }));
+      const combinations = specValue.specificationsEnabled ? generateSpecificationCombinations(completeGroups) : [];
+      const makeRow = (key, name) => {
+        const cached = productSkuPreviewCache.get(key || 'default');
+        const persisted = productCommerceRows.find((row) => (row.variantKey || null) === key);
+        const row = cached?.row || persisted || { productSkuId: 'preview:' + (key || 'default'), variantKey: key, sku: 'NEW-' + crypto.randomUUID().slice(0, 12), sellingPrice: 0, onHand: -1, saleEnabled: true, barcode: null, preparationDays: null, isPreview: true };
+        return { ...row, ...(cached?.value || {}), skuName: name };
+      };
+      const rows = specValue.specificationsEnabled ? combinations.map((combo) => makeRow(combo._key, combo.optionNames.join(' / '))) : [makeRow(null, String(state.selected?.name || '商品'))];
+      renderProductCommerceRows(rows, productCommerceSettings, { editor, hasSpecifications: specValue.specificationsEnabled });
+    }
+
+    function renderProductCommerceRows(rows, settings, live = null) {
+      const salesPanel = live ? productCommercePanel.querySelector('.product-sales-terms') : null;
+      if (live) productCommercePanel.querySelector('.product-commerce-simple-sale')?.remove();
+      if (!live) { productCommerceRows = rows; productCommerceSettings = settings; productSkuPreviewCache.clear(); }
+      productSkuDrafts.clear();
+      if (live) {
+        for (const child of Array.from(productCommercePanel.children)) {
+          if (child !== live.editor && child !== productCommercePanel.firstElementChild && child !== salesPanel) child.remove();
+        }
+      } else {
+        productCommercePanel.replaceChildren(commercePanelHeader());
+        const variantEditor = renderVariantEditor();
+        productCommercePanel.appendChild(variantEditor);
+        productCommercePanel.querySelector('.product-commerce-panel__head').appendChild(variantEditor.querySelector('.product-variant-editor__top'));
+      }
+      const hasSpecifications = live ? live.hasSpecifications : Boolean(state.selected?.specificationsEnabled);
+      const skuHeading = document.createElement('div');
+      skuHeading.className = 'product-commerce-sku-heading';
+      const skuTitle = document.createElement('h4');
+      skuTitle.textContent = hasSpecifications ? '規格表' : '售價與庫存';
+      skuHeading.appendChild(skuTitle);
+
+      const bulk = document.createElement('div');
+      bulk.className = 'product-commerce-bulk';
+      const bulkTitle = document.createElement('strong');
+      bulkTitle.textContent = '批次套用';
+      const bulkPriceLabel = document.createElement('label');
+      bulkPriceLabel.innerHTML = '<span>售價（NT$）</span>';
+      const bulkPrice = document.createElement('input');
+      bulkPrice.type = 'number'; bulkPrice.min = '0'; bulkPrice.step = '1'; bulkPrice.placeholder = '輸入售價';
+      bulkPriceLabel.appendChild(bulkPrice);
+      const bulkStockLabel = document.createElement('label');
+      bulkStockLabel.innerHTML = '<span>庫存數量</span>';
+      const bulkStock = document.createElement('input');
+      bulkStock.type = 'number'; bulkStock.min = '0'; bulkStock.step = '1'; bulkStock.placeholder = '輸入庫存';
+      bulkStockLabel.appendChild(bulkStock);
+      const bulkUnlimitedLabel = document.createElement('label');
+      const bulkUnlimited = document.createElement('input'); bulkUnlimited.type = 'checkbox';
+      bulkUnlimitedLabel.append(bulkUnlimited, document.createTextNode('不限量'));
+      bulkStockLabel.appendChild(bulkUnlimitedLabel);
+      bulkUnlimited.onchange = () => { bulkStock.disabled = bulkUnlimited.checked; };
+      const bulkSkuLabel = document.createElement('label');
+      bulkSkuLabel.innerHTML = '<span>貨號前綴</span>';
+      const bulkSku = document.createElement('input'); bulkSku.type = 'text'; bulkSku.maxLength = 60; bulkSku.placeholder = '輸入前綴，自動加序號';
+      bulkSkuLabel.appendChild(bulkSku);
+      const bulkHint = document.createElement('small'); bulkHint.className = 'product-commerce-bulk__hint'; bulkHint.textContent = '留白不變更；勾選不限量可清空庫存；0 為售完；販售狀態不變。貨號自動加 -01、-02。';
+      const bulkApply = document.createElement('button');
+      bulkApply.type = 'button'; bulkApply.textContent = '全部套用';
+      const bulkFeedback = document.createElement('span');
+      bulkFeedback.className = 'product-commerce-bulk__feedback';
+      bulkApply.onclick = async () => {
+        const price = bulkPrice.value === '' ? null : Number(bulkPrice.value);
+        const stock = bulkUnlimited.checked ? -1 : bulkStock.value === '' ? null : Number(bulkStock.value);
+        const skuPrefix = bulkSku.value.trim();
+        const skuCodes = skuPrefix ? rows.map((_, index) => `${skuPrefix}-${String(index + 1).padStart(2, '0')}`) : null;
+        if (price === null && stock === null && !skuCodes) return;
+        if ((price !== null && (!Number.isInteger(price) || price < 0)) || (stock !== null && (!Number.isInteger(stock) || stock < -1))) {
+          bulkApply.dataset.error = 'true';
+          bulkFeedback.textContent = '請輸入 0 或以上的整數';
+          return;
+        }
+        if (skuCodes && (skuPrefix.length > 60 || skuCodes.some((code) => code.length > 64))) { bulkApply.dataset.error = 'true'; bulkFeedback.textContent = '貨號前綴過長；每個規格貨號最多 64 字'; return; }
+        bulkApply.dataset.error = 'false';
+        const items = Array.from(list.querySelectorAll('.product-commerce-sku'));
+        items.forEach((item, index) => {
+          const priceField = item.querySelector('[data-sku-price]'), stockField = item.querySelector('[data-sku-stock]'), codeField = item.querySelector('[data-sku-code]');
+          if (price !== null) { priceField.value = String(price); priceField.dispatchEvent(new Event('input', { bubbles: true })); }
+          if (stock !== null) { stockField.value = stock < 0 ? '' : String(stock); stockField.dispatchEvent(new Event('input', { bubbles: true })); }
+          if (skuCodes) { codeField.value = skuCodes[index]; codeField.dispatchEvent(new Event('input', { bubbles: true })); }
+        });
+        bulkFeedback.textContent = '已填入表格，點上方「儲存」後生效'; markDirty();
+      };
+      bulk.append(bulkTitle, bulkPriceLabel, bulkStockLabel, bulkSkuLabel, bulkHint, bulkApply, bulkFeedback);
+      const bulkDisclosure = document.createElement('details'); bulkDisclosure.className = 'product-commerce-bulk-disclosure';
+      const bulkSummary = document.createElement('summary'); bulkSummary.textContent = '批次設定'; bulkDisclosure.append(bulkSummary, bulk);
+      const list = document.createElement('div');
+      list.className = 'product-commerce-list';
+      list.setAttribute('role', 'rowgroup');
+      const table = document.createElement('div');
+      table.className = `product-commerce-table${hasSpecifications ? '' : ' is-simple'}`;
+      table.setAttribute('role', 'table');
+      const tableHead = document.createElement('div');
+      tableHead.className = 'product-commerce-table__head';
+      tableHead.setAttribute('role', 'row');
+      ['規格／販售', '售價（NT$）', '庫存', '更多設定'].forEach((label) => {
+        const cell = document.createElement('span'); cell.setAttribute('role', 'columnheader'); cell.textContent = label; tableHead.appendChild(cell);
+      });
+      if (hasSpecifications) table.appendChild(tableHead);
+      table.appendChild(list);
+
+      rows.forEach((row) => {
+        const item = document.createElement('article');
+        item.className = `product-commerce-sku${hasSpecifications ? '' : ' is-simple'}`;
+        item.setAttribute('role', 'row');
+
+        const identity = document.createElement('div');
+        identity.className = 'product-commerce-sku__identity';
+        identity.setAttribute('role', 'cell');
+        const name = document.createElement('strong');
+        name.textContent = String(row.skuName ?? row.productName ?? '商品規格');
+        identity.appendChild(name);
+
+        const priceLabel = document.createElement('label');
+        priceLabel.setAttribute('role', 'cell');
+        priceLabel.dataset.column = '售價';
+        priceLabel.innerHTML = '<span>售價（NT$）</span>';
+        const priceInput = document.createElement('input');
+        priceInput.type = 'number';
+        priceInput.min = '0';
+        priceInput.step = '1';
+        priceInput.required = true;
+        priceInput.dataset.skuPrice = 'true';
+        priceInput.value = String(row.sellingPrice ?? 0);
+        priceLabel.appendChild(priceInput);
+
+        const stockLabel = document.createElement('label');
+        stockLabel.setAttribute('role', 'cell');
+        stockLabel.dataset.column = '商品數量';
+        stockLabel.innerHTML = hasSpecifications ? '<span>庫存</span>' : '<span>商品數量</span>';
+        const stockInput = document.createElement('input');
+        stockInput.type = 'number';
+        stockInput.min = '0';
+        stockInput.step = '1';
+        stockInput.required = false;
+        stockInput.placeholder = '不限量';
+        stockInput.dataset.skuStock = 'true';
+        stockInput.value = Number(row.onHand) < 0 ? '' : String(row.onHand ?? 0);
+        stockLabel.appendChild(stockInput);
+        if (hasSpecifications) { const help = document.createElement('small'); help.className = 'product-commerce-simple-help'; help.textContent = '留白為不限量；0 為售完。'; stockLabel.appendChild(help); }
+
+        const sellerSkuLabel = document.createElement('label'); sellerSkuLabel.dataset.column = '商品選項貨號'; sellerSkuLabel.innerHTML = '<span>貨號 SKU</span>';
+        const sellerSkuInput = document.createElement('input'); sellerSkuInput.type = 'text'; sellerSkuInput.maxLength = 64; sellerSkuInput.value = String(row.sku ?? ''); sellerSkuInput.dataset.skuCode = 'true'; sellerSkuInput.setAttribute('aria-label', '商品選項貨號'); sellerSkuLabel.appendChild(sellerSkuInput);
+
+        const barcodeLabel = document.createElement('label'); barcodeLabel.dataset.column = '國際條碼'; barcodeLabel.innerHTML = '<span>條碼</span>';
+        const barcodeInput = document.createElement('input'); barcodeInput.type = 'text'; barcodeInput.maxLength = 64; barcodeInput.value = String(row.barcode ?? ''); barcodeInput.dataset.skuBarcode = 'true'; barcodeInput.setAttribute('aria-label', '國際條碼（選填）'); barcodeLabel.appendChild(barcodeInput);
+
+        const preparationLabel = document.createElement('label'); preparationLabel.dataset.column = '備貨天數'; preparationLabel.innerHTML = '<span>備貨天數</span>';
+        const preparationInput = document.createElement('input'); preparationInput.type = 'number'; preparationInput.min = '0'; preparationInput.max = '365'; preparationInput.step = '1'; preparationInput.placeholder = '天'; preparationInput.value = row.preparationDays == null ? '' : String(row.preparationDays); preparationInput.dataset.skuPreparation = 'true'; preparationInput.setAttribute('aria-label', '備貨天數'); preparationLabel.appendChild(preparationInput);
+
+        const saleOptions = document.createElement('fieldset');
+        saleOptions.className = 'product-commerce-sale-options';
+        saleOptions.setAttribute('role', 'group');
+        saleOptions.setAttribute('aria-label', '販售狀態');
+        const saleName = `sale-status-${String(row.productSkuId ?? Math.random()).replace(/[^a-zA-Z0-9_-]/g, '')}`;
+        const openSale = document.createElement('label');
+        const openRadio = document.createElement('input');
+        openRadio.type = 'radio';
+        openRadio.name = saleName;
+        openRadio.value = 'open';
+        openRadio.checked = row.saleEnabled !== false;
+        openSale.append(openRadio, document.createTextNode('販售'));
+        const stopSale = document.createElement('label');
+        const stopRadio = document.createElement('input');
+        stopRadio.type = 'radio';
+        stopRadio.name = saleName;
+        stopRadio.value = 'stop';
+        stopRadio.checked = row.saleEnabled === false;
+        stopSale.append(stopRadio, document.createTextNode('停售'));
+        saleOptions.append(openSale, stopSale);
+        identity.appendChild(saleOptions);
+
+        const controls = document.createElement('div');
+        controls.className = 'product-commerce-sku__controls';
+        controls.setAttribute('role', 'cell');
+        controls.dataset.column = '操作';
+        const readCommerce = () => ({ sellingPrice: Number(priceInput.value), onHand: stockInput.value === '' ? -1 : Number(stockInput.value), saleEnabled: openRadio.checked, sku: sellerSkuInput.value.trim(), barcode: barcodeInput.value.trim(), preparationDays: preparationInput.value === '' ? null : Number(preparationInput.value) });
+        productSkuDrafts.set(String(row.productSkuId), { row, read: readCommerce, baseline: readCommerce(), raw: () => [priceInput.value, stockInput.value, sellerSkuInput.value, barcodeInput.value, preparationInput.value], restore: (raw) => { [priceInput, stockInput, sellerSkuInput, barcodeInput, preparationInput].forEach((input, index) => { input.value = raw[index]; }); }, validate: () => {
+          const value = readCommerce();
+          if (priceInput.value === '' || !Number.isInteger(value.sellingPrice) || value.sellingPrice < 0 || !Number.isInteger(value.onHand) || value.onHand < -1 || !value.sku || value.sku.length > 64 || value.barcode.length > 64 || (value.preparationDays !== null && (!Number.isInteger(value.preparationDays) || value.preparationDays < 0 || value.preparationDays > 365))) throw new Error('請確認「' + String(row.skuName ?? row.productName) + '」的價格、庫存、貨號及備貨天數');
+        } });
+        const cachedDraft = live && productSkuPreviewCache.get(row.variantKey || 'default');
+        if (cachedDraft) { const draft = productSkuDrafts.get(String(row.productSkuId)); draft.baseline = cachedDraft.baseline; draft.restore(cachedDraft.raw); }
+        const extra = document.createElement('details'); extra.className = 'product-commerce-sku__extra'; extra.setAttribute('role', 'cell');
+        const extraSummary = document.createElement('summary'); extraSummary.textContent = '貨號・更多';
+        const extraFields = document.createElement('div'); extraFields.className = 'product-commerce-sku__extra-fields'; extraFields.append(sellerSkuLabel, barcodeLabel, preparationLabel);
+        extra.append(extraSummary, extraFields);
+        if (hasSpecifications) item.append(identity, priceLabel, stockLabel, extra);
+        else {
+          const stockHelp = document.createElement('small'); stockHelp.className = 'product-commerce-simple-help'; stockHelp.textContent = '留白為不限量；0 為售完。'; stockLabel.appendChild(stockHelp);
+          name.remove();
+          identity.classList.add('product-commerce-simple-sale');
+          identity.removeAttribute('role');
+          productCommercePanel.querySelector('.product-variant-editor__top').prepend(identity);
+          item.append(priceLabel, stockLabel);
+        }
+        list.appendChild(item);
+      });
+
+      if (hasSpecifications) productCommercePanel.appendChild(skuHeading);
+      if (hasSpecifications && rows.length > 1) productCommercePanel.appendChild(bulkDisclosure);
+      productCommercePanel.append(table, salesPanel || renderProductSalesSettings(String(state.selectedId ?? ''), settings, hasSpecifications));
+      productCommercePanel.querySelectorAll<HTMLInputElement>('input[type="number"]').forEach((input) => { input.inputMode = 'numeric'; });
+    }
+
+    async function loadProductCommerce() {
+      const sequence = ++state.commerceLoadSequence;
+      if (state.model !== 'product' || isProductSortMode()) {
+        productCommercePanel.hidden = true;
+        productCommercePanel.replaceChildren();
+        return;
+      }
+
+      productCommercePanel.hidden = false;
+      const sanityProductId = String(state.selectedId ?? '').trim();
+      const slug = String(state.selected?.slug ?? '').trim();
+      if (!sanityProductId) {
+        commerceStateMessage('請先儲存商品內容，再設定價格與庫存');
+        return;
+      }
+
+      commerceStateMessage('正在讀取價格與庫存…');
+      try {
+        const params = new URLSearchParams({ sanityProductId });
+        if (slug) params.set('slug', slug);
+        const payload = await commerceApi(`/api/admin/product-commerce?${params.toString()}`);
+        if (sequence !== state.commerceLoadSequence || state.model !== 'product') return;
+        const fetchedRows = Array.isArray(payload?.rows) ? payload.rows : [];
+        const rows = selectProductEditorSkus(fetchedRows, Boolean(state.selected?.specificationsEnabled), (state.selected?.variants ?? []).map((variant) => String(variant._key ?? '')));
+        if (!rows.length) {
+          commerceStateMessage('這項官網商品尚未建立電商價格與庫存資料。', { allowSync: true });
+          return;
+        }
+        renderProductCommerceRows(rows, payload?.settings ?? { minimumPurchaseQuantity: 1, priceTiers: [] });
+      } catch (e) {
+        if (sequence !== state.commerceLoadSequence) return;
+        commerceStateMessage(`無法讀取價格與庫存：${e instanceof Error ? e.message : String(e)}`, { error: true });
+      }
     }
 
     const UPLOAD_MAX_MB = 20;
@@ -974,13 +1546,26 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
 
     const tabIcons = {
       promotion: 'fa-tags',
-      product: 'fa-box-open',
-      category: 'fa-folder-tree'
+      product: 'fa-box-open'
     };
+
+    function leaveCurrentProductEditor() {
+      if (!confirmDiscardIfDirty()) return false;
+      ++productSelectionSequence;
+      state.dirty = false;
+      state.pendingUploads = {};
+      if (state.model === 'product') {
+        ++state.commerceLoadSequence;
+        fill({}, { redrawList: false, loadCommerce: false });
+        productCommercePanel.replaceChildren();
+        productCommercePanel.hidden = true;
+      }
+      return true;
+    }
 
     function drawTabs() {
       modelTabs.innerHTML = '';
-      Object.keys(defs).forEach((k) => {
+      ['promotion', 'product'].forEach((k) => {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `tab ${state.model === k ? 'is-active' : ''}`;
@@ -992,40 +1577,46 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         b.append(ic, lab);
         // 「分類管理」固定走排序模式，避免從不同入口看到不同內容
         b.onclick = () => {
-          if (isMobileNarrow() && state.model === k && (k === 'promotion' || k === 'product')) {
-            const panel = String(root.dataset.mobilePanel ?? '');
-            if (panel === 'editor') {
-              setMobilePanel('list');
-              return;
-            }
-            if (panel === 'list') {
-              return;
-            }
+          const returnToProducts = k === 'product' && state.model === 'product' && !isProductSortMode();
+          if (!leaveCurrentProductEditor()) return;
+          if (returnToProducts) {
+            setMobilePanel('list'); drawList(); setStatus('商品清單'); return;
           }
-          if (k === 'category') return switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
-          return switchModel(k);
+          return switchModel(k, { mobilePanel: 'list' });
         };
         modelTabs.appendChild(b);
       });
-      if (!isMobileNarrow()) {
-        const sortTab = document.createElement('button');
-        sortTab.type = 'button';
-        sortTab.className = `tab ${isProductSortMode() ? 'is-active' : ''}`;
-        sortTab.innerHTML = '<i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i><span>調整分類內順序</span>';
-        sortTab.onclick = () =>
-          switchModel('product', { productSortMode: true, mobilePanel: 'list' })
-            .then(() => {
-              if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
-              drawList();
-              setStatus('選分類→拖曳或置頂／置底→頂部「儲存」');
-              queueMicrotask(() => categoryFilter.focus());
-            })
-            .catch((e) => setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`));
-        modelTabs.appendChild(sortTab);
-      }
+      const stockTab = document.createElement('a');
+      stockTab.className = 'tab';
+      stockTab.href = shopProductsHref || '#';
+      stockTab.innerHTML = '<i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i><span>庫存</span>';
+      stockTab.addEventListener('click', (event) => {
+        if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+        if (!leaveCurrentProductEditor()) event.preventDefault();
+      });
+      modelTabs.appendChild(stockTab);
+
+      const sortTab = document.createElement('button');
+      sortTab.type = 'button';
+      sortTab.className = `tab ${isProductSortMode() || isCategorySortMode() ? 'is-active' : ''}`;
+      sortTab.innerHTML = '<i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i><span>排序</span>';
+      sortTab.onclick = () => {
+        if (!leaveCurrentProductEditor()) return;
+        return switchModel('product', { productSortMode: true, mobilePanel: 'list' })
+          .then(() => {
+            if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
+            drawList();
+            setStatus('選分類→拖曳或置頂／置底→頂部「儲存」');
+            queueMicrotask(() => categoryFilter.focus());
+          })
+          .catch((e) => setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`));
+      };
+      modelTabs.appendChild(sortTab);
     }
 
-    function drawList() {
+    function drawList({ append = false } = {}) {
+      productListObserver?.disconnect();
+      productListMore.remove();
       const getProductThumbSrc = (row) => {
         let media = row?.image ?? row?.images ?? null;
         if (Array.isArray(media)) media = media[0] ?? null;
@@ -1469,6 +2060,11 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         categoryId = (row) => productCategoryId(row);
 
         if (selectedCategory) items = items.filter((x) => categoryId(x) === selectedCategory);
+        const statusFilter = String(productStatusFilter.value ?? 'all');
+        if (statusFilter === 'enabled') items = items.filter((x) => Boolean(x.enabled));
+        if (statusFilter === 'disabled') items = items.filter((x) => !Boolean(x.enabled));
+        if (statusFilter === 'sellable') items = items.filter((x) => state.commerceSummary.get(kOf(x))?.canSell === true);
+        if (statusFilter === 'unsellable') items = items.filter((x) => state.commerceSummary.has(kOf(x)) && state.commerceSummary.get(kOf(x))?.canSell === false);
         items.sort((a, b) => {
           // 全部分類：先依分類下拉同順序（orderRank），再依分類內 sortOrder
           const catOrder = new Map(
@@ -1490,10 +2086,37 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           if (sa !== sb) return sa - sb;
           return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
         });
+
+        const sortMode = String(productListSort.value ?? 'default');
+        if (sortMode === 'name-asc') {
+          items.sort((a, b) => String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant'));
+        } else if (sortMode.startsWith('price-') || sortMode.startsWith('stock-')) {
+          const field = sortMode.startsWith('price-') ? 'price' : 'stock';
+          const direction = sortMode.endsWith('-desc') ? -1 : 1;
+          items.sort((a, b) => {
+            const av = state.commerceSummary.get(kOf(a))?.[field];
+            const bv = state.commerceSummary.get(kOf(b))?.[field];
+            if (av == null && bv == null) return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
+            if (av == null) return 1;
+            if (bv == null) return -1;
+            if (av !== bv) return (av - bv) * direction;
+            return String(a[titleKey] ?? '').localeCompare(String(b[titleKey] ?? ''), 'zh-Hant');
+          });
+        }
       }
       items = items.filter((x) => String(x[titleKey] ?? '').toLowerCase().includes(q));
+      let appendBatch = false, totalProducts = items.length;
+      if (state.model === 'product') {
+        const key = JSON.stringify([state.model, q, categoryFilter.value, productStatusFilter.value, productListSort.value, items.map(kOf)]);
+        const sameList = productListKey === key;
+        const previousShown = sameList ? productListShown : 0;
+        if (!sameList) { productListKey = key; productListShown = PRODUCT_LIST_BATCH_SIZE; }
+        appendBatch = append && sameList;
+        if (appendBatch) productListShown = Math.min(totalProducts, productListShown + PRODUCT_LIST_BATCH_SIZE);
+        items = items.slice(appendBatch ? previousShown : 0, productListShown);
+      } else { productListKey = ''; productListShown = PRODUCT_LIST_BATCH_SIZE; }
       listCount.textContent = '';
-      entryList.innerHTML = '';
+      if (!appendBatch) entryList.innerHTML = '';
       items.forEach((row) => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -1505,8 +2128,9 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           const thumbSrc = getProductThumbSrc(row);
           const cat = categoryName(row) || '未分類';
           const title = String(row[titleKey] ?? '').trim() || `項目 #${row.id}`;
+          const commerce = state.commerceSummary.get(kOf(row));
 
-          b.className = `item item--product ${isActive ? 'is-active' : ''} ${enabled ? 'item--enabled' : 'item--disabled'}`;
+          b.className = `item item--product item--catalog ${isActive ? 'is-active' : ''} ${enabled ? 'item--enabled' : 'item--disabled'}`;
 
           const thumbWrap = document.createElement('span');
           thumbWrap.className = 'item__thumbWrap';
@@ -1533,6 +2157,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           const titleEl = document.createElement('span');
           titleEl.className = 'item__title';
           titleEl.textContent = title;
+          titleEl.title = title;
           row1.appendChild(titleEl);
 
           const meta = document.createElement('span');
@@ -1545,6 +2170,15 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           const tagWrap = document.createElement('span');
           tagWrap.className = 'item__metaTags';
           tagWrap.setAttribute('aria-label', '商品標籤');
+          const statusBadge = document.createElement('span');
+          statusBadge.className = `badge badge--status ${enabled ? 'is-enabled' : 'is-disabled'}`;
+          statusBadge.textContent = enabled ? '上架' : '未上架';
+          tagWrap.appendChild(statusBadge);
+          const saleSummary = state.commerceSummary.get(kOf(row));
+          const saleBadge = document.createElement('span');
+          saleBadge.className = `badge badge--sale-status ${saleSummary ? (saleSummary.canSell ? 'is-selling' : 'is-stopped') : 'is-unknown'}`;
+          saleBadge.textContent = saleSummary ? (saleSummary.canSell ? '販售' : '禁售') : '未同步';
+          tagWrap.appendChild(saleBadge);
           if (heroSpotlight) {
             const spot = document.createElement('span');
             spot.className = 'badge badge--spotlight';
@@ -1560,7 +2194,20 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
 
           meta.append(catEl, tagWrap);
 
-          main.append(row1, meta);
+          const commerceMeta = document.createElement('span');
+          commerceMeta.className = 'item__commerce';
+          const priceMeta = document.createElement('span');
+          priceMeta.className = 'item__price';
+          priceMeta.textContent = commerce?.priceText ?? '尚未定價';
+          priceMeta.title = priceMeta.textContent;
+          const stockMeta = document.createElement('span');
+          stockMeta.className = 'item__stock';
+          stockMeta.textContent = commerce?.stockText ?? '庫存未同步';
+          stockMeta.title = stockMeta.textContent;
+          stockMeta.classList.toggle('is-empty', Boolean(commerce && commerce.stock === 0));
+          commerceMeta.append(priceMeta, stockMeta);
+
+          main.append(row1, meta, commerceMeta);
           b.append(thumbWrap, main);
         } else {
           b.className = `item ${isActive ? 'is-active' : ''}`;
@@ -1569,9 +2216,40 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         b.onclick = () => select(row);
         entryList.appendChild(b);
       });
+      if (state.model === 'product' && productListShown < totalProducts) {
+        productListMore.textContent = '已顯示 ' + Math.min(productListShown, totalProducts) + ' / ' + totalProducts + ' · 載入更多';
+        entryList.appendChild(productListMore);
+        if ('IntersectionObserver' in window) {
+          productListObserver = new IntersectionObserver((entries) => {
+            if (!entries.some((entry) => entry.isIntersecting) || state.saving) return;
+            productListObserver.disconnect();
+            requestAnimationFrame(() => {
+              if (productListMore.isConnected && state.model === 'product' && !isProductSortMode()) drawList({ append: true });
+            });
+          }, { rootMargin: '0px 0px 80px 0px' });
+          productListObserver.observe(productListMore);
+        }
+      }
     }
-    function select(row) {
+    async function select(row) {
+      if (state.saving) return;
+      if (state.model === 'product' && state.dirty) {
+        if (kOf(row) === state.selectedId) return;
+        if (!confirmDiscardIfDirty()) return;
+      }
       if (isCategorySortMode() || isProductSortMode()) return;
+      const sequence = ++productSelectionSequence;
+      if (state.model === 'product' && row.__listOnly) {
+        setStatus('讀取商品內容…');
+        try {
+          const payload = await api(defs.product.api + '/' + encodeURIComponent(kOf(row)));
+          if (sequence !== productSelectionSequence || state.model !== 'product' || state.saving) return;
+          const detail = normOne(payload);
+          if (!detail || !kOf(detail)) throw new Error('找不到商品內容');
+          row = { ...row, ...detail, __listOnly: false };
+          state.entries = state.entries.map((entry) => kOf(entry) === kOf(row) ? row : entry);
+        } catch (error) { if (sequence === productSelectionSequence) setStatus('無法讀取商品：' + (error instanceof Error ? error.message : String(error))); return; }
+      }
       fill(row);
       state.dirty = false;
       setStatus(`已載入 ${defs[state.model].label}`);
@@ -1617,7 +2295,10 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       const cat = await api('/api/categories?fields[0]=name&fields[1]=orderRank&pagination[pageSize]=200');
       state.categoryOptions = sortCategoriesByOrderRank(Array.isArray(cat?.data) ? cat.data : []);
       categoryFilter.style.display = 'block';
-      categoryFilter.innerHTML = '<option value="">全部分類</option>';
+      editCategoriesBtn.style.display = isProductSortMode() ? 'inline-flex' : 'none';
+      productListSort.style.display = isProductSortMode() ? 'none' : 'block';
+      productStatusFilter.style.display = isProductSortMode() ? 'none' : 'block';
+      categoryFilter.innerHTML = '<option value="">分類</option>';
       state.categoryOptions.forEach((x) => {
         const o = document.createElement('option');
         o.value = String(x.documentId ?? x.id ?? '');
@@ -1630,6 +2311,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     }
 
     async function drawForm() {
+      saveBtn.querySelector('.action-btn__label').textContent = '儲存';
       formRoot.innerHTML = '';
       const attrs = schemas[state.model]?.attributes ?? {};
       const advancedKeys = [];
@@ -1711,7 +2393,12 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         }
       } else {
         categoryFilter.style.display = 'none';
+        editCategoriesBtn.style.display = 'none';
         categoryFilter.value = '';
+        productListSort.style.display = 'none';
+        productListSort.value = 'default';
+        productStatusFilter.style.display = 'none';
+        productStatusFilter.value = 'all';
       }
       fill(state.selected);
       formRoot.oninput = (e) => {
@@ -1875,7 +2562,10 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       mediaBind(card);
     }
 
-    function fill(row, { redrawList = true } = {}) {
+    function fill(row, { redrawList = true, loadCommerce = true } = {}) {
+      ++productSelectionSequence;
+      if (kOf(row ?? {}) !== state.selectedId) { productSyncPending = false; productCommerceRows = []; productCommerceSettings = null; }
+      productSpecificationDraft = null; productSalesDraft = null; productSkuDrafts.clear(); productSkuPreviewCache.clear();
       state.selected = row ?? {};
       state.selectedId = kOf(state.selected);
       if (state.model === 'product') {
@@ -1939,9 +2629,11 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       if (redrawList) drawList();
       updateSectionLabels();
       syncPublicSiteButtons();
+      if (state.model === "product") productBaseSnapshot = structuredClone(collect({ validate: false }).out);
+      if (loadCommerce) productCommerceReady = loadProductCommerce();
     }
 
-    function collect() {
+    function collect({ validate = true } = {}) {
       const attrs = schemas[state.model].attributes;
       const out = {};
       let ok = true;
@@ -1950,7 +2642,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
         const t = card.dataset.type;
         if (!f) return;
         const err = card.querySelector('.err');
-        if (err) err.textContent = '';
+        if (validate && err) err.textContent = '';
 
         if (t === 'boolean') {
           const c = card.querySelector('input[type="checkbox"]');
@@ -1989,7 +2681,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           else out[f] = raw;
         }
 
-        if (attrs[f]?.required && (out[f] === '' || out[f] == null)) {
+        if (validate && attrs[f]?.required && (out[f] === '' || out[f] == null)) {
           if (err) err.textContent = '此欄位必填';
           ok = false;
         }
@@ -2015,10 +2707,15 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       listCount.textContent = '載入中...';
       entryList.innerHTML = '';
       try {
-        const j = await api(`${defs[state.model].api}?populate=*`);
+        productListKey = ''; productListShown = PRODUCT_LIST_BATCH_SIZE;
+        const listOnly = state.model === 'product' && adminBackend === 'sanity' && !isProductSortMode();
+        const j = await api(`${defs[state.model].api}?${listOnly ? 'view=list-index' : 'populate=*'}`);
         state.entries = norm(j);
         if (state.model === 'product' && state.entries.length) {
           state.entries = applySortOrderWithinEachCategory(state.entries);
+          await loadCommerceSummary();
+        } else {
+          state.commerceSummary = new Map();
         }
         if (isCategorySortMode()) {
           // 只在載入時依 orderRank 排序一次，後續調整以陣列順序為準
@@ -2049,6 +2746,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     async function switchModel(model, options = {}) {
       const {
         selectPromotionSlug,
+        selectEntrySlug,
         mobilePanel,
         selectFirstEntry = false,
         // 「分類管理」預設開排序模式：只調整順序、不顯示右側表單
@@ -2084,6 +2782,11 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
           const row = state.entries.find((e) => String(e.slug ?? '').trim() === slug);
           if (row) select(row);
           else setStatus(`找不到促銷頁（slug）：${slug}`);
+        } else if (selectEntrySlug) {
+          const slug = String(selectEntrySlug).trim();
+          const row = state.entries.find((e) => String(e.slug ?? '').trim() === slug);
+          if (row) select(row);
+          else setStatus(`找不到商品（slug）：${slug}`);
         } else if (
           selectFirstEntry &&
           !state.categorySortMode &&
@@ -2120,33 +2823,6 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       }
 
       setStatus('已重整：最新資料');
-    }
-
-    async function hubAction(hubKey) {
-      if (!confirmDiscardIfDirty()) return;
-      state.dirty = false;
-      try {
-        if (hubKey === 'promo-weekly') await switchModel('promotion', { selectPromotionSlug: 'weekly-new' });
-        else if (hubKey === 'promo-special') await switchModel('promotion', { selectPromotionSlug: 'special-offers' });
-        else if (hubKey === 'promo-equipment') await switchModel('promotion', { selectPromotionSlug: 'equipment-sale' });
-        else if (hubKey === 'products-all') {
-          await switchModel('product', { mobilePanel: 'list' });
-          categoryFilter.value = '';
-          drawList();
-          setStatus('全部商品');
-        } else if (hubKey === 'products-by-category') {
-          await switchModel('product', { productSortMode: true, mobilePanel: 'list' });
-          if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
-          drawList();
-          setStatus('選分類→拖曳或置頂／置底→頂部「儲存」');
-          queueMicrotask(() => categoryFilter.focus());
-        } else if (hubKey === 'categories-sort') {
-          await switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
-          setStatus('拖曳或置頂／置底→頂部「儲存」');
-        }
-      } catch (e) {
-        setStatus(`無法開啟：${e instanceof Error ? e.message : String(e)}`);
-      }
     }
 
     async function saveCategoryOrder() {
@@ -2348,7 +3024,106 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       closeCategoryModal();
     }
 
+    async function saveAllProductChanges() {
+      if (state.saving) return;
+      state.saving = true;
+      productCommercePanel.dataset.savePhase = 'checking'; setStatus('檢查變更…');
+      saveBtn.disabled = true; saveBtn.setAttribute('aria-busy', 'true'); saveBtn.setAttribute('data-saving', '1');
+      [formRoot, productCommercePanel, entryList, modelTabs].forEach((element) => { element.inert = true; });
+      [newBtn, refreshBtn, simpleModeToggle].forEach((button) => { button.disabled = true; });
+      let hasCommittedContent = false;
+      try {
+        await productCommerceReady;
+        if (specificationUploads) throw new Error('圖片仍在上傳，完成後再儲存');
+        const basic = collect(); if (!basic.ok) throw new Error('請先修正商品必填欄位');
+        const specDraft = productSpecificationDraft;
+        const specValue = specDraft?.read();
+        const specPatch = specDraft ? changedFields(specValue, specDraft.baseline) : {};
+        if (Object.keys(specPatch).length) specDraft.validate();
+        const salesDraft = productSalesDraft;
+        const salesValue = salesDraft?.read();
+        const settingsPatch = salesDraft ? changedFields(salesValue, salesDraft.baseline) : {};
+        if (Object.keys(settingsPatch).length) salesDraft.validate();
+        const skuChanges = [];
+        for (const [id, draft] of productSkuDrafts) {
+          const value = draft.read(), patch = changedFields(value, draft.baseline);
+          if (!Object.keys(patch).length) continue;
+          // Deleted combinations retain historical records, without writing abandoned edits to them.
+          if (specPatch.specifications !== undefined || specPatch.specificationsEnabled !== undefined) {
+            const keys = specValue.specificationsEnabled ? new Set(generateSpecificationCombinations(normalizeSpecifications(specValue.specifications)).map((combo) => combo._key)) : null;
+            if (keys ? !keys.has(draft.row.variantKey) : Boolean(draft.row.variantKey)) continue;
+          }
+          draft.validate(); skuChanges.push({ productSkuId: id, patch, draft, value });
+        }
+        const codes = Array.from(productSkuDrafts.values()).map((draft) => draft.read().sku);
+        if (skuChanges.some((entry) => entry.patch.sku !== undefined) && new Set(codes).size !== codes.length) throw new Error('商品選項貨號不可重複');
+        const hasPendingImages = Object.values(state.pendingUploads).some((files) => Array.isArray(files) && files.length);
+        const creating = !state.selectedId;
+        const initialBasicPatch = creating ? basic.out : changedFields(basic.out, productBaseSnapshot);
+        if (!creating && !Object.keys(initialBasicPatch).length && !Object.keys(specPatch).length && !skuChanges.length && !Object.keys(settingsPatch).length && !hasPendingImages && !productSyncPending) {
+          productCommercePanel.dataset.savePhase = 'unchanged'; state.dirty = false; setStatus('沒有變更，無需儲存'); return;
+        }
+        setStatus('正在儲存變更…');
+        for (const card of formRoot.querySelectorAll('.card[data-type="media"]')) await applyPendingUploads(card, { interactive: false });
+        const collected = collect(); if (!collected.ok) throw new Error('請先修正商品欄位');
+        const basePatch = creating ? collected.out : changedFields(collected.out, productBaseSnapshot);
+        const contentPatch = { ...basePatch, ...specPatch };
+        // Image-only specification edits need no SQL catalog synchronization.
+        const specIdentity = (value) => JSON.stringify({ enabled: value?.specificationsEnabled, groups: (value?.specifications ?? []).map((group) => ({ id: group._key, name: group.name, options: group.options.map((option) => ({ id: option._key, name: option.name })) })) });
+        const needsSync = creating || ['name', 'slug', 'enabled', 'category'].some((key) => key in basePatch) || (specDraft && specIdentity(specValue) !== specIdentity(specDraft.baseline));
+        if (Object.keys(contentPatch).length || creating) {
+          const endpoint = creating ? defs.product.api : defs.product.api + '/' + encodeURIComponent(state.selectedId);
+          const result = await api(endpoint, { method: creating ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ data: contentPatch }) });
+          const saved = normOne(result); if (!saved || !kOf(saved)) throw new Error('商品已寫入，但回傳資料不完整，請重新載入確認');
+          hasCommittedContent = true;
+          state.selectedId = kOf(saved); state.selected = { ...state.selected, ...saved };
+          if (creating) state.entries.unshift(saved); else state.entries = state.entries.map((entry) => kOf(entry) === state.selectedId ? { ...entry, ...saved } : entry);
+          productBaseSnapshot = { ...productBaseSnapshot, ...basePatch };
+          if (specDraft) specDraft.baseline = structuredClone(specValue);
+          productSyncPending = productSyncPending || Boolean(needsSync);
+        }
+        let persistedRows = productCommerceRows, persistedSettings = productCommerceSettings;
+        if (productSyncPending) {
+          setStatus('正在同步此商品的變更…');
+          const synced = await commerceApi('/api/admin/product-commerce', { method: 'POST', body: JSON.stringify({ action: 'sync', sanityProductId: state.selectedId, includeCommerce: true }) });
+          if (synced.result?.errors?.length || !Array.isArray(synced.rows)) throw new Error(synced.result?.errors?.[0]?.message || '商品規格同步失敗，請重試');
+          persistedRows = synced.rows; persistedSettings = synced.settings; productSyncPending = false;
+        }
+        if (skuChanges.length || Object.keys(settingsPatch).length) {
+          setStatus('正在儲存價格、庫存及購買設定…');
+          const persisted = await commerceApi('/api/admin/product-commerce', { method: 'POST', body: JSON.stringify({ action: 'save-changes', sanityProductId: state.selectedId, changes: skuChanges.map((entry) => {
+            const target = persistedRows.find((row) => (row.variantKey || null) === (entry.draft.row.variantKey || null));
+            if (!target) throw new Error('找不到新規格，變更已保留，請重試儲存');
+            const patch = { ...entry.patch };
+            if (entry.draft.row.isPreview && patch.sku === entry.draft.baseline.sku) delete patch.sku;
+            return { productSkuId: target.productSkuId, ...patch };
+          }), ...(Object.keys(settingsPatch).length ? { settings: settingsPatch } : {}) }) });
+          skuChanges.forEach((entry) => { entry.draft.baseline = structuredClone(entry.value); });
+          if (salesDraft) salesDraft.baseline = structuredClone(salesValue);
+          persistedRows = persisted.rows; persistedSettings = persisted.settings;
+        }
+        const productId = state.selectedId;
+        fill(state.selected, { redrawList: false, loadCommerce: false });
+        if (Array.isArray(persistedRows) && persistedRows.length) {
+          const summary = buildCommerceSummary(persistedRows).get(productId);
+          if (summary) state.commerceSummary.set(productId, summary);
+          const rows = selectProductEditorSkus(persistedRows, Boolean(state.selected.specificationsEnabled), (state.selected.variants ?? []).map((variant) => String(variant._key ?? '')));
+          renderProductCommerceRows(rows, persistedSettings);
+        } else productCommerceReady = loadProductCommerce();
+        productCommercePanel.dataset.savePhase = 'saved'; state.dirty = false; drawList(); setStatus('全部變更已儲存');
+      } catch (error) {
+        state.dirty = true;
+        productCommercePanel.dataset.savePhase = 'error';
+        setStatus((hasCommittedContent ? '商品內容已儲存；其餘變更保留待重試：' : '儲存失敗：') + (error instanceof Error ? error.message : String(error)));
+      } finally {
+        state.saving = false; saveBtn.disabled = false; saveBtn.removeAttribute('aria-busy'); saveBtn.removeAttribute('data-saving');
+        [formRoot, productCommercePanel, entryList, modelTabs].forEach((element) => { element.inert = false; });
+        [newBtn, refreshBtn, simpleModeToggle].forEach((button) => { button.disabled = false; });
+      }
+    }
+
     async function save() {
+      if (state.model === 'product' && !isProductSortMode()) return saveAllProductChanges();
       if (state.saving) return;
       state.saving = true;
       saveBtn.setAttribute('data-saving', '1');
@@ -2415,13 +3190,32 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       }
     }
 
+    const searchToggle = document.getElementById('searchToggle');
+    const searchFilters = searchInput.closest('.listpane__filters');
+    const setSearchExpanded = (expanded) => {
+      searchFilters.classList.toggle('is-search-open', expanded);
+      searchToggle.setAttribute('aria-expanded', String(expanded));
+      searchToggle.setAttribute('aria-label', expanded ? '收合搜尋' : searchInput.value ? '展開搜尋，已套用搜尋條件' : '展開搜尋');
+      searchToggle.innerHTML = expanded ? '<i class="fa-solid fa-xmark" aria-hidden="true"></i>' : '<i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>';
+      if (expanded) searchInput.focus(); else searchToggle.focus();
+    };
+    searchToggle.addEventListener('click', () => setSearchExpanded(searchToggle.getAttribute('aria-expanded') !== 'true'));
+    searchInput.addEventListener('keydown', (event) => { if (event.key === 'Escape' && searchFilters.classList.contains('is-search-open')) { event.preventDefault(); setSearchExpanded(false); } });
+    searchInput.addEventListener('input', () => { searchToggle.classList.toggle('has-query', Boolean(searchInput.value.trim())); });
     searchInput.addEventListener('input', () => {
       if (isProductSortMode()) return;
       drawList();
     });
     categoryFilter.addEventListener('change', drawList);
+    editCategoriesBtn.addEventListener('click', () => {
+      if (!confirmDiscardIfDirty()) return;
+      void switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
+    });
+    productListSort.addEventListener('change', drawList);
+    productStatusFilter.addEventListener('change', drawList);
     const simpleModeLabel = simpleModeToggle.querySelector('.action-btn__label');
     simpleModeToggle.onclick = () => {
+      if (state.model === 'product' && state.dirty) { setStatus('請先儲存變更，再切換編輯模式'); return; }
       state.simpleMode = !state.simpleMode;
       simpleModeToggle.classList.toggle('is-on', state.simpleMode);
       simpleModeToggle.classList.toggle('is-off', !state.simpleMode);
@@ -2434,6 +3228,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     };
     refreshBtn.onclick = () => void refreshCurrentView().catch((e) => setStatus(`載入失敗：${e.message}`));
     newBtn.onclick = () => {
+      if (!confirmDiscardIfDirty()) return;
       if (isCategorySortMode()) {
         openCategoryModal('create');
         return;
@@ -2485,26 +3280,11 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     catModalSlug.addEventListener('input', () => {
       catModalState.manualSlug = true;
     });
-    mobileSanityMenuBtn.addEventListener('click', () => {
-      if (root.dataset.mobilePanel === 'home') return;
-      if (!confirmDiscardIfDirty()) return;
-      state.dirty = false;
-      setMobilePanel('home');
-    });
-    mobileHub.addEventListener('click', (ev) => {
-      const t = ev.target;
-      if (!(t instanceof Element)) return;
-      const row = t.closest('[data-hub]');
-      if (!(row instanceof HTMLButtonElement)) return;
-      const key = row.dataset.hub ?? '';
-      if (!key) return;
-      void hubAction(key);
-    });
     window.addEventListener('resize', () => {
       if (!isMobileNarrow()) setMobilePanel('editor');
       else {
         const p = root.dataset.mobilePanel;
-        if (p !== 'home' && p !== 'list' && p !== 'editor') setMobilePanel('home');
+        if (p !== 'list' && p !== 'editor') setMobilePanel('list');
       }
     });
     saveBtn.onclick = () => save().catch((e) => setStatus(`儲存失敗：${e instanceof Error ? e.message : String(e)}`));
@@ -2546,9 +3326,19 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     if (simpleModeLabel) simpleModeLabel.textContent = '簡易';
     drawTabs();
     const narrow = isMobileNarrow();
-    if (narrow) setMobilePanel('home');
+    if (narrow) setMobilePanel('list');
     else setMobilePanel('editor');
-    switchModel('promotion', narrow ? { mobilePanel: 'home' } : {})
+    const initialParams = new URLSearchParams(window.location.search);
+    const requestedModel = initialParams.get('model');
+    const initialModel = requestedModel === 'product' || requestedModel === 'category' || requestedModel === 'promotion'
+      ? requestedModel
+      : 'product';
+    const initialProductSlug = initialParams.get('product') ?? '';
+    const initialOptions = {
+      ...(narrow ? { mobilePanel: 'list' } : {}),
+      ...(initialModel === 'product' && initialProductSlug ? { selectEntrySlug: initialProductSlug } : {})
+    };
+    switchModel(initialModel, initialOptions)
       .catch((e) => setStatus(`初始化失敗：${e.message}`));
     imgPreviewBackdrop.addEventListener('click', closePreview);
     imgPreviewClose.addEventListener('click', closePreview);
@@ -2572,7 +3362,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       console.error('[admin-dashboard:init]', error);
     }
   </script>
-</Layout>
+</AdminLayout>
 
 <style is:global>
   .line-float { display: none !important; }
@@ -2630,8 +3420,8 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     --tb-ink: #2a3148;
     --tb-border: #e8ecf4;
     --tb-surface: #fafbff;
-    position: sticky;
-    top: 0;
+    position: relative;
+    top: auto;
     z-index: 50;
     align-self: start;
     display: flex;
@@ -3194,6 +3984,25 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     gap: 10px;
     min-width: 0;
   }
+  .category-edit-entry {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 0 12px;
+    border: 1px solid #b9dcd6;
+    border-radius: 10px;
+    background: #f1f9f7;
+    color: #087e78;
+    font: inherit;
+    font-size: .82rem;
+    font-weight: 800;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .category-edit-entry:hover { border-color: #087e78; background: #e5f4f1; }
   .search--category {
     flex: 0 1 155px;
     min-width: 0;
@@ -3541,6 +4350,54 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     color: #5b21b6;
     box-shadow: 0 2px 10px rgba(139, 92, 246, 0.12);
   }
+  .badge--status {
+    gap: 4px;
+    border: 1px solid transparent;
+    box-shadow: none;
+  }
+  .badge--status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge--status.is-enabled {
+    border-color: #a7dcc7;
+    background: #e9f8f2;
+    color: #08745c;
+  }
+  .badge--status.is-disabled {
+    border-color: #f0c6b3;
+    background: #fff2eb;
+    color: #b34c20;
+  }
+  .badge--sale-status {
+    border: 1px solid transparent;
+    box-shadow: none;
+  }
+  .badge--sale-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .badge--sale-status.is-selling {
+    border-color: #a7dcc7;
+    background: #e9f8f2;
+    color: #08745c;
+  }
+  .badge--sale-status.is-stopped {
+    border-color: #efb6ae;
+    background: #fff0ee;
+    color: #bb3d32;
+  }
+  .badge--sale-status.is-unknown {
+    border-color: #d7e1e2;
+    background: #f2f6f6;
+    color: #687d80;
+  }
 
   .item--enabled:not(.is-active) {
     border-color: rgba(16, 185, 129, 0.35);
@@ -3728,6 +4585,102 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
     min-height: calc(110px * 1.1);
   }
   .slug-card input[readonly] { background: #f1f5f9; color: #334155; font-weight: 700; letter-spacing: .08em; }
+  .product-commerce-panel {
+    margin-top: 12px;
+    padding: 14px;
+    border: 1px solid rgba(13, 148, 136, 0.25);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgba(240, 253, 250, 0.9), rgba(255, 255, 255, 0.98));
+    box-shadow: 0 8px 24px rgba(15, 118, 110, 0.06);
+  }
+  .product-commerce-panel[hidden] { display: none; }
+  .product-commerce-panel__head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid #dce9e6; }
+  .product-commerce-panel__head h3 { margin: 0; color: #134e4a; font-size: 1.08rem; letter-spacing: .01em; }
+  .product-commerce-panel__head p { margin: 4px 0 0; color: #64748b; font-size: .76rem; line-height: 1.5; }
+  .product-commerce-sku-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 16px 0 10px; }
+  .product-commerce-sku-heading h4 { margin: 0; color: #134e4a; font-size: .98rem; }
+  .product-commerce-sku-heading p { margin: 0; color: #647779; font-size: .74rem; }
+  .product-commerce-bulk { display: grid; grid-template-columns: minmax(90px, .5fr) repeat(3, minmax(135px, 1fr)) auto; align-items: end; gap: 10px; margin-bottom: 10px; padding: 12px; border: 1px solid #dce9e6; border-radius: 10px; background: #f6f9f8; }
+  .product-commerce-bulk > strong { align-self: center; color: #245b56; font-size: .84rem; }
+  .product-commerce-bulk label { display: grid; gap: 5px; color: #536a6d; font-size: .72rem; font-weight: 800; }
+  .product-commerce-bulk input { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #cadbd7; border-radius: 8px; background: #fff; color: #183d3b; font: inherit; }
+  .product-commerce-bulk__hint { grid-column: 2 / -2; color: #7b8c89; font-size: .68rem; line-height: 1.4; }
+  .product-commerce-bulk button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; background: #e76f2e; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+  .product-commerce-bulk button[data-error='true'] { background: #b42318; }
+  .product-commerce-bulk__feedback { grid-column: 2 / -1; min-height: 1em; color: #b42318; font-size: .72rem; }
+  .product-commerce-list { display: grid; gap: 8px; }
+  .product-commerce-sku { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(205px, 1.15fr) minmax(155px, auto); align-items: end; gap: 14px; padding: 16px; border: 1px solid #dce9e6; border-radius: 12px; background: #fff; }
+  .product-commerce-sku__identity { grid-column: 1 / -1; align-self: center; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; padding-bottom: 10px; border-bottom: 1px solid #edf2f1; }
+  .product-commerce-sku__identity strong { overflow: hidden; max-width: 100%; color: #233f42; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
+  .product-commerce-availability { display: inline-flex; padding: 3px 7px; border-radius: 999px; background: #e9f7f1; color: #28745b; font-size: .62rem; font-weight: 800; }
+  .product-commerce-availability.is-disabled { background: #fff0ee; color: #b44d43; }
+  .product-commerce-sku > label { display: grid; gap: 7px; color: #536a6d; font-size: .84rem; font-weight: 800; }
+  .product-commerce-sku > label small { color: #829294; font-size: .7rem; font-weight: 550; }
+  .product-commerce-sku input[type='number'] { width: 100%; min-width: 0; height: 46px; box-sizing: border-box; padding: 0 12px; border: 1px solid #cadbd7; border-radius: 9px; background: #fff; color: #183d3b; font: inherit; font-size: 1rem; }
+  .product-commerce-sale-options { display: inline-flex; align-items: center; justify-content: stretch; gap: 5px; width: 100%; min-width: 0; box-sizing: border-box; margin: 0; padding: 4px; border: 1px solid #cadbd7; border-radius: 9px; background: #f3f8f7; }
+  .product-commerce-sale-options label { position: relative; display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; min-height: 36px; padding: 0 8px; border-radius: 6px; color: #617779; font-size: .8rem; font-weight: 800; white-space: nowrap; cursor: pointer; }
+  .product-commerce-sale-options input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .product-commerce-sale-options label:has(input:checked) { background: #fff; color: #0f766e; box-shadow: 0 1px 5px rgba(15, 118, 110, .16); }
+  .product-commerce-sale-options label:has(input[value='stop']:checked) { color: #b5472a; }
+  .product-commerce-sale-options label:focus-within { outline: 2px solid rgba(15, 118, 110, .28); outline-offset: 1px; }
+  .product-commerce-sku__controls { align-self: end; display: grid; width: 100%; gap: 4px; }
+  .product-commerce-sku__controls button,
+  .product-commerce-state button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 46px; padding: 0 13px; border: 0; border-radius: 9px; background: #0f766e; color: #fff; font: inherit; font-size: .84rem; font-weight: 800; cursor: pointer; }
+  .product-commerce-sku__controls button:disabled,
+  .product-commerce-state button:disabled { opacity: .6; cursor: wait; }
+  .product-commerce-sku__controls button:disabled { cursor: default; }
+  .product-commerce-sku__controls button.is-dirty {
+    background: #e76f2e;
+    color: #fff;
+    box-shadow: 0 0 0 3px rgba(231, 111, 46, .18), 0 7px 18px rgba(187, 75, 24, .24);
+    animation: commerce-save-pulse 1.8s ease-in-out infinite;
+  }
+  .product-commerce-sku__controls button.is-dirty:hover { background: #c9541d; }
+  @keyframes commerce-save-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(231, 111, 46, .14), 0 7px 18px rgba(187, 75, 24, .2); }
+    50% { box-shadow: 0 0 0 6px rgba(231, 111, 46, .2), 0 9px 22px rgba(187, 75, 24, .28); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .product-commerce-sku__controls button.is-dirty { animation: none; }
+  }
+  .product-commerce-feedback { color: #0f766e; font-size: .64rem; }
+  .product-commerce-feedback:empty { display: none; }
+  .product-commerce-feedback.is-error { color: #b42318; }
+  .product-variant-editor { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; border: 1px solid #cfe3df; border-radius: 12px; background: #f7fbfa; }
+  .product-variant-editor h4 { margin: 0; color: #134e4a; font-size: .98rem; }
+  .product-variant-editor > p { margin: 0; color: #647779; font-size: .78rem; line-height: 1.55; }
+  .product-variant-editor input[type='text'] { min-width: 0; width: 100%; min-height: 42px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cadbd7; border-radius: 8px; font: inherit; }
+  .product-variant-editor__names { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .product-variant-editor__names label,.product-variant-editor__value-field { display: grid; gap: 6px; color: #536a6d; font-size: .78rem; font-weight: 750; }
+  .product-variant-editor__value-field textarea { width: 100%; min-height: 66px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cadbd7; border-radius: 8px; font: inherit; font-size: .88rem; resize: vertical; }
+  .product-variant-editor__rows { display: grid; gap: 8px; }
+  .product-variant-editor__row { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding: 10px; border: 1px solid #dce9e6; border-radius: 9px; background: #fff; }
+  .product-variant-editor__combo,.product-variant-editor__count { grid-column: 1 / -1; margin: 0; color: #134e4a; font-size: .84rem; }
+  .product-variant-editor__row input[type='file'] { grid-column: 1 / -1; width: 100%; min-width: 0; font: inherit; font-size: .76rem; }
+  .product-variant-editor__preview { grid-column: 1 / -1; width: 76px; height: 76px; border-radius: 8px; object-fit: cover; border: 1px solid #dce9e6; }
+  .product-variant-editor__image-state { color: #617779; font-size: .74rem; }
+  .product-variant-editor__remove { justify-self: end; border: 0; background: transparent; color: #b5472a; font: inherit; cursor: pointer; }
+  .product-variant-editor__add,.product-variant-editor__save { min-height: 42px; padding: 0 12px; border: 1px solid #bfd9d4; border-radius: 8px; background: #fff; color: #0f766e; font: inherit; font-weight: 800; cursor: pointer; }
+  .product-variant-editor__save { border-color: #0f766e; background: #0f766e; color: #fff; }
+  .product-variant-editor__save:disabled { opacity: .6; cursor: wait; }
+  .product-specification-enabled { display: flex; align-items: center; gap: 8px; color: #134e4a; font-weight: 750; }
+  .product-variant-editor__top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .product-variant-editor__top h4 { margin: 0; color: #253f42; font-size: .95rem; }
+  .product-specification-enabled { min-height: 36px; padding: 0 10px; border: 1px solid #d6e4e1; border-radius: 8px; background: #fff; font-size: .82rem; cursor: pointer; }
+  .product-specification-enabled input { width: 16px; height: 16px; accent-color: #ee6047; }
+  .product-variant-editor__group-actions { display: flex; justify-content: flex-start; }
+  .product-variant-editor__group-actions[hidden] { display: none; }
+  .product-specification-groups { display: grid; gap: 10px; }
+  .product-specification-group { display: grid; gap: 9px; padding: 12px; border: 1px solid #dce9e6; border-radius: 10px; background: #f8fbfa; }
+  .product-specification-group__head { display: grid; grid-template-columns: minmax(0,1fr) auto auto auto; gap: 6px; }
+  .product-specification-options { display: grid; gap: 7px; }
+  .product-specification-option { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(130px,1fr) auto auto auto auto; align-items: center; gap: 6px; padding: 7px; border: 1px solid #e0eae8; border-radius: 8px; background: #fff; }
+  .product-specification-option img { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+  .product-specification-option input[type='file'] { min-width: 0; width: 100%; font-size: .72rem; }
+  .product-specification-group button,.product-specification-option button,.product-specification-groups + button { min-height: 34px; padding: 0 8px; border: 1px solid #cadbd7; border-radius: 7px; background: #fff; color: #245b56; font: inherit; font-size: .75rem; cursor: pointer; }
+  .product-specification-group button:disabled,.product-specification-option button:disabled,.product-specification-groups + button:disabled { opacity: .45; cursor: default; }
+  .product-commerce-state { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px; border: 1px dashed #b9d7d1; border-radius: 10px; background: rgba(255, 255, 255, .75); color: #526c6d; font-size: .78rem; }
+  .product-commerce-state.is-error { border-color: #efc4bf; background: #fff7f6; color: #a43f35; }
   .product-remove-btn {
     justify-self: end;
     margin-top: 4px;
@@ -4241,7 +5194,7 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       -webkit-overflow-scrolling: touch;
       justify-content: space-between;
     }
-    .tab {
+  .tab {
       flex: 1 1 0;
       min-width: 0;
       padding: 6px 6px;
@@ -4443,7 +5396,8 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      cursor: pointer;
+    cursor: pointer;
+    text-decoration: none;
     }
     .mobile-sanity-bar__iconbtn:active {
       background: #f1f5f9;
@@ -4890,5 +5844,892 @@ const shopAdminHref = `${getAdminBasePath()}/shop`;
   .mobile-hub__row--shop {
     background: rgba(45, 212, 191, 0.12);
   }
+  @media (max-width: 1180px) {
+    .product-commerce-sku { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .product-commerce-sku__identity { grid-column: 1 / -1; }
+    .product-commerce-sku__controls { grid-column: 1 / -1; }
+    .product-commerce-bulk { grid-template-columns: minmax(80px, .45fr) repeat(3, minmax(110px, 1fr)) auto; }
+  }
+  @media (max-width: 640px) {
+    .product-commerce-panel { margin-inline: -4px; padding: 10px; border-radius: 12px; }
+    .product-commerce-panel__head { margin-bottom: 12px; }
+    .product-commerce-sku-heading { display: grid; gap: 4px; }
+    .product-commerce-bulk { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .product-commerce-bulk > strong { grid-column: 1 / -1; }
+    .product-commerce-bulk button { min-height: 44px; }
+    .product-commerce-bulk__feedback { grid-column: 1 / -1; }
+    .product-commerce-list { gap: 12px; }
+    .product-commerce-sku { grid-template-columns: 1fr; gap: 12px; padding: 14px; border-radius: 12px; }
+    .product-commerce-sku__identity,
+    .product-commerce-sku__controls { grid-column: auto; }
+    .product-commerce-sku__identity { grid-template-columns: minmax(0, 1fr) auto; align-items: center; justify-items: stretch; }
+    .product-commerce-sku__identity strong { font-size: 1rem; white-space: normal; }
+    .product-commerce-availability { justify-self: end; font-size: .72rem; padding: 4px 8px; }
+    .product-commerce-sku > label { gap: 7px; font-size: .8rem; }
+    .product-commerce-sku input[type='number'] { height: 46px; font-size: 1rem; }
+    .product-commerce-sale-options { display: grid; grid-template-columns: 1fr 1fr; min-height: 46px; }
+    .product-commerce-sale-options label { min-height: 40px; font-size: .82rem; }
+    .product-commerce-sku__controls button { min-height: 48px; font-size: .86rem; }
+    .product-commerce-feedback { font-size: .75rem; }
+    .product-commerce-state { align-items: stretch; flex-direction: column; }
+    .product-variant-editor { padding: 11px; }
+    .product-variant-editor__names { grid-template-columns: 1fr; }
+    .product-variant-editor__row { grid-template-columns: 1fr; }
+    .product-variant-editor__row input[type='file'] { grid-column: auto; }
+    .product-specification-group__head { grid-template-columns: minmax(0,1fr) auto auto; }
+    .product-specification-group__head input { grid-column: 1 / -1; }
+    .product-specification-option { grid-template-columns: minmax(0,1fr) auto auto auto; }
+    .product-specification-option input[type='file'] { grid-column: 1 / -1; }
+  }
 
+  /* 官網內容編輯器整合進電商後台：沿用共用的青綠色、卡片與按鈕語彙。 */
+  body:has(.commerce-admin) .adminx {
+    width: 100%;
+    max-width: 1500px;
+    margin: 0 auto;
+    gap: 16px;
+  }
+  .product-admin-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 18px;
+  }
+  .product-admin-heading h1 { margin: 0; }
+  .product-admin-heading .lead { max-width: 720px; }
+  .product-admin-heading__status { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .product-admin-current {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid #d4e9e4;
+    border-radius: 999px;
+    background: var(--commerce-primary-soft);
+    color: var(--commerce-primary-dark);
+    font-size: 12px;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+  .product-admin-menu-btn { display: none; }
+  .product-admin-heading #titleStatus { display: none; }
+  .product-admin-heading #titleStatusDesktop {
+    display: inline-flex;
+    max-width: 260px;
+    border-color: #dbe7e4;
+    background: #fff;
+    color: #5c7074;
+    box-shadow: none;
+  }
+  .adminx[data-dirty='true'] .product-admin-heading #titleStatusDesktop {
+    border-color: #edb7b0;
+    background: #fff5f3;
+    color: #a7443a;
+  }
+  body:has(.commerce-admin) .adminx .topbar {
+    --tb-accent: var(--commerce-primary);
+    --tb-accent-soft: #39a89f;
+    --tb-accent-deep: var(--commerce-primary-dark);
+    --tb-ink: var(--commerce-ink);
+    --tb-border: var(--commerce-line);
+    padding: 14px;
+    border-color: var(--commerce-line);
+    border-radius: 16px;
+    background: var(--commerce-paper);
+    box-shadow: var(--commerce-shadow);
+  }
+  body:has(.commerce-admin) .adminx .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body:has(.commerce-admin) .adminx .tab {
+    min-height: 44px;
+    border-color: #dfe9e7;
+    border-radius: 10px;
+    background: #f8fbfa;
+    color: #607579;
+    box-shadow: none;
+  }
+  body:has(.commerce-admin) .adminx .tab:hover {
+    border-color: #b9dcd6;
+    background: #f1f9f7;
+    color: var(--commerce-primary-dark);
+    box-shadow: none;
+  }
+  body:has(.commerce-admin) .adminx .tab.is-active {
+    border-color: #b7dcd5;
+    background: var(--commerce-primary-soft);
+    color: var(--commerce-primary-dark);
+    box-shadow: inset 0 0 0 1px rgba(8, 126, 120, .04);
+  }
+  body:has(.commerce-admin) .adminx .actions .action-btn--solid,
+  body:has(.commerce-admin) .adminx .actions .mode-btn {
+    min-height: 40px;
+    border-color: #d6e5e2;
+    border-radius: 9px;
+    background: #f7faf9;
+    color: #49666a;
+    box-shadow: none;
+  }
+  body:has(.commerce-admin) .adminx .actions .action-btn--solid:hover,
+  body:has(.commerce-admin) .adminx .actions .mode-btn:hover {
+    border-color: #b9dcd6;
+    background: var(--commerce-primary-soft);
+    color: var(--commerce-primary-dark);
+    box-shadow: none;
+    transform: translateY(-1px);
+  }
+  body:has(.commerce-admin) .adminx .actions #saveBtn {
+    border-color: var(--commerce-primary);
+    background: var(--commerce-primary);
+    color: #fff;
+  }
+  body:has(.commerce-admin) .adminx .actions #saveBtn:hover {
+    border-color: var(--commerce-primary-dark);
+    background: var(--commerce-primary-dark);
+    color: #fff;
+  }
+  body:has(.commerce-admin) .adminx .workspace { gap: 14px; }
+  body:has(.commerce-admin) .adminx .listpane,
+  body:has(.commerce-admin) .adminx .formpane {
+    border-color: var(--commerce-line);
+    border-radius: 16px;
+    background: var(--commerce-paper);
+    box-shadow: var(--commerce-shadow);
+  }
+  body:has(.commerce-admin) .adminx .search {
+    border-color: #dce6e3;
+    border-radius: 9px;
+    background: #fff;
+    color: var(--commerce-ink);
+  }
+  body:has(.commerce-admin) .adminx .search:focus {
+    border-color: var(--commerce-primary);
+    outline: 3px solid rgba(8, 126, 120, .1);
+  }
+  body:has(.commerce-admin) .adminx .item,
+  body:has(.commerce-admin) .adminx .cat-manage-row {
+    border-color: #e0e9e7;
+    background: #fff;
+    color: #41575e;
+    box-shadow: none;
+  }
+  body:has(.commerce-admin) .adminx .item:hover,
+  body:has(.commerce-admin) .adminx .cat-manage-row:hover {
+    border-color: #b9dcd6;
+    background: #f8fcfb;
+  }
+  body:has(.commerce-admin) .adminx .item.is-active {
+    border-color: var(--commerce-primary);
+    background: var(--commerce-primary-soft);
+    color: var(--commerce-primary-dark);
+    box-shadow: inset 3px 0 0 var(--commerce-primary);
+  }
+  body:has(.commerce-admin) .adminx .formpane__section-title { color: var(--commerce-primary-dark); }
+  body:has(.commerce-admin) .adminx[data-model="product"] #sectionLabelForm { font-size:1.25rem; line-height:1.4; font-weight:800; overflow-wrap:anywhere; }
+  body:has(.commerce-admin) .adminx .card input,
+  body:has(.commerce-admin) .adminx .card textarea,
+  body:has(.commerce-admin) .adminx .card select {
+    border-color: #dce6e3;
+    color: var(--commerce-ink);
+  }
+  body:has(.commerce-admin) .adminx .card input:focus,
+  body:has(.commerce-admin) .adminx .card textarea:focus,
+  body:has(.commerce-admin) .adminx .card select:focus {
+    border-color: var(--commerce-primary);
+    outline: 3px solid rgba(8, 126, 120, .1);
+  }
+  body:has(.commerce-admin) .adminx .product-commerce-panel {
+    border-color: #cfe6e1;
+    background: #f7fbfa;
+    box-shadow: none;
+  }
+  @media (max-width: 860px) {
+    .product-admin-heading { align-items: start; flex-direction: column; gap: 10px; }
+    .product-admin-heading__status { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+    .product-admin-menu-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid #d4e5e1;
+      border-radius: 9px;
+      background: #fff;
+      color: var(--commerce-primary-dark);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 750;
+    }
+    .product-admin-heading #titleStatusDesktop { display: none; }
+    .product-admin-heading #titleStatus { display: inline-flex; border-color: #dbe7e4; background: #fff; color: #5c7074; box-shadow: none; }
+    body:has(.commerce-admin) .adminx .topbar { position: static; padding: 11px; }
+    body:has(.commerce-admin) .adminx .tabs {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+    body:has(.commerce-admin) .adminx .tab {
+      min-height: 44px;
+      gap: 4px;
+      padding: 6px 3px;
+      font-size: .76rem;
+    }
+    body:has(.commerce-admin) .adminx .mobile-hub {
+      overflow: hidden;
+      border: 1px solid var(--commerce-line);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: var(--commerce-shadow);
+    }
+    body:has(.commerce-admin) .adminx .mobile-hub__row--primary {
+      border-color: #cfe6e1;
+      background: var(--commerce-primary-soft);
+      color: var(--commerce-primary-dark);
+    }
+  }
+
+  /* 商品工作區：清單與編輯器自頁面頂端並排，兩側欄都能獨立收折。 */
+  body:has(.commerce-admin) .adminx .tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  body:has(.commerce-admin) .adminx .actions #newBtn {
+    border-color: #82c8bf;
+    background: var(--commerce-primary-soft);
+    color: var(--commerce-primary-dark);
+    font-weight: 800;
+    box-shadow: 0 5px 14px rgba(8, 126, 120, .12);
+  }
+  body:has(.commerce-admin) .adminx .actions #newBtn:hover {
+    border-color: var(--commerce-primary);
+    background: #d8eee9;
+  }
+  body:has(.commerce-admin) .adminx .actions #saveBtn {
+    font-weight: 800;
+    box-shadow: 0 7px 17px rgba(8, 126, 120, .22);
+  }
+  body:has(.commerce-admin) .adminx .listpane__filters {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  body:has(.commerce-admin) .adminx .category-edit-entry { min-height: 42px; }
+  body:has(.commerce-admin) .adminx .search--category,
+  body:has(.commerce-admin) .adminx .search--sort,
+  body:has(.commerce-admin) .adminx .search--status { flex: 1 1 calc(33.333% - 4px); max-width: none; width: auto; }
+  body:has(.commerce-admin) .adminx[data-product-sort-mode='1'] .search--category { flex: 1 1 auto; }
+  body:has(.commerce-admin) .adminx .search-wrap { flex: 1 1 100%; }
+  body:has(.commerce-admin) .adminx .product-commerce-panel { margin: 0 0 14px; }
+  .item__commerce {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+    color: #536d70;
+    font-size: .69rem;
+    font-weight: 800;
+    white-space: nowrap;
+  }
+  .item__commerce span + span {
+    padding-left: 7px;
+    border-left: 1px solid #d9e5e2;
+    color: var(--commerce-primary-dark);
+  }
+  .mobile-content-menu { display: none !important; }
+
+  @media (min-width: 861px) {
+    body:has(.commerce-admin) .adminx .workspace {
+      display: grid;
+      grid-template-columns: minmax(310px, 370px) minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      align-items: start;
+      gap: 14px;
+      min-height: calc(100vh - 60px);
+      overflow: visible;
+      transition: grid-template-columns .2s ease;
+    }
+    body:has(.commerce-admin) .adminx .listpane {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      position: sticky;
+      top: 16px;
+      height: calc(100vh - 32px);
+      max-height: none;
+      box-sizing: border-box;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      align-content: stretch;
+      overflow: hidden;
+    }
+    body:has(.commerce-admin) .adminx .entry-list {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      min-height: 0;
+      height: 100%;
+      max-height: none;
+      overflow: auto;
+      gap: 12px;
+      padding: 5px;
+    }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product {
+      flex: 0 0 auto;
+      box-sizing: border-box;
+      min-height: 76px;
+      gap: 14px;
+      padding: 13px 14px;
+      margin: 0;
+      border-radius: 14px;
+    }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__thumb,
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__thumb--empty {
+      width: 60px;
+      height: 50px;
+      border-radius: 11px;
+    }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__main { gap: 6px; }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__title {
+      font-size: 1.03rem;
+      line-height: 1.3;
+    }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__meta {
+      font-size: .84rem;
+      line-height: 1.35;
+    }
+    body:has(.commerce-admin) .adminx .entry-list > .item.item--product .item__commerce {
+      gap: 9px;
+      font-size: .78rem;
+      line-height: 1.3;
+    }
+    body:has(.commerce-admin) .adminx .topbar {
+      grid-column: 2;
+      grid-row: 1;
+      position: relative;
+      top: auto;
+      z-index: 7;
+    }
+    body:has(.commerce-admin) .adminx .formpane { grid-column: 2; grid-row: 2; }
+    body:has(.commerce-admin) .adminx[data-category-sort-mode='1'] .workspace,
+    body:has(.commerce-admin) .adminx[data-product-sort-mode='1'] .workspace {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto;
+    }
+    body:has(.commerce-admin) .adminx[data-category-sort-mode='1'] .topbar,
+    body:has(.commerce-admin) .adminx[data-product-sort-mode='1'] .topbar { grid-column: 1; grid-row: 1; }
+    body:has(.commerce-admin) .adminx[data-category-sort-mode='1'] .listpane,
+    body:has(.commerce-admin) .adminx[data-product-sort-mode='1'] .listpane {
+      grid-column: 1;
+      grid-row: 2;
+      position: static;
+      width: auto;
+      height: auto;
+      max-height: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    body:has(.commerce-admin) .adminx .workspace {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto;
+    }
+    body:has(.commerce-admin) .adminx .topbar { grid-column: 1; grid-row: 1; }
+    body:has(.commerce-admin) .adminx .listpane,
+    body:has(.commerce-admin) .adminx .formpane {
+      grid-column: 1;
+      grid-row: 2;
+      position: static;
+      height: auto;
+    }
+    body:has(.commerce-admin) .adminx .mobile-content-menu { display: inline-flex !important; }
+    body:has(.commerce-admin) .adminx .tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+    body:has(.commerce-admin) .adminx .tab { min-height: 44px; gap: 4px; padding: 6px 3px; font-size: .76rem; }
+    body:has(.commerce-admin) .adminx[data-model='product'] .entry-list > .item.item--product .item__main { gap: 2px; }
+    body:has(.commerce-admin) .adminx[data-model='product'] .entry-list > .item.item--product .item__title { max-width: 8em; }
+  }
+
+  /* Shopee-inspired sales information: spec groups first, then one editable SKU matrix. */
+  .product-commerce-panel { container: product-commerce / inline-size; }
+  .product-variant-editor { background: #f4f5f5; border-color: #e1e5e4; }
+  .product-specification-group { padding: 14px; background: #fff; }
+  .product-specification-group__head { grid-template-columns: auto minmax(150px, 1fr) auto auto auto; }
+  .product-specification-group__head strong { color: #496260; font-size: .8rem; white-space: nowrap; }
+  .product-specification-group__name,.product-specification-option__name { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; min-width: 0; }
+  .product-specification-group__name small,.product-specification-option__name small { color: #8b9997; font-size: .68rem; font-weight: 500; white-space: nowrap; }
+  .product-specification-option { display: grid; grid-template-columns: 32px minmax(140px, 1fr) 32px 32px auto auto; align-items: center; gap: 8px; padding: 8px; }
+  .product-specification-option__name input { min-height: 38px !important; }
+  .product-specification-option > input[type='file'] { display: none; }
+  .product-specification-option.is-text-only { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+  .product-specification-option__image { display: grid; place-items: center; width: 32px; height: 32px; overflow: hidden; padding: 0 !important; border: 1px dashed #c4d4d1 !important; border-radius: 5px !important; color: #738583 !important; font-size: .56rem !important; }
+  .product-specification-option__image img { display: block; width: 32px; height: 32px; object-fit: cover; }
+  .product-specification-option__clear { font-size: .68rem !important; }
+  .product-specification-group__count { color: #7b8c89; font-size: .72rem; }
+  .product-specification-group button.product-variant-editor__add,.product-variant-editor__add { min-height: 38px; border-style: dashed; color: #d94f36; }
+  .product-variant-editor__add:disabled { border-color: #d5dcda; color: #8b9997; }
+  .product-commerce-bulk__feedback { grid-column: 1 / -1; color: #0f766e; }
+  .product-commerce-bulk__feedback.is-error { color: #b42318; }
+  .product-image-cropper { position: fixed; z-index: 100000; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(17, 32, 31, .56); }
+  .product-image-cropper__dialog { display: grid; justify-items: center; gap: 14px; width: min(500px, 100%); max-height: min(92dvh, 760px); overflow: auto; padding: 20px; border: 1px solid #dce6e4; border-radius: 14px; background: #fff; box-shadow: 0 22px 70px rgba(0,0,0,.26); }
+  .product-image-cropper__head { display: grid; justify-self: stretch; gap: 4px; color: #253f42; }
+  .product-image-cropper__head span { color: #748482; font-size: .8rem; }
+  .product-image-cropper__canvas { width: min(360px, 76vw); height: auto; aspect-ratio: 1; border: 1px solid #dce4e2; border-radius: 8px; touch-action: none; cursor: grab; }
+  .product-image-cropper__canvas:active { cursor: grabbing; }
+  .product-image-cropper__controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 7px; width: 100%; }
+  .product-image-cropper__controls label { display: inline-flex; align-items: center; gap: 7px; margin-right: auto; color: #536a6d; font-size: .78rem; }
+  .product-image-cropper__controls input[type='range'] { width: 110px; accent-color: #0f766e; }
+  .product-image-cropper__controls button,.product-image-cropper__foot button { min-height: 36px; padding: 0 10px; border: 1px solid #d4e0de; border-radius: 7px; background: #fff; color: #375553; font: inherit; font-size: .76rem; cursor: pointer; }
+  .product-image-cropper__foot { display: flex; justify-content: flex-end; gap: 8px; width: 100%; padding-top: 8px; border-top: 1px solid #edf1f0; }
+  .product-image-cropper__foot button:not(.is-secondary) { border-color: #0f766e; background: #0f766e; color: #fff; font-weight: 750; }
+  .product-image-cropper__dialog.is-preview .product-image-cropper__canvas { width: min(420px, 80vw); }
+  .product-commerce-sku-heading { align-items: start; }
+  .product-commerce-sku-heading h4 { font-size: 1rem; }
+  .product-commerce-sku-heading p { max-width: 36em; line-height: 1.45; }
+  .product-commerce-table__head { display: none; }
+  .product-commerce-sku { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center; }
+  .product-commerce-sku__identity { grid-column: 1 / -1; }
+  .product-commerce-sku__controls { grid-column: 1 / -1; }
+  .product-variant-editor { background: #f5f6f6; border-color: #e2e6e5; }
+  .product-specification-group { background: #fff; }
+  .product-specification-group__head { grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; }
+  .product-specification-group__head strong { color: #496260; font-size: .78rem; white-space: nowrap; }
+  .product-specification-option { display: flex; flex-wrap: wrap; }
+  .product-specification-option > img { flex: 0 0 40px; }
+  .product-specification-option > input[type='text'] { flex: 1 1 130px; }
+  .product-specification-option > button { flex: 0 0 auto; }
+  .product-specification-option input[type='file'] { display: none; }
+  .product-variant-editor__add { justify-self: start; }
+  .product-variant-editor__save { justify-self: start; min-width: 150px; }
+  .product-commerce-bulk { background: #f5f6f6; }
+  .product-sales-terms { display: grid; gap: 12px; margin-top: 16px; padding: 14px; border: 1px solid #e0e6e5; border-radius: 10px; background: #fff; }
+  .product-sales-terms__minimum { display: grid; grid-template-columns: minmax(170px, .7fr) minmax(180px, 1fr); gap: 8px 14px; align-items: center; }
+  .product-sales-terms__minimum > span { color: #364e50; font-size: .84rem; font-weight: 800; }
+  .product-sales-terms__minimum > span b { color: #e45d45; }
+  .product-sales-terms__minimum input,.product-price-tiers__row input { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 10px; border: 1px solid #d5dfdd; border-radius: 7px; color: #183d3b; font: inherit; }
+  .product-sales-terms__minimum small { grid-column: 2; color: #829294; font-size: .72rem; line-height: 1.5; }
+  .product-price-tiers__heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 3px; }
+  .product-price-tiers__heading strong { color: #364e50; font-size: .84rem; }
+  .product-price-tiers__heading button,.product-price-tiers__remove { min-height: 34px; padding: 0 10px; border: 1px dashed #c4d4d1; border-radius: 6px; background: #fff; color: #d94f36; font: inherit; font-size: .76rem; cursor: pointer; }
+  .product-price-tiers__heading button:disabled { opacity: .45; cursor: default; }
+  .product-price-tiers { overflow: auto; border: 1px solid #dce4e2; border-radius: 8px; }
+  .product-price-tiers__row { display: grid; grid-template-columns: minmax(100px, .8fr) minmax(110px, 1.1fr) minmax(110px, 1.1fr) minmax(130px, 1.25fr) 64px; gap: 8px; align-items: center; min-width: 620px; padding: 8px 10px; border-bottom: 1px solid #e9eeed; }
+  .product-price-tiers__row:last-child { border-bottom: 0; }
+  .product-price-tiers__row.is-head { background: #f3f5f5; color: #596b6b; font-size: .72rem; }
+  .product-price-tiers__row > span { color: #375355; font-size: .76rem; }
+  .product-price-tiers__price { display: flex; align-items: center; gap: 6px; padding-left: 8px; border: 1px solid #d5dfdd; border-radius: 7px; color: #788887; font-size: .72rem; }
+  .product-price-tiers__price input { border: 0; padding-left: 0; }
+  .product-price-tiers__remove { min-height: 32px; border-style: solid; color: #8a5750; }
+  .product-price-tiers__hint { color: #829294; font-size: .72rem; line-height: 1.5; }
+  .product-sales-terms__actions { display: flex; align-items: center; gap: 10px; }
+  .product-sales-terms__actions button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 7px; background: #0f766e; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+  .product-sales-terms__actions button:disabled { opacity: .6; cursor: wait; }
+  @container product-commerce (min-width: 660px) {
+    .product-commerce-table { overflow-x: auto; border: 1px solid #dce4e2; border-radius: 9px; background: #fff; }
+    .product-commerce-table__head,
+    .product-commerce-sku { min-width: 1160px; grid-template-columns: minmax(150px, 1.2fr) minmax(100px, .72fr) minmax(95px, .68fr) minmax(130px, .95fr) minmax(120px, .82fr) minmax(90px, .6fr) minmax(145px, 1fr) minmax(115px, .82fr); gap: 9px; }
+    .product-commerce-table__head { display: grid; align-items: center; padding: 11px 12px; border-bottom: 1px solid #dce4e2; background: #f1f3f3; color: #526562; font-size: .76rem; font-weight: 800; }
+    .product-commerce-table__head > :first-child { position: sticky; left: 0; z-index: 3; padding: 8px 6px; background: #f1f3f3; }
+    .product-commerce-list { gap: 0; }
+    .product-commerce-sku { align-items: center; padding: 10px 12px; border: 0; border-radius: 0; border-bottom: 1px solid #e9eeed; }
+    .product-commerce-sku:last-child { border-bottom: 0; }
+    .product-commerce-sku__identity { grid-column: auto; display: grid; justify-content: stretch; gap: 6px; padding: 0; border: 0; }
+    .product-commerce-sku__identity { position: sticky; left: 0; z-index: 2; min-height: 54px; padding: 6px; background: #fff; }
+    .product-commerce-sku__identity strong { white-space: normal; overflow-wrap: anywhere; font-size: .88rem; }
+    .product-commerce-sku > label { gap: 4px; font-size: .72rem; }
+    .product-commerce-sku > label > span:first-child { display: none; }
+    .product-commerce-sku input[type='number'] { height: 40px; padding-inline: 8px; font-size: .9rem; }
+    .product-commerce-sku input[type='text'] { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 8px; border: 1px solid #cadbd7; border-radius: 8px; font: inherit; font-size: .82rem; }
+    .product-commerce-sale-options { padding: 2px; }
+    .product-commerce-sale-options label { min-height: 32px; padding-inline: 4px; font-size: .7rem; }
+    .product-commerce-sku__controls { grid-column: auto; }
+    .product-commerce-sku__controls button { min-height: 40px; padding-inline: 8px; font-size: .74rem; }
+  }
+  @media (max-width: 640px) {
+    .product-specification-group__head { grid-template-columns: minmax(0,1fr) auto auto auto; }
+    .product-specification-group__head strong { grid-column: 1 / -1; }
+    .product-specification-group__name { grid-column: 1 / -1; }
+    .product-specification-group__name small { justify-self: end; }
+    .product-specification-option { grid-template-columns: 32px minmax(0, 1fr) 30px 30px auto; gap: 5px; padding: 6px; }
+    .product-specification-option__name { grid-template-columns: minmax(0,1fr); gap: 1px; }
+    .product-specification-option__name small { justify-self: end; }
+    .product-specification-option__clear { grid-column: 2 / -1; justify-self: start; }
+    .product-specification-option { gap: 5px; }
+    .product-specification-option > input[type='text'] { flex-basis: calc(100% - 55px); }
+    .product-specification-option > button { min-height: 32px; padding-inline: 6px; font-size: .68rem; }
+    .product-commerce-bulk { grid-template-columns: 1fr 1fr; }
+    .product-commerce-bulk__hint { grid-column: 1 / -1; }
+    .product-sales-terms { padding: 10px; }
+    .product-sales-terms__minimum { grid-template-columns: 1fr; }
+    .product-sales-terms__minimum small { grid-column: auto; }
+    .product-sales-terms__actions { align-items: stretch; flex-direction: column; }
+    .product-price-tiers__heading { align-items: center; flex-direction: row; }
+  }
+
+  /* Compact sales editor for narrow screens and installed PWA windows. */
+  .product-commerce-panel { padding: 10px; background: #fff; box-shadow: none; }
+  .product-commerce-panel [hidden] { display: none !important; }
+  .product-commerce-panel__head { margin-bottom: 8px; padding-bottom: 8px; }
+  .product-commerce-panel__head h3 { font-size: 1rem; }
+  .product-variant-editor { gap: 6px; margin-bottom: 10px; padding: 8px; border-radius: 9px; }
+  .product-variant-editor > p { font-size: .7rem; }
+  .product-specification-enabled { min-height: 36px; padding-inline: 8px; }
+  .product-specification-groups { gap: 6px; }
+  .product-specification-group { gap: 6px; padding: 8px; border-radius: 8px; }
+  .product-specification-group__head { display: grid; grid-template-columns: auto minmax(0,1fr) repeat(3, 36px); gap: 4px; }
+  .product-specification-group__head strong,.product-specification-group__name { grid-column: auto; }
+  .product-specification-group__head button { padding: 0; font-size: 1rem; }
+  .product-specification-group__name,.product-specification-option__name { position: relative; display: block; min-width: 0; }
+  .product-specification-group__name small,.product-specification-option__name small { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); visibility: hidden; pointer-events: none; background: #fff; }
+  .product-specification-group__name:focus-within small,.product-specification-option__name:focus-within small { visibility: visible; }
+  .product-specification-group__name:focus-within input,.product-specification-option__name:focus-within input { padding-right: 50px; }
+  .product-specification-options { gap: 4px; }
+  .product-specification-option { position: relative; display: grid; grid-template-columns: 36px minmax(0,1fr) repeat(3,36px); gap: 4px; padding: 2px; border: 0; background: transparent; }
+  .product-specification-option > button { padding-inline: 0; }
+  .product-specification-option__clear { grid-column: 2 / -1; justify-self: start; padding-inline: 7px !important; }
+  .product-specification-group__footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .product-specification-group button.product-variant-editor__add { min-height: 34px; }
+  .product-variant-editor__add,.product-variant-editor__save { min-height: 38px; font-size: .8rem; }
+  .product-variant-editor__save { min-width: 110px; }
+  .product-commerce-sku-heading { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; }
+  .product-commerce-sku-heading h4 { font-size: .9rem; }
+  .product-commerce-sku-heading p { font-size: .68rem; }
+  .product-commerce-bulk-disclosure,.product-sales-terms { display: block; margin: 8px 0; padding: 0; border: 1px solid #dce6e3; border-radius: 8px; background: #fff; }
+  .product-commerce-bulk-disclosure > summary,.product-sales-terms > summary,.product-commerce-sku__extra > summary { min-height: 40px; box-sizing: border-box; padding: 10px; color: #375553; font-size: .78rem; font-weight: 700; cursor: pointer; }
+  .product-sales-terms > summary small { margin-left: 8px; color: #0f766e; font-weight: 500; }
+  .product-commerce-bulk { grid-template-columns: repeat(3,minmax(0,1fr)) auto; gap: 8px; margin: 0; padding: 8px; border: 0; border-top: 1px solid #e6edeb; border-radius: 0 0 8px 8px; }
+  .product-commerce-bulk > strong { display: none; }
+  .product-commerce-bulk__hint { grid-column: 1 / -1; grid-row: 2; }
+  .product-commerce-bulk > button { grid-column: 4; grid-row: 1; background: #0f766e; }
+  .product-commerce-bulk__feedback:empty { display: none; }
+  .product-sales-terms__content { display: grid; gap: 10px; padding: 8px; border-top: 1px solid #e6edeb; }
+  .product-sales-terms__minimum { grid-template-columns: 1fr 100px; gap: 6px 8px; }
+  .product-sales-terms__minimum small { grid-column: 1 / -1; }
+  .product-sales-terms__actions { flex-direction: row; align-items: center; }
+  .product-commerce-sku__extra { min-width: 0; }
+  .product-commerce-sku__extra > summary { padding: 8px 4px; font-size: .72rem; }
+  .product-commerce-sku__extra-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; padding: 6px 0; }
+  .product-commerce-sku__extra-fields label { display: grid; gap: 4px; min-width: 0; color: #617779; font-size: .72rem; }
+  .product-commerce-sku__extra-fields input { width: 100%; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 8px; border: 1px solid #cadbd7; border-radius: 7px; background: #fff; color: #183d3b; font: inherit; }
+  @container product-commerce (min-width: 660px) {
+    .product-commerce-table__head,.product-commerce-sku { min-width: 740px; grid-template-columns: minmax(150px,1.4fr) minmax(90px,1fr) minmax(90px,1fr) 120px 90px 90px; gap: 8px; }
+    .product-commerce-sku { padding: 6px 8px; }
+    .product-commerce-sku__identity { min-height: 40px; }
+    .product-commerce-sku__extra[open] { grid-column: 1 / -1; grid-row: 2; }
+    .product-commerce-sku__controls { grid-column: 6; grid-row: 1; }
+  }
+  @container product-commerce (max-width: 659px) {
+    .product-commerce-list { gap: 6px; }
+    .product-commerce-sku { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; padding: 10px; border-radius: 9px; }
+    .product-commerce-sku__identity { position: static; grid-column: 1 / -1; padding-bottom: 6px; }
+    .product-commerce-sku__identity strong { font-size: .88rem; }
+    .product-commerce-sku > label { gap: 4px; font-size: .74rem; }
+    .product-commerce-sale-options { grid-column: 1; grid-row: 3; }
+    .product-commerce-sku__controls { grid-column: 2; grid-row: 3; }
+    .product-commerce-sku__extra { grid-column: 1 / -1; grid-row: 4; border-top: 1px solid #edf2f0; }
+    .product-commerce-sku__extra > summary { padding-block: 8px; }
+    .product-commerce-sku__extra-fields { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .product-commerce-sku__extra-fields label:first-child { grid-column: 1 / -1; }
+    .product-commerce-bulk { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .product-commerce-bulk > button { grid-column: 2; grid-row: 2; align-self: end; }
+    .product-commerce-bulk__hint { grid-row: 3; }
+    .product-specification-group__head { grid-template-columns: auto minmax(0,1fr) repeat(3,36px); }
+    .product-specification-group__head strong,.product-specification-group__name { grid-column: auto; }
+  }
+  @media (pointer: coarse), (max-width: 640px) {
+    .product-commerce-panel input[type='text'],.product-commerce-panel input[type='number'] { min-height: 44px; font-size: 16px; }
+    .product-specification-option__name input { min-height: 44px !important; }
+    .product-commerce-panel summary,.product-commerce-panel button { min-height: 44px; }
+    .product-specification-option { grid-template-columns: 44px minmax(0,1fr) repeat(3,44px); gap: 2px; }
+    .product-specification-option__image { width: 44px; height: 44px; min-height: 44px; }
+    .product-specification-option__image img { width: 32px; height: 32px; }
+    .product-specification-group__head { grid-template-columns: auto minmax(0,1fr) repeat(3,36px); }
+    .product-commerce-sale-options { min-height: 44px; }
+    .product-commerce-sale-options label { min-height: 36px; font-size: .78rem; }
+    .product-commerce-sku__controls button { min-height: 44px; font-size: .8rem; }
+    .product-commerce-panel input,.product-commerce-panel button,.product-commerce-panel summary { scroll-margin-block: 90px max(20px,env(safe-area-inset-bottom)); }
+    .product-commerce-table,.product-price-tiers { -webkit-overflow-scrolling: touch; overscroll-behavior-inline: contain; }
+  }
+  .product-variant-editor:not(.is-specification-enabled) { padding: 0; margin: 0 0 12px; border: 0; background: transparent; }
+  .product-specification-enabled:focus-within { outline: 2px solid #0f766e; outline-offset: 2px; }
+  .product-commerce-table.is-simple { min-width: 0; overflow: visible; border: 0; background: transparent; }
+  .product-commerce-table.is-simple .product-commerce-list { display: block; }
+  .product-commerce-sku.is-simple { display: grid; grid-template-columns: minmax(0,1fr); min-width: 0; gap: 12px; padding: 0; border: 0; border-radius: 0; background: transparent; }
+  .product-commerce-sku.is-simple > label { display: grid; grid-column: 1; gap: 6px; font-size: .82rem; }
+  .product-commerce-sku.is-simple > label > span:first-child { display: inline; }
+  .product-commerce-sku.is-simple .product-commerce-sku__controls { grid-column: 1; grid-row: auto; justify-self: start; width: auto; min-width: 110px; }
+  .product-commerce-sku.is-simple > .product-commerce-sku__identity { grid-column:1; grid-row:auto; }
+  .product-commerce-simple-help { color: #829294; font-size: .72rem; font-weight: 400; }
+  .product-sales-terms.is-simple { margin-top: 14px; border: 0; background: transparent; }
+  .product-sales-terms.is-simple .product-sales-terms__content { padding: 0; border: 0; }
+  .product-sales-terms.is-simple .product-sales-terms__minimum { grid-template-columns: minmax(0,1fr); }
+  .product-sales-terms.is-simple .product-sales-terms__minimum small { grid-column: 1; }
+
+  /* Specification sorting uses a dedicated touch handle; fields remain scrollable. */
+  .product-specification-group > .product-specification-group__head { grid-template-columns: auto minmax(0,1fr) 36px 36px; }
+  .product-specification-option { grid-template-columns: 36px minmax(0,1fr) 36px 36px; }
+  .product-specification-option.is-text-only { grid-template-columns: minmax(0,1fr) 36px 36px; }
+  .product-specification-group button.product-specification-drag { display:grid; place-items:center; width:36px; min-height:36px; padding:0; border:0; background:transparent; color:#829591; font-size:22px; cursor:grab; touch-action:none; user-select:none; -webkit-user-select:none; }
+  .product-specification-group button.product-specification-drag:active { cursor:grabbing; }
+  .product-specification-group button.product-specification-drag:disabled { opacity:.3; cursor:default; }
+  .product-specification-drag:focus-visible { outline:2px solid #0f766e; outline-offset:1px; }
+  .is-spec-dragging { position:relative; z-index:2; outline:2px solid #5ea8a0; background:#edf8f5; box-shadow:0 5px 16px #173f3920; opacity:.85; }
+  @media(pointer:coarse),(max-width:640px) {
+    .product-specification-group > .product-specification-group__head { grid-template-columns:auto minmax(0,1fr) 44px 44px; }
+    .product-specification-option { grid-template-columns:44px minmax(0,1fr) 44px 44px; }
+    .product-specification-option.is-text-only { grid-template-columns:minmax(0,1fr) 44px 44px; }
+    .product-specification-group button.product-specification-drag { width:44px; min-height:44px; }
+  }
+
+  .product-specification-option__media { position:relative; display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; overflow:visible; }
+  .product-specification-group button.product-specification-option__clear { position:absolute; top:-5px; right:-3px; z-index:1; display:grid; place-items:center; grid-column:auto; width:22px; height:22px; min-width:22px; min-height:22px; padding:0 !important; border:1px solid #ecd5d1 !important; border-radius:50% !important; background:#fff !important; color:#a94b40 !important; font-size:16px !important; line-height:1; box-shadow:0 1px 4px #173f391a; cursor:pointer; }
+  .product-specification-group button.product-specification-option__clear[hidden] { display:none !important; }
+  .product-specification-group button.product-specification-option__clear:hover { background:#fff1ef !important; }
+  .product-specification-option__clear:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
+  @media(pointer:coarse),(max-width:640px) {
+    .product-specification-option__media { width:44px; height:44px; }
+    .product-specification-group button.product-specification-option__clear { width:26px; height:26px; min-width:26px; min-height:26px; top:-4px; right:-3px; }
+  }
+
+  .product-save-hint { color:#738583; font-size:.72rem; }
+  .product-commerce-table .product-commerce-table__head,.product-commerce-table .product-commerce-sku:not(.is-simple) { grid-template-columns:minmax(110px,1fr) minmax(90px,1fr) minmax(80px,.8fr) minmax(90px,.8fr) minmax(110px,1fr); }
+  @media(max-width:640px) { .product-commerce-table .product-commerce-sku:not(.is-simple) { grid-template-columns:minmax(0,1fr) minmax(0,1fr); } }
+
+  body:has(.commerce-admin) .adminx .actions > #saveBtn { flex:0 0 auto; min-width:72px; width:auto; min-height:44px; }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn .action-btn__label { max-width:none; overflow:visible; white-space:nowrap; }
+
+  @media(max-width:640px) { body:has(.commerce-admin) .adminx .actions > #saveBtn { min-width:44px; width:100%; min-height:48px; padding-inline:4px; } }
+
+  /* Sale controls share the SKU heading instead of occupying their own row. */
+  .product-commerce-sku__identity { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .product-commerce-sku__identity > strong { min-width:0; flex:1 1 auto; }
+  .product-commerce-sku__identity > .product-commerce-sale-options { display:inline-flex; flex:0 0 auto; align-items:center; gap:2px; width:auto; min-width:0; min-height:32px; margin:0; padding:2px; border-radius:999px; grid-column:auto; grid-row:auto; }
+  .product-commerce-sku__identity .product-commerce-sale-options label { flex:0 0 auto; min-width:38px; min-height:26px; padding:0 6px; border-radius:999px; font-size:.68rem; line-height:1.2; }
+  .product-commerce-sku__identity .product-commerce-sale-options label:has(input[value='open']:checked) { background:#e2f3ec; color:#16785e; box-shadow:none; }
+  .product-commerce-sku__identity .product-commerce-sale-options label:has(input[value='stop']:checked) { background:#fce8e4; color:#ad4d3b; box-shadow:none; }
+  @media(min-width:641px) { .product-commerce-table .product-commerce-table__head,.product-commerce-table .product-commerce-sku:not(.is-simple) { grid-template-columns:minmax(190px,1.4fr) minmax(90px,1fr) minmax(80px,.8fr) minmax(110px,1fr); } }
+  @media(pointer:coarse),(max-width:640px) {
+    .product-commerce-sku__identity > .product-commerce-sale-options { min-height:36px; }
+    .product-commerce-sku__identity .product-commerce-sale-options label { min-height:30px; min-width:40px; }
+  }
+
+  /* Phone/PWA editor fills its available width without another card shell. */
+  @media(max-width:860px) {
+    body:has(.commerce-admin) .adminx[data-model='product'] .formpane {
+      min-width:0; width:100%; box-sizing:border-box; margin:0; padding:0;
+      border:0; border-radius:0; background:transparent; box-shadow:none; overflow:visible;
+    }
+    .adminx[data-model='product'] .formpane > .formpane__section-head {
+      margin:0 0 8px; padding:0; border:0; border-radius:0; background:transparent; box-shadow:none;
+    }
+    .adminx[data-model='product'] .formpane__section-title {
+      background:transparent; border:0; box-shadow:none; padding:4px 0; min-height:26px; line-height:1.35;
+    }
+    .adminx[data-model='product'] .formpane > .product-commerce-panel,
+    .adminx[data-model='product'] .formpane > .form-grid { min-width:0; width:100%; box-sizing:border-box; margin-inline:0; }
+  }
+
+  /* PWA toolbar and catalog use the page width without outer card shells. */
+  @media(max-width:860px) {
+    body:has(.commerce-admin) .adminx[data-model='product'] .topbar,
+    body:has(.commerce-admin) .adminx[data-model='product'] .listpane {
+      width:100%; min-width:0; box-sizing:border-box; margin-inline:0; padding:0;
+      border:0; border-radius:0; background:transparent; box-shadow:none; overflow:visible;
+    }
+    body:has(.commerce-admin) .adminx[data-model='product'] .topbar { gap:6px; }
+    .adminx[data-model='product'] .listpane .listpane__filters,
+    .adminx[data-model='product'] .listpane .search-wrap {
+      width:100%; min-width:0; box-sizing:border-box; margin-inline:0; padding-inline:0;
+    }
+    body:has(.commerce-admin) .adminx[data-model='product'] .entry-list {
+      width:100%; min-width:0; height:auto; max-height:none; box-sizing:border-box;
+      margin-inline:0; padding:0; overflow:visible;
+    }
+    .adminx[data-model='product'] .entry-list > .item { width:100%; box-sizing:border-box; }
+  }
+
+  @media(max-width:860px) {
+    .adminx[data-model='product'] { width:100%; max-width:100%; margin-left:0; margin-right:0; }
+  }
+
+  @media(max-width:640px) {
+    .product-commerce-table .product-commerce-list { gap:6px; }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) {
+      grid-template-rows:auto auto auto; align-items:start; row-gap:4px; column-gap:8px; padding:6px 8px;
+    }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) > .product-commerce-sku__identity {
+      grid-column:1 / -1; grid-row:1; min-height:0; margin:0; padding:0 0 4px;
+    }
+    .product-commerce-table .product-commerce-sku__identity > strong { font-size:1rem; line-height:1.25; font-weight:750; }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) > label {
+      grid-row:2; display:grid; align-content:start; gap:3px; margin:0; padding:0; font-size:.84rem; line-height:1.2;
+    }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) > label > span { margin:0; padding:0; }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) input[type='number'] {
+      height:44px; min-height:44px; padding:0 10px; font-size:18px; font-weight:650; line-height:1.2;
+    }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) > .product-commerce-sku__extra {
+      grid-column:1 / -1; grid-row:3; min-height:0; margin:0; padding:2px 0 0;
+    }
+    .product-commerce-table .product-commerce-sku__extra > summary { min-height:32px; padding:5px 0; font-size:.82rem; line-height:1.35; }
+    .product-commerce-table .product-commerce-sku__extra-fields { padding:4px 0; gap:6px; }
+    .product-commerce-table .product-commerce-sku__extra-fields input { min-height:44px; font-size:16px; }
+    .product-commerce-table .product-commerce-sku__identity .product-commerce-sale-options label { font-size:.75rem; }
+  }
+
+  .product-specification-group { --spec-thumb-column:36px; }
+  .product-specification-group > .product-specification-group__head { grid-template-columns:auto minmax(0,1fr) 28px 30px; }
+  .product-specification-option { grid-template-columns:var(--spec-thumb-column) minmax(0,1fr) 28px 30px; }
+  .product-specification-option.is-text-only { grid-template-columns:minmax(0,1fr) 28px 30px; }
+  .product-specification-group button.product-specification-drag { width:28px; min-width:28px; height:30px; min-height:30px; font-size:20px; }
+  .product-specification-group button.product-specification-delete { display:grid; place-items:center; align-self:center; width:30px; min-width:30px; height:30px; min-height:30px; padding:0 !important; line-height:1; border-radius:7px; }
+  .product-specification-delete svg,.product-specification-option__clear svg { display:block; flex:none; width:16px; height:16px; pointer-events:none; }
+  @media(pointer:coarse),(max-width:640px) { .product-specification-group { --spec-thumb-column:44px; } }
+
+  /* Keep only the content-management toolbar within reach while scrolling. */
+  body:has(.commerce-admin) .adminx .workspace { overflow:visible; }
+  body:has(.commerce-admin) .adminx[data-model] .topbar {
+    position:sticky; top:env(safe-area-inset-top, 0px); z-index:40; align-self:start;
+    background:var(--commerce-canvas, #f3f7f6); overflow:visible;
+  }
+
+  body:has(.commerce-admin) .adminx .actions > #saveBtn {
+    position:relative; overflow:visible; background:#e2f1ec; border-color:#a3d0c4; color:#17695e;
+    box-shadow:0 2px 7px rgba(8,126,120,.09);
+  }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn:hover { background:#d3eae2; border-color:#78b6a7; color:#155f55; }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn > i,
+  body:has(.commerce-admin) .adminx .actions > #saveBtn .action-btn__label { color:inherit; }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty:not([data-saving='1']) {
+    background:#fff2d5; border-color:#d28a28; color:#854800;
+    outline:2px solid #e9ad55; outline-offset:1px; animation:product-unsaved-reminder 2.5s ease-in-out infinite;
+  }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty:not([data-saving='1'])::after {
+    content:'!'; position:absolute; top:-6px; right:-4px; display:grid; place-items:center; width:17px; height:17px;
+    border:2px solid #fff; border-radius:50%; background:#c85834; color:#fff; font-size:12px; font-weight:900; line-height:1;
+    box-shadow:0 1px 4px #8b471b30; pointer-events:none;
+  }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty > i::after { display:none; }
+  body:has(.commerce-admin) .adminx .actions > #saveBtn[data-saving='1'] { animation:none; outline:0; }
+  @keyframes product-unsaved-reminder { 0%,100% { box-shadow:0 0 0 0 #dc972400; } 50% { box-shadow:0 0 0 4px #dc972426; } }
+  @media(prefers-reduced-motion:reduce) { body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty { animation:none !important; } }
+
+  .product-specification-groups { gap:0; }
+  .product-specification-group {
+    --spec-thumb-column:52px; min-width:0; margin:0; padding:8px 0;
+    border:0; border-top:1px solid #d9e5e1; border-bottom:1px solid #d9e5e1;
+    border-radius:0; background:transparent; box-shadow:none;
+  }
+  .product-specification-group + .product-specification-group { border-top:0; }
+  .product-specification-group.has-option-images > .product-specification-group__head {
+    grid-template-columns:var(--spec-thumb-column) minmax(0,1fr) 28px 30px; gap:4px;
+  }
+  .product-specification-group.has-option-images > .product-specification-group__head > strong { width:100%; box-sizing:border-box; }
+  .product-specification-group .product-specification-option { padding:0; column-gap:4px; align-items:center; }
+  .product-specification-group .product-specification-option__media { width:52px; height:52px; }
+  .product-specification-group button.product-specification-option__image {
+    width:52px; height:52px; min-width:52px; min-height:52px; padding:0 !important; border-radius:7px !important;
+  }
+  .product-specification-group .product-specification-option__image img { width:100%; height:100%; object-fit:cover; }
+
+  .product-specification-group > .product-specification-group__head {
+    grid-template-columns:var(--spec-thumb-column) minmax(0,1fr) 28px 30px; gap:4px; align-items:center;
+  }
+  .product-specification-group > .product-specification-group__head > strong {
+    display:grid; place-items:center; width:100%; min-height:44px; margin:0; padding:0; box-sizing:border-box; text-align:center;
+  }
+  .product-commerce-sku__extra > summary,
+  .product-sales-terms > summary { display:flex; align-items:center; box-sizing:border-box; list-style:none; line-height:1.35; }
+  .product-commerce-sku__extra > summary::-webkit-details-marker,
+  .product-sales-terms > summary::-webkit-details-marker { display:none; }
+  .product-commerce-sku__extra > summary::before,
+  .product-sales-terms > summary::before { content:'▸'; display:inline-block; flex:none; margin-right:5px; line-height:1; transform-origin:center; }
+  .product-commerce-sku__extra[open] > summary::before,
+  .product-sales-terms[open] > summary::before { transform:rotate(90deg); }
+  .product-sales-terms > summary { min-height:36px; padding:4px 8px; }
+  .product-sales-terms > summary small { margin-left:auto; padding-left:6px; }
+  @media(max-width:640px) {
+    .product-commerce-table .product-commerce-sku:not(.is-simple) { padding-bottom:4px; }
+    .product-commerce-table .product-commerce-sku:not(.is-simple) > .product-commerce-sku__extra { padding-top:0; }
+    .product-commerce-table .product-commerce-sku__extra > summary { min-height:26px; padding:2px 0; }
+    .product-sales-terms { margin-block:6px; }
+    .product-commerce-panel .product-sales-terms > summary { min-height:36px; padding:4px 8px; }
+  }
+
+  .product-commerce-panel .product-commerce-bulk-disclosure > summary,
+  .product-commerce-panel .product-sales-terms > summary {
+    display:flex; align-items:center; box-sizing:border-box; min-height:36px;
+    padding:4px 8px; margin:0; font-size:.82rem; line-height:1.35; list-style:none;
+  }
+  .product-commerce-bulk-disclosure > summary::-webkit-details-marker { display:none; }
+  .product-commerce-bulk-disclosure > summary::before {
+    content:'▸'; display:inline-block; flex:none; margin-right:5px; line-height:1; transform-origin:center;
+  }
+  .product-commerce-bulk-disclosure[open] > summary::before { transform:rotate(90deg); }
+  .product-commerce-table .product-commerce-sku__extra > summary {
+    display:flex; align-items:center; box-sizing:border-box; min-height:28px;
+    padding:0; margin:0; line-height:1.25;
+  }
+  .product-commerce-table .product-commerce-sku:not(.is-simple) > .product-commerce-sku__extra { padding-block:0; }
+
+  body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty:not([data-saving='1'])::after {
+    content:''; top:-4px; right:-4px; width:18px; height:18px; box-sizing:border-box;
+    padding:0; margin:0; border:2px solid #fff; border-radius:50%; background-color:#c85834;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 3.4v5.4' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='8' cy='12' r='1.1' fill='white'/%3E%3C/svg%3E");
+    background-position:center; background-size:13px 13px; background-repeat:no-repeat;
+    transform-origin:center; will-change:transform;
+    animation:save-alert-enter .24s cubic-bezier(.2,.8,.3,1.2) both, save-alert-nudge 3.2s .5s ease-in-out infinite;
+  }
+  @keyframes save-alert-enter {
+    from { opacity:0; transform:scale(.6); }
+    75% { opacity:1; transform:scale(1.08); }
+    to { opacity:1; transform:scale(1); }
+  }
+  @keyframes save-alert-nudge {
+    0%,78%,100% { transform:scale(1); }
+    86% { transform:scale(1.12); }
+    93% { transform:scale(.98); }
+  }
+  @media(prefers-reduced-motion:reduce) {
+    body:has(.commerce-admin) .adminx .actions > #saveBtn.is-dirty::after { animation:none !important; }
+  }
+
+  .product-commerce-panel__head { justify-content:space-between; gap:8px; }
+  .product-commerce-panel__head > div:first-child { flex:none; }
+  .product-commerce-panel__head > .product-variant-editor__top { flex:1; justify-content:flex-end; gap:8px; min-width:0; }
+  .product-commerce-panel__head > .product-variant-editor__top > h4 { display:none; }
+  .product-variant-editor__top > .product-commerce-simple-sale { position:static; display:flex; flex:none; align-items:center; justify-content:flex-start; gap:0; min-height:36px; margin:0; padding:0; border:0; background:transparent; }
+  .product-commerce-panel__head .product-specification-enabled { flex:none; white-space:nowrap; }
+  .product-variant-editor:not(.is-specification-enabled) { margin:0; padding:0; border:0; gap:0; }
+  .product-commerce-panel > .product-sales-terms.is-simple:last-child { margin-bottom:0; padding-bottom:0; }
+  .product-sales-terms.is-simple .product-sales-terms__content { gap:8px; padding-bottom:0; }
+  .product-commerce-panel:has(> .product-sales-terms.is-simple) { padding-bottom:6px; }
+
+  /* Catalog cards: full-height image and three aligned information rows. */
+  .adminx[data-model='product'] #entryList > .item.item--catalog { display:grid; grid-template-columns:68px minmax(0,1fr); align-items:center; gap:10px; width:100%; min-width:0; min-height:94px; padding:10px; box-sizing:border-box; text-align:left; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__thumbWrap { display:block; align-self:center; width:68px; height:68px; margin:0; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__thumb { display:block; width:100%; height:100%; box-sizing:border-box; object-fit:cover; border-radius:10px; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__main { display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:22px 22px 22px; gap:3px; min-width:0; width:100%; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__row1 { display:block; min-width:0; margin:0; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog.is-active .item__row1 { padding-right:48px; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__title { display:block; width:100%; max-width:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1rem; font-weight:750; line-height:22px; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__meta { display:flex; align-items:center; flex-wrap:nowrap; justify-content:space-between; gap:6px; min-width:0; overflow:hidden; font-size:.75rem; line-height:22px; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__metaCategory { flex:1 1 40px; min-width:0; color:#527775; font-weight:600; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__metaTags { display:flex; flex:0 1 auto; flex-wrap:nowrap; gap:4px; min-width:0; overflow:hidden; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .badge { min-height:20px; box-sizing:border-box; padding:1px 6px; font-size:.65rem; font-weight:650; line-height:16px; border-radius:6px; box-shadow:none; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .badge--status { background:#edf5f3; border-color:#d3e6e1; color:#39736a; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .badge--status.is-disabled { background:#ffead5; border-color:#e8b98b; color:#934b20; font-weight:800; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .badge--sale-status.is-selling { background:#e1f3ec; border-color:#b8ded0; color:#167259; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .badge--sale-status.is-stopped { background:#fce1dd; border-color:#e6aaa2; color:#a2332d; font-weight:800; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__commerce { display:flex; align-items:center; justify-content:space-between; gap:6px; min-width:0; font-size:.75rem; line-height:22px; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__price { flex:1 1 auto; min-width:0; padding:0; border:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#164f4b; font-size:.85rem; font-weight:800; font-variant-numeric:tabular-nums; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__stock { flex:none; padding:0; border:0; color:#738583; font-size:.7rem; font-weight:550; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .adminx[data-model='product'] #entryList > .item.item--catalog .item__stock.is-empty { color:#ad5745; }
+
+  .search-toggle { display:none; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .listpane__filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)) 42px; gap:6px; align-items:center; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .listpane__filters > select.search { width:100%; min-width:0; max-width:none; padding-inline:8px; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .search-toggle { position:relative; display:grid; grid-column:4; grid-row:1; place-items:center; width:42px; min-height:42px; padding:0; border:1px solid var(--commerce-line,#d6e4e1); border-radius:10px; background:#fff; color:var(--commerce-primary-dark,#17695e); cursor:pointer; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .search-toggle.has-query { background:#e2f3ec; border-color:#8fcbb9; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .search-toggle.has-query::after { content:''; position:absolute; top:6px; right:6px; width:6px; height:6px; border-radius:50%; background:#16836a; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .search-toggle:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .listpane__filters > .search-wrap { display:none; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .listpane__filters.is-search-open > select.search { display:none !important; }
+  .adminx[data-model='product']:not([data-product-sort-mode='1']) .listpane__filters.is-search-open > .search-wrap { display:block; grid-column:1 / 4; grid-row:1; min-width:0; width:100%; }
+
+  .adminx #entryList > .product-list-more { display:block; width:100%; min-height:42px; padding:10px; border:1px dashed #c7ded7; border-radius:10px; background:transparent; color:#548077; font:inherit; font-size:.78rem; cursor:pointer; }
+  .adminx #entryList > .product-list-more:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
 </style>

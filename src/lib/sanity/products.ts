@@ -18,7 +18,7 @@ export async function fetchSanityProducts(): Promise<ProductContent[]> {
 export async function fetchSanityProductBySlug(
 	slug: string,
 ): Promise<ProductContent | null> {
-	const doc = await getSanityClient().fetch<SanityProductDocument | null>(
+	const doc = await getSanityClient().withConfig({ useCdn: false }).fetch<SanityProductDocument | null>(
 		PRODUCT_BY_SLUG_QUERY,
 		{ slug },
 	);
@@ -27,8 +27,10 @@ export async function fetchSanityProductBySlug(
 
 export async function fetchSanityProductById(
 	id: string,
+	options: { fresh?: boolean } = {},
 ): Promise<ProductContent | null> {
-	const doc = await getSanityClient().fetch<SanityProductDocument | null>(
+	const client = options.fresh ? getSanityClient().withConfig({ useCdn: false }) : getSanityClient();
+	const doc = await client.fetch<SanityProductDocument | null>(
 		PRODUCT_BY_ID_QUERY,
 		{ id },
 	);

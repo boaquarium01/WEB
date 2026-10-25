@@ -1,6 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
-import { orderItems, orders, payments } from '../db/schema';
+import { orderItems, orders, payments, productSkus } from '../db/schema';
 import type { ShippingAddressSnapshot } from './checkout';
 import {
 	listPaymentSubmissionsForPayments,
@@ -11,6 +11,7 @@ export type OrderItemView = {
 	id: string;
 	productName: string;
 	sku: string;
+	skuName: string | null;
 	unitPrice: number;
 	quantity: number;
 	subtotal: number;
@@ -66,11 +67,13 @@ export async function getOrderForUser(
 			id: orderItems.id,
 			productName: orderItems.productName,
 			sku: orderItems.sku,
+			skuName: orderItems.skuNameSnapshot,
 			unitPrice: orderItems.unitPrice,
 			quantity: orderItems.quantity,
 			subtotal: orderItems.subtotal,
 		})
 		.from(orderItems)
+		.leftJoin(productSkus, eq(orderItems.productSkuId, productSkus.id))
 		.where(eq(orderItems.orderId, order.id));
 
 	const paymentRows = await db
@@ -115,7 +118,7 @@ export function orderStatusLabel(status: string): string {
 		PENDING_PAYMENT: '待付款',
 		PAYMENT_SUBMITTED: '已回報付款',
 		PAID: '已付款',
-		PROCESSING: '處理中',
+		PROCESSING: '備貨中',
 		SHIPPED: '已出貨',
 		COMPLETED: '已完成',
 		CANCELLED: '已取消',

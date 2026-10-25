@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import {
 	orders,
@@ -58,6 +58,7 @@ function readPublic(key: string): string {
 
 export type SubmitBankLastFiveInput = {
 	orderNumber: string;
+	submissionId?: string;
 	bankLastFive: string;
 	/** Amount customer claims to have transferred; defaults to order.total */
 	amount?: number;
@@ -73,6 +74,7 @@ export async function submitBankTransferLastFive(
 	input: SubmitBankLastFiveInput,
 ): Promise<{ orderNumber: string; submissionId: string }> {
 	const orderNumber = String(input.orderNumber ?? '').trim();
+	const submissionId = String(input.submissionId ?? '').trim();
 	const bankLastFive = String(input.bankLastFive ?? '').trim();
 	const note = String(input.note ?? '').trim() || null;
 
@@ -92,6 +94,7 @@ export async function submitBankTransferLastFive(
 			.where(
 				and(eq(orders.orderNumber, orderNumber), eq(orders.userId, userId)),
 			)
+			.for('update')
 			.limit(1);
 
 		if (!order) {
@@ -132,16 +135,45 @@ export async function submitBankTransferLastFive(
 		}
 
 		const now = new Date();
-		const [submission] = await tx
-			.insert(paymentSubmissions)
-			.values({
-				paymentId: payment.id,
-				bankLastFive,
-				amount,
-				note,
-				submittedAt: now,
-			})
-			.returning();
+		let submission: { id: string } | undefined;
+		let existingSubmission: { id: string; verifiedAt: Date | null } | undefined;
+		if (submissionId) {
+			[existingSubmission] = await tx
+				.select()
+				.from(paymentSubmissions)
+				.where(and(eq(paymentSubmissions.id, submissionId), eq(paymentSubmissions.paymentId, payment.id)))
+				.limit(1);
+			if (!existingSubmission || existingSubmission.verifiedAt) {
+				throw new Error('此轉帳回報目前無法編輯');
+			}
+		} else {
+			// Reuse the pending record when a stale form or browser refresh repeats the POST.
+			[existingSubmission] = await tx
+				.select({ id: paymentSubmissions.id, verifiedAt: paymentSubmissions.verifiedAt })
+				.from(paymentSubmissions)
+				.where(and(eq(paymentSubmissions.paymentId, payment.id), isNull(paymentSubmissions.verifiedAt)))
+				.orderBy(desc(paymentSubmissions.submittedAt))
+				.limit(1);
+		}
+
+		if (existingSubmission) {
+			[submission] = await tx
+				.update(paymentSubmissions)
+				.set({ bankLastFive, amount, note, submittedAt: now })
+				.where(eq(paymentSubmissions.id, existingSubmission.id))
+				.returning();
+		} else {
+			[submission] = await tx
+				.insert(paymentSubmissions)
+				.values({
+					paymentId: payment.id,
+					bankLastFive,
+					amount,
+					note,
+					submittedAt: now,
+				})
+				.returning();
+		}
 
 		if (!submission) {
 			throw new Error('無法建立付款回報');
@@ -162,13 +194,15 @@ export async function submitBankTransferLastFive(
 				updatedAt: now,
 			})
 			.where(eq(orders.id, order.id));
-		await tx.insert(orderStatusHistory).values({
-			orderId: order.id,
-			status: 'PAYMENT_SUBMITTED',
-			paymentStatus: 'AWAITING_VERIFICATION',
-			shippingStatus: order.shippingStatus,
-			createdAt: now,
-		});
+		if (order.status !== 'PAYMENT_SUBMITTED') {
+			await tx.insert(orderStatusHistory).values({
+				orderId: order.id,
+				status: 'PAYMENT_SUBMITTED',
+				paymentStatus: 'AWAITING_VERIFICATION',
+				shippingStatus: order.shippingStatus,
+				createdAt: now,
+			});
+		}
 
 		return {
 			orderNumber: order.orderNumber,

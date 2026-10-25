@@ -33,7 +33,7 @@ const methods = await listShippingMethods();
 
 <AdminLayout title="運費設定｜水博館水族">
 	<header class="head page-heading">
-		<div class="heading-row"><div><h1>運費設定</h1><p>管理配送方式、基本運費與滿額免運門檻。</p></div></div>
+		<div class="heading-row"><div><h1>運費設定</h1></div></div>
 	</header>
 	{message && <p class="notice success">{message}</p>}
 	{error && <p class="notice error">{error}</p>}
@@ -69,7 +69,6 @@ const methods = await listShippingMethods();
 </AdminLayout>
 
 <style>
-	.head h1 { font-size: 34px; }
 	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); font-size: 15px; }
 	.notice { padding: 12px 15px; border-radius: 10px; font-size: 14px; }
 	.notice.success { background: #edf8f1; color: #28734b; }

@@ -6,13 +6,11 @@ import {
 	removeCartItem,
 	updateCartItemQuantity,
 } from '../../lib/services/cart';
-import { getShippingFee, listShippingMethods } from '../../lib/services/shipping';
 
 export const prerender = false;
 
 const user = Astro.locals.user!;
 let error: string | null = null;
-let message: string | null = null;
 
 if (Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
@@ -23,28 +21,24 @@ if (Astro.request.method === 'POST') {
 		if (action === 'update') {
 			const quantity = Number(form.get('quantity'));
 			await updateCartItemQuantity(user.id, cartItemId, quantity);
-			message = '已更新數量';
 		} else if (action === 'remove') {
 			await removeCartItem(user.id, cartItemId);
-			message = '已移除商品';
 		}
 	} catch (e) {
 		error = e instanceof Error ? e.message : '操作失敗';
 	}
 }
 
-const [cart, shippingMethods] = await Promise.all([getCartView(user.id), listShippingMethods(true)]);
-const estimatedShippingFee = shippingMethods[0] ? getShippingFee(shippingMethods[0], cart.subtotal) : 0;
+const cart = await getCartView(user.id);
 ---
 
-<SiteLayout title="購物車｜桃園中壢水博館水族" description="購物車" wide legacyFooter productBack={{ href: '/products/1', label: '上一頁' }}>
-	<div class="cart-page">
+<SiteLayout title="購物車｜桃園中壢水博館水族" description="購物車" wide productBack={{ href: '/products/1', label: '上一頁' }}>
+	<div class="cart-page" data-cart-id={cart.cartId} data-preserve-selection={Astro.request.method === 'POST' ? 'true' : 'false'}>
 	<header class="head">
-		<div class="title-row"><div><h1>購物車</h1><p class="subhead">確認商品與數量，準備完成訂單。</p></div><span class="item-count"><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>{cart.itemCount} 件商品</span></div>
+		<div class="title-row"><div><h1>購物車</h1><p class="subhead">確認商品與數量，準備完成訂單。</p></div></div>
 		<div class="steps" aria-label="結帳流程"><span class="step active"><b>1</b>購物車</span><i></i><span class="step"><b>2</b>配送與付款</span><i></i><span class="step"><b>3</b>完成訂單</span></div>
 	</header>
 
-	{message && <p class="banner ok">{message}</p>}
 	{error && <p class="banner error">{error}</p>}
 
 	{
@@ -57,49 +51,182 @@ const estimatedShippingFee = shippingMethods[0] ? getShippingFee(shippingMethods
 			</div>
 		) : (
 			<>
-				<div class="cart-layout"><section class="cart-items-panel"><div class="panel-heading"><h2>商品明細</h2><span>{cart.itemCount} 件</span></div><ul class="lines">
+				<div class="cart-layout"><section class="cart-items-panel"><div class="cart-columns"><div class="mark-column"><label class="select-all"><input type="checkbox" data-select-all checked aria-label="全選商品" /></label></div><span class="column-product">商品</span><span class="column-unit-price">單價</span><span class="column-quantity">數量</span><span class="column-total">總計</span><button class="edit-toggle" type="button" data-edit-toggle>編輯</button></div><ul class="lines">
 					{cart.items.map((item) => (
-						<li class="line">
-							<div class="product-visual" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></div>
-							<div class="product-info">
-								<a href={`/product/${item.slug}`} class="name">
+						<li class="line" data-cart-line data-item-id={item.cartItemId} data-product-id={item.productId} data-unit-price={item.unitPrice} data-base-unit-price={item.baseUnitPrice} data-minimum-purchase={item.minimumPurchaseQuantity} data-price-tiers={JSON.stringify(item.priceTiers)} data-stock-limit={item.available >= 0 ? item.available : ''} data-line-total={item.lineTotal} data-quantity={item.quantity}>
+							<label class="line-select"><input type="checkbox" data-item-select value={item.cartItemId} checked aria-label={`選擇${item.productName}`} /></label>
+							<div class="product-summary"><div class="product-visual" aria-hidden="true">{item.imageUrl ? <img src={item.imageUrl} alt="" loading="lazy" /> : <i class="fa-solid fa-fish-fins"></i>}</div><div class="product-info">
+								<a href={`/product/${item.slug}`} class="name" title={item.productName}>
 									{item.productName}
 								</a>
-								<p class="sku">{item.skuName} · {item.sku}</p>
-								<p class="avail">{item.available < 0 ? '庫存充足' : `可售庫存 ${item.available}`}</p>
-							</div>
+								<p class="sku">{item.skuName && item.skuName !== item.productName ? item.skuName : '單一規格'}{item.minimumPurchaseQuantity > 1 && <span> · 最低 {item.minimumPurchaseQuantity} 件</span>}</p>
+							</div></div>
+							<span class="unit-price" data-label="單價">{formatTwd(item.unitPrice)}</span>
 							<div class="actions">
-								<form method="post" class="qty">
+								<div class="qty-stock"><form method="post" class="qty">
 									<input type="hidden" name="_action" value="update" />
 									<input type="hidden" name="cartItemId" value={item.cartItemId} />
-									<input
-										type="number"
-										name="quantity"
-										min="1"
-										{...(item.available >= 0 ? { max: Math.max(item.available, item.quantity) } : {})}
-									value={item.quantity}
-								/>
-									<button type="submit" class="qty-update" aria-label={`更新${item.productName}數量`}><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
-								</form>
-								<form method="post">
+									<button type="button" data-quantity-step="-1" class="qty-step" aria-label={`減少${item.productName}數量`}>−</button>
+									<input type="number" name="quantity" min="1" step="1" inputmode="numeric" {...(item.available >= 0 ? { max: Math.max(item.available, item.quantity) } : {})} value={item.quantity} aria-label={`${item.productName} 數量`} />
+									<button type="button" data-quantity-step="1" data-max-quantity={item.available >= 0 ? item.available : ''} class="qty-step" aria-label={`增加${item.productName}數量`}>＋</button>
+								</form>{item.available >= 0 && <p class="stock-limit" data-stock-warning hidden={item.quantity < item.available}>已達最大上限</p>}</div>
+								<div class="edit-actions"><form method="post">
 									<input type="hidden" name="_action" value="remove" />
 									<input type="hidden" name="cartItemId" value={item.cartItemId} />
 									<button type="submit" class="danger"><i class="fa-regular fa-trash-can" aria-hidden="true"></i>移除</button>
-								</form>
+								</form></div>
 							</div>
-							<strong class="line-total">{formatTwd(item.lineTotal)}</strong>
+							<strong class="line-total" data-label="總計">{formatTwd(item.lineTotal)}</strong>
 						</li>
 					))}
-				</ul><a href="/products/1" class="continue"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>繼續選購</a></section>
+				</ul></section>
 
-				<aside class="summary"><p class="summary-title">訂單摘要</p><div class="summary-row"><span>商品小計 · {cart.itemCount} 件</span><strong>{formatTwd(cart.subtotal)}</strong></div><div class="summary-row muted"><span>預估運費{shippingMethods[0] ? ` · ${shippingMethods[0].name}` : ''}</span><span>{formatTwd(estimatedShippingFee)}</span></div><div class="summary-total"><span>預估總計</span><strong>{formatTwd(cart.subtotal + estimatedShippingFee)}</strong></div><a class="checkout-btn" href="/checkout">前往結帳<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a><p class="secure"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>庫存與價格將於結帳時再次確認</p><div class="payment-note"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i><span>下單後可於訂單頁查看付款與配送資訊</span></div></aside></div>
+				<aside class="summary" data-cart-summary><p class="summary-title">訂單摘要</p><div class="summary-total"><span>訂單總計</span><strong data-summary-total>{formatTwd(cart.subtotal)}</strong></div><p class="selection-warning" data-selection-warning hidden>請先勾選要結帳的商品</p><a class="checkout-btn" data-checkout-link href={`/checkout?${cart.items.map((item) => `item=${encodeURIComponent(item.cartItemId)}`).join('&')}`}><span data-checkout-label>去買單（{cart.items.length}）</span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a><p class="secure"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i>庫存與價格將於結帳時再次確認</p><div class="payment-note"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i><span>下單後可於訂單頁查看付款與配送資訊</span></div></aside></div>
 			</>
 		)
 	}
 	</div>
 </SiteLayout>
 
+<script>
+	const cartRoot = document.querySelector<HTMLElement>('[data-cart-id]');
+	const cartSummary = document.querySelector<HTMLElement>('[data-cart-summary]');
+	if (cartRoot && cartSummary) {
+		const storageKey = `cart-selection-${cartRoot.dataset.cartId}`;
+		const lines = Array.from(document.querySelectorAll<HTMLElement>('[data-cart-line]'));
+		const checks = lines.map((line) => line.querySelector<HTMLInputElement>('[data-item-select]')).filter((check): check is HTMLInputElement => Boolean(check));
+		const selectAll = document.querySelector<HTMLInputElement>('[data-select-all]');
+		const checkout = document.querySelector<HTMLAnchorElement>('[data-checkout-link]');
+		const warning = document.querySelector<HTMLElement>('[data-selection-warning]');
+		const totalOutput = cartSummary.querySelector<HTMLElement>('[data-summary-total]');
+		const editToggle = document.querySelector<HTMLButtonElement>('[data-edit-toggle]');
+		editToggle?.addEventListener('click', () => {
+			const editing = cartRoot.classList.toggle('is-editing');
+			editToggle.textContent = editing ? '完成' : '編輯';
+			editToggle.setAttribute('aria-pressed', String(editing));
+		});
+		const formatMoney = (amount: number) => `NT$ ${new Intl.NumberFormat('zh-TW').format(amount)}`;
+		const tierPrice = (base: number, quantity: number, tiers: Array<{minQuantity: number; maxQuantity: number | null; unitPrice: number}>) => tiers.filter((tier) => quantity >= tier.minQuantity && (tier.maxQuantity == null || quantity <= tier.maxQuantity)).sort((a, b) => b.minQuantity - a.minQuantity)[0]?.unitPrice ?? base;
+		let savedIds: string[] | null = null;
+		try {
+			const raw = window.sessionStorage.getItem(storageKey);
+			if (raw !== null) {
+				const parsed: unknown = JSON.parse(raw);
+				if (Array.isArray(parsed)) savedIds = parsed.filter((id): id is string => typeof id === 'string');
+			}
+		} catch { /* Private browsing may disable storage; selection still works for this page. */ }
+		if (cartRoot.dataset.preserveSelection === 'true' && savedIds !== null) checks.forEach((check) => { check.checked = savedIds.includes(check.value); });
+
+		const updateSelection = () => {
+			const selected = checks.filter((check) => check.checked);
+			const selectedSet = new Set(selected.map((check) => check.value));
+			const selectedLines = lines.filter((line) => selectedSet.has(line.dataset.itemId ?? ''));
+			const quantities = new Map<string, number>();
+			for (const line of selectedLines) {
+				const id = line.dataset.productId ?? '';
+				quantities.set(id, (quantities.get(id) ?? 0) + Number(line.dataset.quantity ?? 0));
+			}
+			let minimumError = '';
+			const subtotal = selectedLines.reduce((sum, line) => {
+				const id = line.dataset.productId ?? '';
+				const quantity = quantities.get(id) ?? 0;
+				const minimum = Number(line.dataset.minimumPurchase ?? 1);
+				if (quantity < minimum) minimumError = `「${line.querySelector('.name')?.textContent?.trim() ?? '商品'}」最低購買數量為 ${minimum} 件`;
+				let tiers: Array<{minQuantity: number; maxQuantity: number | null; unitPrice: number}> = [];
+				try { tiers = JSON.parse(line.dataset.priceTiers ?? '[]'); } catch { /* Ignore malformed display metadata; server remains authoritative. */ }
+				const unit = tierPrice(Number(line.dataset.baseUnitPrice ?? line.dataset.unitPrice ?? 0), quantity, tiers);
+				const total = unit * Number(line.dataset.quantity ?? 0);
+				line.dataset.lineTotal = String(total);
+				const unitNode = line.querySelector<HTMLElement>('.unit-price');
+				if (unitNode) unitNode.textContent = formatMoney(unit);
+				const totalNode = line.querySelector<HTMLElement>('.line-total');
+				if (totalNode) totalNode.textContent = formatMoney(total);
+				return sum + total;
+			}, 0);
+			if (selectAll) {
+				selectAll.checked = selected.length === checks.length;
+				selectAll.indeterminate = selected.length > 0 && selected.length < checks.length;
+			}
+			if (totalOutput) totalOutput.textContent = formatMoney(subtotal);
+			if (checkout) {
+				const label = checkout.querySelector('[data-checkout-label]');
+				if (label) label.textContent = `去買單（${selected.length}）`;
+				checkout.setAttribute('aria-label', `去買單，已選 ${selected.length} 筆商品`);
+				checkout.setAttribute('aria-disabled', String(selected.length === 0));
+				checkout.classList.toggle('is-disabled', selected.length === 0);
+				if (selected.length > 0) {
+					const params = new URLSearchParams();
+					selected.forEach((check) => params.append('item', check.value));
+					checkout.href = `/checkout?${params.toString()}`;
+				} else checkout.href = '#';
+			}
+			if (warning) { warning.textContent = minimumError || '請先勾選要結帳的商品'; warning.hidden = selected.length > 0 && !minimumError; }
+			if (checkout) {
+				checkout.setAttribute('aria-disabled', String(selected.length === 0 || Boolean(minimumError)));
+				checkout.classList.toggle('is-disabled', selected.length === 0 || Boolean(minimumError));
+			}
+			try { window.sessionStorage.setItem(storageKey, JSON.stringify(selected.map((check) => check.value))); } catch { /* Ignore unavailable session storage. */ }
+		};
+		const persistQuantity = (form: HTMLFormElement) => {
+			const priorTimer = Number(form.dataset.submitTimer ?? 0);
+			window.clearTimeout(priorTimer);
+			form.dataset.submitTimer = String(window.setTimeout(() => form.requestSubmit(), 350));
+		};
+		lines.forEach((line) => {
+			const input = line.querySelector<HTMLInputElement>('.qty input[name="quantity"]');
+			const total = line.querySelector<HTMLElement>('.line-total');
+			const stockWarning = line.querySelector<HTMLElement>('[data-stock-warning]');
+			if (!input || !total) return;
+			const refreshLine = () => {
+				const quantity = Math.max(1, Number(input.value) || 1);
+				const lineTotal = Number(line.dataset.unitPrice ?? 0) * quantity;
+				const stockLimit = line.dataset.stockLimit ?? '';
+				if (stockWarning && stockLimit !== '') stockWarning.hidden = quantity < Number(stockLimit);
+				line.dataset.quantity = String(quantity);
+				line.dataset.lineTotal = String(lineTotal);
+				total.textContent = formatMoney(lineTotal);
+				updateSelection();
+			};
+			input.addEventListener('input', refreshLine);
+			input.addEventListener('change', () => {
+				refreshLine();
+				if (input.checkValidity() && input.form) persistQuantity(input.form);
+			});
+			line.querySelectorAll<HTMLButtonElement>('[data-quantity-step]').forEach((button) => {
+				button.addEventListener('click', () => {
+					const next = Number(input.value) + Number(button.dataset.quantityStep);
+					const maxText = button.dataset.maxQuantity ?? '';
+					if (next < 1 || (maxText !== '' && next > Number(maxText))) return;
+					input.value = String(next);
+					refreshLine();
+					if (input.form) persistQuantity(input.form);
+				});
+			});
+		});
+		checks.forEach((check) => check.addEventListener('change', updateSelection));
+		selectAll?.addEventListener('change', () => {
+			checks.forEach((check) => { check.checked = selectAll.checked; });
+			updateSelection();
+		});
+		checkout?.addEventListener('click', (event) => {
+			if (checks.every((check) => !check.checked) || checkout.getAttribute('aria-disabled') === 'true') {
+				event.preventDefault();
+				return;
+			}
+			if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+			event.preventDefault();
+			if (checkout.classList.contains('is-checkout-starting')) return;
+			const destination = checkout.href;
+			checkout.classList.add('is-checkout-starting');
+			checkout.setAttribute('aria-busy', 'true');
+			window.setTimeout(() => window.location.assign(destination), 240);
+		});
+		updateSelection();
+	}
+</script>
+
 <style>
+	.product-visual{overflow:hidden}.product-visual img{width:100%;height:100%;object-fit:cover;display:block}
 	.head {
 		margin-bottom: 1rem;
 	}
@@ -208,7 +335,7 @@ const estimatedShippingFee = shippingMethods[0] ? getShippingFee(shippingMethods
 	}
 
 	.summary {
-		margin-top: 1.25rem;
+		margin-top: 0;
 		padding: 1.1rem 1.2rem;
 		background: #fff;
 		border: 1px solid var(--aq-line);
@@ -225,4 +352,124 @@ const estimatedShippingFee = shippingMethods[0] ? getShippingFee(shippingMethods
 	.cart-page{color:var(--aq-ink)}.head{margin-bottom:1.5rem}.crumb{display:flex;gap:.55rem;align-items:center;color:#8a9590;font-size:.84rem}.crumb a{color:#66716d}.crumb strong{color:var(--aq-primary-dark)}.title-row{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;margin:1.5rem 0 1.35rem}.eyebrow{margin:0 0 .45rem;color:var(--aq-primary);font-size:.69rem;font-weight:800;letter-spacing:.16em}.title-row h1{font-size:clamp(2rem,4vw,2.7rem);letter-spacing:-.045em;font-weight:800}.subhead{margin:.45rem 0 0;color:var(--aq-muted)}.item-count{display:flex;align-items:center;gap:.55rem;padding:.65rem .9rem;border:1px solid #e7ebe6;border-radius:999px;background:#fff;color:#57635e;font-size:.85rem;font-weight:700}.item-count i{color:var(--aq-primary)}.steps{display:flex;align-items:center;gap:.8rem;max-width:560px;padding:.8rem 0}.steps>i{height:1px;flex:1;background:#e5e8e4}.step{display:flex;align-items:center;gap:.45rem;white-space:nowrap;color:#9aa39f;font-size:.8rem;font-weight:650}.step b{display:grid;place-items:center;width:25px;height:25px;border:1px solid #dfe4df;border-radius:50%;font-size:.7rem}.step.active{color:var(--aq-primary-dark)}.step.active b{border-color:var(--aq-primary);background:var(--aq-primary);color:white}.banner{border:1px solid #cfe8d7}.banner.error{border-color:#f0ccca}.cart-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;align-items:start;gap:1.25rem}.cart-items-panel,.summary{border:1px solid #e8ebe6;border-radius:20px;background:#fff;box-shadow:0 10px 30px rgba(35,49,42,.045)}.cart-items-panel{padding:1.2rem 1.3rem}.panel-heading{display:flex;align-items:center;justify-content:space-between;padding:0 0 1rem;border-bottom:1px solid #edf0ec}.panel-heading h2{margin:0;font-size:1.05rem;font-weight:800}.panel-heading span{color:var(--aq-muted);font-size:.8rem}.lines{gap:0}.line{display:grid;grid-template-columns:76px minmax(0,1fr) auto auto;align-items:center;gap:1rem;padding:1.15rem 0;border:0;border-bottom:1px solid #edf0ec;border-radius:0;background:transparent}.product-visual{display:grid;place-items:center;width:76px;height:76px;border-radius:16px;background:linear-gradient(145deg,#eff7f3,#dcece5);color:#438577;font-size:1.5rem}.product-info{min-width:0}.name{display:block;color:#24312d;font-size:.98rem;font-weight:750}.sku{margin:.35rem 0 0;color:#828d87;font-size:.8rem}.avail{margin:.25rem 0 0;color:#56836f;font-size:.76rem}.line .price{margin:.35rem 0 0;color:#65716c;font-size:.83rem}.actions{display:flex;align-items:center;gap:.5rem}.qty{display:flex;align-items:center;gap:.3rem;padding:.22rem;border:1px solid #e1e6e1;border-radius:11px}.qty input{width:44px;padding:.35rem .2rem;border:0;background:transparent;text-align:center;font:inherit;font-weight:700;color:var(--aq-ink)}.qty-update{width:30px;height:30px;border:0;border-radius:8px;background:#eef5f1;color:var(--aq-primary-dark);cursor:pointer}.danger{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .55rem;border:0!important;background:transparent!important;color:#a56a65!important;font-size:.78rem;cursor:pointer}.line-total{white-space:nowrap;font-size:.92rem;font-weight:800;color:#34423c}.continue{display:inline-flex;align-items:center;gap:.5rem;margin-top:1rem;color:var(--aq-primary-dark);font-size:.85rem;font-weight:700}.summary{position:sticky;top:100px;padding:1.35rem}.summary-title{margin:0 0 1.1rem;font-size:1.05rem;font-weight:800}.summary-row,.summary-total{display:flex;justify-content:space-between;gap:1rem;font-size:.85rem}.summary-row{margin:.8rem 0;color:#58645f}.summary-row.muted{padding-bottom:1rem;border-bottom:1px solid #edf0ec;color:#909994}.summary-total{align-items:center;padding-top:.25rem;font-weight:700}.summary-total strong{font-size:1.22rem;color:var(--aq-ink)}.checkout-btn{display:flex;align-items:center;justify-content:space-between;margin-top:1.2rem;padding:.9rem 1rem;border-radius:13px;background:var(--aq-primary);color:white!important;font-weight:750;text-decoration:none;box-shadow:0 8px 18px rgba(21,106,102,.18);transition:transform .15s,background .15s}.checkout-btn:hover{transform:translateY(-1px);background:var(--aq-primary-dark)}.secure{display:flex;align-items:center;justify-content:center;gap:.45rem;margin:.85rem 0 0;color:#8b9690;font-size:.72rem}.secure i{color:#5b9a78}.payment-note{display:flex;align-items:center;gap:.7rem;margin-top:1.2rem;padding:.8rem;border-radius:12px;background:#f7f9f6;color:#77827c;font-size:.73rem;line-height:1.45}.payment-note i{color:var(--aq-primary);font-size:1rem}.empty{padding:4rem 1.5rem;border:1px solid #e8ebe6;border-radius:22px;box-shadow:0 10px 30px rgba(35,49,42,.045)}.empty-icon{display:grid;place-items:center;width:66px;height:66px;margin:0 auto 1.2rem;border-radius:22px;background:#edf5f1;color:var(--aq-primary);font-size:1.45rem}.empty h2{margin:0 0 .4rem;font-size:1.25rem}.empty p{margin:0 0 1.3rem;color:var(--aq-muted)}.empty .btn-primary{gap:.6rem;border-radius:12px;padding:.8rem 1.1rem}
 	@media(max-width:850px){.cart-layout{grid-template-columns:1fr}.summary{position:static}.line{grid-template-columns:64px minmax(0,1fr) auto}.product-visual{width:64px;height:64px}.line-total{grid-column:2;grid-row:2}.actions{grid-column:3;grid-row:1/3;flex-direction:column;align-items:flex-end}}
 	@media(max-width:520px){.title-row{align-items:flex-start;flex-direction:column}.steps{gap:.45rem}.step{font-size:.7rem}.step b{width:22px;height:22px}.cart-items-panel{padding:.9rem}.line{grid-template-columns:52px minmax(0,1fr) auto;gap:.65rem}.product-visual{width:52px;height:52px;border-radius:13px;font-size:1.15rem}.name{font-size:.86rem}.sku{font-size:.72rem}.actions{grid-column:2/4;grid-row:2;flex-direction:row;justify-content:space-between;align-self:start}.line-total{grid-column:3;grid-row:1;font-size:.85rem}.line{align-items:start}.danger{padding:.35rem}.summary{padding:1.05rem}}
+	.selection-toolbar{display:flex;align-items:center;justify-content:space-between;margin:-.1rem 0 .2rem;padding:.1rem 0 .9rem;border-bottom:1px solid #edf0ec}.select-all{display:inline-flex;align-items:center;gap:.55rem;color:var(--aq-ink);font-size:.9rem;font-weight:750;cursor:pointer}.select-all input,.line-select input{width:19px;height:19px;margin:0;accent-color:var(--aq-primary);cursor:pointer}.selection-count{color:var(--aq-muted);font-size:.8rem;font-weight:650}.line{grid-template-columns:24px 64px minmax(0,1fr) auto auto;gap:.8rem}.line-select{display:grid;place-items:center;min-width:24px;min-height:42px;cursor:pointer}.product-visual{width:64px;height:64px}.actions{display:flex;align-items:center;gap:.7rem}.qty-stock{display:flex;align-items:center;gap:.7rem}.avail{margin:0;white-space:nowrap;color:#56836f;font-size:.76rem}.sku{margin-top:.25rem}.checkout-btn.is-disabled{opacity:.48;cursor:not-allowed;pointer-events:auto}.selection-warning{margin:.8rem 0 0;color:var(--aq-danger);font-size:.8rem}.line:not(:has(.line-select input:checked)){opacity:.58;background:#fafbf9}
+	@media(max-width:850px){.line{grid-template-columns:24px 58px minmax(0,1fr) auto auto;gap:.65rem}.product-visual{width:58px;height:58px}.actions{grid-column:auto;grid-row:auto;flex-direction:row;align-items:center}.qty-stock{gap:.55rem}}
+	@media(max-width:520px){.title-row{align-items:center;flex-direction:row}.cart-items-panel{padding:.8rem}.line{grid-template-columns:22px 48px minmax(0,1fr) auto;gap:.55rem;padding:.9rem 0}.line-select{min-width:22px;grid-column:1;grid-row:1}.product-visual{width:48px;height:48px;grid-column:2;grid-row:1;border-radius:12px}.product-info{grid-column:3;grid-row:1}.name{font-size:.84rem}.sku{font-size:.72rem}.line-total{grid-column:4;grid-row:1;font-size:.82rem}.actions{grid-column:2/5;grid-row:2;display:flex;flex-direction:row;justify-content:space-between;align-items:center;gap:.45rem}.qty-stock{flex:1;min-width:0;justify-content:flex-start;gap:.45rem}.avail{font-size:.7rem}.qty{gap:.15rem}.qty input{width:42px}.qty-update{width:28px;height:28px}.danger{padding:.35rem;font-size:.74rem}.summary{padding:1rem}.selection-toolbar{padding-bottom:.7rem}}
+	/* Keep cart rows aligned to a shared column header. */
+	.cart-columns,.line{display:grid;grid-template-columns:56px minmax(180px,1fr) 82px 148px 88px 56px;align-items:center;gap:.55rem}
+	.cart-columns{padding:0 0 .75rem;border-bottom:1px solid #edf0ec;color:#75817a;font-size:.75rem;font-weight:700}
+	.mark-column{display:grid;gap:.45rem;justify-items:start}
+	.mark-column>span{padding-left:.1rem}
+	.select-all{gap:.35rem;font-size:.74rem}
+	.cart-columns .column-quantity,.cart-columns .column-total{text-align:right}
+	.edit-toggle{justify-self:end;padding:.4rem .5rem;border:1px solid #e5e9e4;border-radius:8px;background:#fff;color:var(--aq-primary-dark);font:inherit;font-size:.75rem;font-weight:700;cursor:pointer}
+	.selection-status{margin:.55rem 0 .15rem;text-align:right;color:var(--aq-muted);font-size:.76rem}
+	.line{grid-template-columns:56px minmax(180px,1fr) 82px 148px 88px 56px;gap:.55rem;padding:.95rem 0}
+	.product-summary{display:flex;align-items:center;gap:.8rem;min-width:0}
+	.unit-price{color:#68746e;font-size:.84rem;white-space:nowrap}
+	.actions{display:contents}
+	.qty-stock{grid-column:4;justify-content:flex-end;gap:.45rem}
+	.edit-actions{grid-column:6;justify-self:end;display:none}
+	.cart-page.is-editing .edit-actions{display:block}
+	.line-total{grid-column:5;text-align:right}
+	.line-total{grid-row:1}
+	.mark-column{display:flex;align-items:center}
+	.cart-columns{justify-items:stretch}
+	.cart-columns .mark-column,.cart-columns .column-product,.cart-columns .column-unit-price,.cart-columns .column-quantity,.cart-columns .column-total,.cart-columns .edit-toggle{text-align:center;justify-self:center}
+	.cart-columns .column-product,.cart-columns .column-unit-price,.cart-columns .column-quantity,.cart-columns .column-total{width:100%}
+	.unit-price,.line-total{text-align:center}
+	.cart-columns .column-quantity{text-align:center}
+	.edit-toggle{justify-self:center}
+	.qty-stock{flex-direction:column;align-items:center;justify-content:center;gap:.25rem}
+	.qty input{text-align:center}
+	.qty{justify-content:center;width:100%;padding:.22rem .35rem}
+	.qty input{flex:0 1 3.25rem;width:3.25rem;max-width:3.25rem;box-sizing:border-box}
+	.stock-limit{text-align:center;line-height:1.25}
+	.qty-step{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;padding:0;border:0;border-radius:8px;background:#eef5f1;color:var(--aq-primary-dark);font-size:1rem;font-weight:700;line-height:1;cursor:pointer}
+	.qty-step:hover{background:#dcece5}
+	.qty input::-webkit-outer-spin-button,.qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+	.qty input[type=number]{-moz-appearance:textfield;appearance:textfield}
+	.qty{gap:.2rem}
+	.qty-step{display:grid;place-items:center;width:29px;height:29px;padding:0;border:0;border-radius:8px;background:#eef5f1;color:var(--aq-primary-dark);cursor:pointer}
+	.qty-step:hover{background:#dcece5}
+	.qty input{width:38px}
+	.stock-limit{margin:.35rem 0 0;color:var(--aq-danger);font-size:.7rem;white-space:nowrap}
+	.qty{gap:0;flex:0 0 auto;width:max-content;padding:0;border:1px solid #dfe5e0;border-radius:6px;background:#fff;overflow:hidden}
+	.qty-step{width:32px;height:30px;flex:0 0 32px;border:0;border-radius:0;background:#fff;color:var(--aq-primary-dark);font-size:.9rem}
+	.qty-step:hover{background:#edf5f1}
+	.qty input{width:42px;max-width:42px;height:30px;flex:0 0 42px;padding:0;border:0;border-right:1px solid #e5e9e5;border-left:1px solid #e5e9e5;border-radius:0;background:#fff;color:var(--aq-ink);font-size:.88rem;text-align:center}
+	@media(max-width:850px){.cart-columns,.line{grid-template-columns:42px minmax(130px,1fr) 68px 132px 76px 50px;gap:.4rem}.cart-items-panel{padding:1rem}.product-summary{gap:.55rem}.product-visual{width:52px;height:52px}.qty-stock{gap:.35rem}.avail{font-size:.68rem}}
+	@media(max-width:600px){.cart-columns,.line{grid-template-columns:28px minmax(0,1fr) auto;gap:.45rem}.cart-columns{padding-bottom:.6rem}.mark-column{grid-column:1;grid-row:1 / span 2}.mark-column>span{display:none}.cart-columns .column-product{grid-column:2;grid-row:1 / span 2}.cart-columns .column-unit-price,.cart-columns .column-quantity,.cart-columns .column-total{display:none}.edit-toggle{grid-column:3;grid-row:1 / span 2}.line{grid-template-columns:24px 60px minmax(0,1fr) 76px;align-items:start;gap:.25rem .55rem;padding:.55rem 0}.line-select{grid-column:1;grid-row:1;min-width:24px;min-height:60px}.product-summary{display:contents}.product-visual{grid-column:2;grid-row:1 / span 3;width:60px;height:60px;border:1px solid #e6ebe7;border-radius:12px}.product-info{grid-column:3;grid-row:1;align-self:start;min-width:0}.name{display:-webkit-box;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-height:1.35}.unit-price{grid-column:3;grid-row:2;padding:0;font-size:.75rem;text-align:left}.unit-price::before{content:attr(data-label) '：';color:var(--aq-muted)}.qty-stock{grid-column:3;grid-row:3;justify-content:flex-start;align-items:center;padding:0;margin-top:.1rem}.qty-stock .avail{font-size:.7rem}.qty{margin-left:0}.line-total{grid-column:4;grid-row:1;align-self:start;padding-top:.1rem;font-size:.8rem;line-height:1.35;text-align:right;white-space:nowrap}.line-total::before{display:block;margin-bottom:.15rem;color:var(--aq-muted);font-size:.68rem;font-weight:500;content:'商品小計'}.edit-actions{grid-column:4;grid-row:3;align-self:center;margin-top:0}.cart-page.is-editing .edit-actions{justify-self:end}}
+	@media(max-width:600px){
+		.cart-page{padding-bottom:1rem}
+		.summary{position:fixed;top:auto;right:0;bottom:0;left:0;height:auto;z-index:10000;display:grid;grid-template-columns:minmax(0,1fr) 136px;grid-template-rows:auto auto;align-items:center;column-gap:.75rem;row-gap:.15rem;padding:10px max(14px,env(safe-area-inset-right,0px)) calc(10px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px));border:0;border-top:1px solid #e8ebe6;border-radius:18px 18px 0 0;background:#fff;box-shadow:0 -8px 28px rgba(35,49,42,.12)}
+		.summary-title,.summary-row,.secure,.payment-note{display:none}
+		.summary-total{grid-column:1;grid-row:1;display:flex;flex-direction:column;align-items:flex-start;gap:0;padding:0;font-size:.9rem;font-weight:700;line-height:1.3}
+		.summary-total strong{font-size:1.3rem;line-height:1.25;white-space:nowrap}
+		.checkout-btn{grid-column:2;grid-row:1;align-self:center;width:100%;min-height:54px;margin:0;padding:.65rem .7rem;border-radius:12px;font-size:1.05rem;font-weight:750}
+		.selection-warning{grid-column:1;grid-row:2;margin:0;font-size:.72rem;line-height:1.2}
+		.qty-step{width:40px;height:40px;flex-basis:40px;font-size:1rem}
+		.qty input{width:44px;max-width:44px;height:40px;flex-basis:44px;font-size:.95rem}
+		:global(body:has(.cart-page) .cart-float){display:none!important}
+		:global(body:has(.cart-page) .line-float){right:max(14px,env(safe-area-inset-right,0px));bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+	}
+	@media(max-width:600px){
+		.cart-items-panel .line{grid-template-columns:22px 64px minmax(0,1fr) 92px;grid-template-rows:minmax(34px,auto) 36px;align-items:stretch;column-gap:.5rem;row-gap:0;min-height:72px;padding:.45rem 0}
+		.cart-items-panel .line-select{grid-column:1;grid-row:1 / span 2;align-self:center;min-width:22px;min-height:0}
+		.cart-items-panel .product-visual{grid-column:2;grid-row:1 / span 2;align-self:center;width:64px;height:64px}
+		.cart-items-panel .product-info{grid-column:3;grid-row:1;align-self:end;padding-bottom:.1rem}
+		.cart-items-panel .unit-price{grid-column:3;grid-row:2;align-self:start;padding-top:.15rem;text-align:left}
+		.cart-items-panel .qty-stock{grid-column:4;grid-row:2;display:flex;flex-direction:row;justify-content:flex-end;align-items:start;gap:0;margin:0;padding:0}
+		.cart-items-panel .qty-step{width:28px;height:34px;flex-basis:28px}
+		.cart-items-panel .qty input{width:32px;height:34px;flex-basis:32px}
+		.cart-items-panel .line-total{grid-column:4;grid-row:1;align-self:end;padding-bottom:.1rem}
+		.cart-items-panel .edit-actions{grid-column:4;grid-row:3;justify-self:end}
+	}
+	@media(max-width:360px){
+		.cart-items-panel .line{grid-template-columns:20px 54px minmax(0,1fr) 88px;grid-template-rows:minmax(32px,auto) 34px;column-gap:.4rem}
+		.cart-items-panel .line-select{min-width:20px}
+		.cart-items-panel .product-visual{width:54px;height:54px}
+		.cart-items-panel .qty-step{width:26px;height:34px;flex-basis:26px}
+		.cart-items-panel .qty input{width:30px;height:34px;flex-basis:30px}
+	}
+	:global(body:has(.cart-page) > footer.site-footer){display:none!important}
+	:global(body:has(.cart-page) > main.page-main){flex:0 0 auto;padding-bottom:1rem}
+
+	@media(max-width:600px) {
+		.cart-items-panel .cart-columns,.cart-items-panel .line { grid-template-columns:22px 64px minmax(0,1fr) 96px; column-gap:8px; }
+		.cart-items-panel .cart-columns { grid-template-rows:auto; align-items:center; }
+		.cart-items-panel .cart-columns .mark-column { grid-column:1; grid-row:1; justify-self:start; min-width:22px; }
+		.cart-items-panel .cart-columns .column-product { grid-column:2 / 4; grid-row:1; text-align:left; justify-self:start; }
+		.cart-items-panel .cart-columns .edit-toggle { grid-column:4; grid-row:1; justify-self:end; }
+		.cart-items-panel .select-all,.cart-items-panel .line-select { display:flex; align-items:center; justify-content:center; width:22px; margin:0; padding:0; }
+		.cart-items-panel .select-all input,.cart-items-panel .line-select input { flex:none; width:19px; height:19px; margin:0; }
+		.cart-items-panel .line { position:relative; grid-template-rows:22px 18px minmax(30px,auto); row-gap:3px; min-height:82px; padding:12px 0; align-items:center; }
+		.cart-items-panel .line-select { grid-column:1; grid-row:1 / span 3; align-self:center; min-height:0; }
+		.cart-items-panel .product-visual { grid-column:2; grid-row:1 / span 3; align-self:center; width:64px; height:72px; border-radius:10px; }
+		.cart-items-panel .product-info { display:contents; }
+		.cart-items-panel .name { grid-column:3 / -1; grid-row:1; display:block; min-width:0; width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; -webkit-line-clamp:unset; line-height:22px; font-size:14px; font-weight:700; }
+		.cart-items-panel .sku { grid-column:3 / -1; grid-row:2; margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; line-height:18px; }
+		.cart-items-panel .unit-price { grid-column:3; grid-row:3; align-self:center; min-width:0; padding:0; color:var(--aq-primary-dark); font-size:13px; font-weight:650; font-variant-numeric:tabular-nums; }
+		.cart-items-panel .unit-price::before { content:none; }
+		.cart-items-panel .qty-stock { grid-column:4; grid-row:3; align-self:center; display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:2px; margin:0; padding:0; }
+		.cart-items-panel .qty { margin:0; }
+		.cart-items-panel .qty-step { width:30px; height:28px; flex-basis:30px; }
+		.cart-items-panel .qty input { width:34px; max-width:34px; height:28px; flex-basis:34px; }
+		.cart-items-panel .stock-limit { margin:0; font-size:10px; }
+		.cart-items-panel .line-total { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+		.cart-items-panel .edit-actions { grid-column:3 / -1; grid-row:4; margin-top:4px; }
+	}
+	@media(max-width:360px) {
+		.cart-items-panel .cart-columns,.cart-items-panel .line { grid-template-columns:20px 52px minmax(0,1fr) 90px; column-gap:6px; }
+		.cart-items-panel .cart-columns .mark-column,.cart-items-panel .select-all,.cart-items-panel .line-select { width:20px; min-width:20px; }
+		.cart-items-panel .product-visual { width:52px; height:64px; }
+		.cart-items-panel .unit-price { font-size:12px; }
+		.cart-items-panel .qty-step { width:27px; flex-basis:27px; }
+		.cart-items-panel .qty input { width:34px; flex-basis:34px; }
+	}
+	@media(max-width:600px){:global(body:has(.cart-page) > main.page-main){padding-top:.75rem}.cart-page .title-row{margin:.35rem 0 .8rem}.cart-page .steps{padding:.35rem 0}.cart-page .head{margin-bottom:.75rem}}
+	.checkout-btn{position:relative;overflow:hidden;justify-content:center;gap:.65rem;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}.checkout-btn>span{white-space:nowrap}.checkout-btn>i{flex:none;transition:transform .18s ease}.checkout-btn:not(.is-disabled):not(.is-checkout-starting){animation:checkout-attention 2.8s ease-in-out infinite}.checkout-btn:not(.is-disabled):not(.is-checkout-starting)>i{animation:checkout-arrow-loop 2.8s ease-in-out infinite}.checkout-btn:not(.is-disabled):hover>i{transform:translateX(4px)}.checkout-btn:not(.is-disabled):active{transform:scale(.97)}.checkout-btn.is-checkout-starting{animation:checkout-ready .24s ease-out both}.checkout-btn.is-checkout-starting>i{animation:checkout-arrow .24s ease-out both}@keyframes checkout-attention{0%,78%,100%{transform:scale(1);box-shadow:0 8px 18px rgba(21,106,102,.18)}84%{transform:scale(1.018);box-shadow:0 0 0 4px #17817b20,0 8px 22px rgba(21,106,102,.24)}90%{transform:scale(1)}}@keyframes checkout-arrow-loop{0%,78%,100%{transform:translateX(0)}84%{transform:translateX(3px)}90%{transform:translateX(0)}}@keyframes checkout-ready{50%{transform:scale(.96);filter:brightness(1.12);box-shadow:0 0 0 5px #17817b26}100%{transform:scale(1)}}@keyframes checkout-arrow{50%{transform:translateX(5px)}100%{transform:translateX(0)}}@media(prefers-reduced-motion:reduce){.checkout-btn,.checkout-btn>i{transition:none!important;animation:none!important}}
+	@media(max-width:600px){.summary{grid-template-columns:minmax(0,1fr) max-content}.checkout-btn{box-sizing:border-box;width:auto;min-width:136px;max-width:48vw;gap:.4rem;padding-inline:.5rem;font-size:.92rem}}
+	@media(max-width:360px){.checkout-btn{min-width:128px;font-size:.86rem;gap:.3rem}}
+	@media(max-width:600px){:global(body:has(.cart-page) > main.page-main){padding-bottom:calc(128px + env(safe-area-inset-bottom,0px))}}
 </style>

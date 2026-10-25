@@ -1,0 +1,1 @@
+ALTER TABLE "product_skus" ADD COLUMN "sale_enabled" boolean DEFAULT true NOT NULL;

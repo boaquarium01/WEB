@@ -58,9 +58,6 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 ---
 
 <AccountLayout title="收件地址｜水博館 V2">
-	<h1>收件地址</h1>
-	<p class="lead">管理常用收件地址，結帳時可快速選取。</p>
-
 	{message && <p class="ok">{message}</p>}
 	{error && <p class="error">{error}</p>}
 
@@ -114,30 +111,25 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 			電話
 			<input type="tel" name="phone" required />
 		</label>
+		<div class="field-row"><label>縣市<select name="city" class="city-select" required><option value="">請選擇縣市</option>{Object.keys(taiwanAddresses).map((city) => <option value={city}>{city}</option>)}</select></label><label>鄉鎮市區<select name="district" class="district-select" required disabled><option value="">請先選縣市</option></select></label></div>
 		<label>
-			郵遞區號 <small>選擇行政區後可自動帶入前三碼，也可自行補足六碼</small>
+			郵遞區號
 			<input type="text" name="postalCode" inputmode="numeric" maxlength="6" required />
 		</label>
-		<div class="field-row"><label>縣市<select name="city" class="city-select" required><option value="">請選擇縣市</option>{Object.keys(taiwanAddresses).map((city) => <option value={city}>{city}</option>)}</select></label><label>鄉鎮市區<select name="district" class="district-select" required disabled><option value="">請先選縣市</option></select></label></div>
 		<label>
 			詳細地址
 			<input type="text" name="addressLine" required />
 		</label>
 		<label class="check">
 			<input type="checkbox" name="isDefault" />
-			設為預設地址
+			<span>設為預設地址</span>
 		</label>
-		<button type="submit">新增</button>
+		<button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i> 儲存地址</button>
 	</form>
 	</details>
 </AccountLayout>
 
 <style>
-	h1 {
-		margin: 0 0 0.5rem;
-	}
-
-	.lead,
 	.muted,
 	.empty {
 		color: var(--muted);
@@ -190,11 +182,7 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 		gap: 0.35rem;
 	}
 
-	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
+	.check { display:flex; align-items:center; gap:.7rem; min-height:52px; padding:.75rem .9rem; border:1px solid #dce8e2; border-radius:12px; background:#f7fbf9; color:#25463c; cursor:pointer; }
 
 	input[type='text'],
 	input[type='tel'] {
@@ -222,6 +210,8 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 		color: #ffb0b0;
 		margin-top: 0.5rem;
 	}
+	.address-form>button[type=submit] { display:inline-flex; align-items:center; justify-content:center; gap:.5rem; width:100%; min-height:48px; border-radius:12px; background:var(--aq-primary); color:#fff; box-shadow:0 6px 16px rgba(21,106,102,.17); transition:transform .15s ease,background .15s ease,box-shadow .15s ease; }
+	.address-form>button[type=submit]:hover { transform:translateY(-1px); background:var(--aq-primary-dark); box-shadow:0 8px 18px rgba(21,106,102,.22); }
 
 	.card { background: #fff; border-radius: 16px; padding: 1.1rem 1.2rem; }
 	.add-address { margin-top:1.25rem; }
@@ -249,7 +239,11 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 	.field-row label { min-width:0; }
 	label small { color:var(--aq-muted); font-size:.76rem; font-weight:400; }
 	select { width:100%; min-height:46px; padding:.7rem .85rem; border:1px solid #dedfd9; border-radius:12px; background:#fff; color:var(--aq-ink); font:inherit; }
-	.check input { width:18px; min-height:18px!important; }
+	.check input { appearance:none; display:grid; place-content:center; flex:none; width:21px; height:21px; min-height:21px!important; margin:0; border:1.5px solid #aebfb6; border-radius:6px; background:#fff; cursor:pointer; transition:background .15s,border-color .15s,box-shadow .15s; }
+	.check input::before { content:""; width:5px; height:9px; border:solid #fff; border-width:0 2px 2px 0; transform:translateY(-1px) rotate(45deg) scale(0); transition:transform .12s ease; }
+	.check input:checked { border-color:var(--aq-primary); background:var(--aq-primary); }
+	.check input:checked::before { transform:translateY(-1px) rotate(45deg) scale(1); }
+	.check input:focus-visible { outline:3px solid rgba(21,106,102,.2); outline-offset:2px; }
 	@media(max-width:560px) { .field-row { grid-template-columns:1fr; } .address-card-head { align-items:flex-start; } }
 </style>
 

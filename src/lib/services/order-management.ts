@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import {
 	inventory,
@@ -23,6 +23,7 @@ export type OrderListItem = {
 	shippingStatus: string;
 	total: number;
 	itemCount: number;
+	items: { productName: string; quantity: number }[];
 	createdAt: Date;
 };
 
@@ -69,6 +70,19 @@ export async function listOrdersForUser(
 			orders.createdAt,
 		)
 		.orderBy(desc(orders.createdAt));
+	const itemRows = rows.length
+		? await db
+				.select({ orderId: orderItems.orderId, productName: orderItems.productName, quantity: orderItems.quantity })
+				.from(orderItems)
+				.where(inArray(orderItems.orderId, rows.map((row) => row.id)))
+				.orderBy(asc(orderItems.productName), asc(orderItems.id))
+		: [];
+	const itemsByOrder = new Map<string, { productName: string; quantity: number }[]>();
+	for (const item of itemRows) {
+		const items = itemsByOrder.get(item.orderId) ?? [];
+		items.push({ productName: item.productName, quantity: item.quantity });
+		itemsByOrder.set(item.orderId, items);
+	}
 
 	return rows.map((row) => ({
 		id: row.id,
@@ -78,6 +92,7 @@ export async function listOrdersForUser(
 		shippingStatus: row.shippingStatus,
 		total: row.total,
 		itemCount: Number(row.itemCount ?? 0),
+		items: itemsByOrder.get(row.id) ?? [],
 		createdAt: row.createdAt,
 	}));
 }

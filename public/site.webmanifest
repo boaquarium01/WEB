@@ -1,6 +1,10 @@
 {
   "name": "桃園中壢水博館水族",
   "short_name": "水博館水族",
+  "description": "水博館水族商品、會員與訂單服務",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -17,5 +21,6 @@
   ],
   "theme_color": "#ffffff",
   "background_color": "#ffffff",
-  "display": "standalone"
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"]
 }

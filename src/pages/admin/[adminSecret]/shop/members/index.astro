@@ -3,7 +3,8 @@ import AdminLayout from '../../../../../layouts/AdminLayout.astro';
 import { getAdminBasePath, isValidAdminSecretParam } from '../../../../../lib/admin/path';
 import { formatTwd } from '../../../../../lib/services/catalog';
 import { orderStatusLabel } from '../../../../../lib/services/order';
-import { getAdminMember, listAdminMembers, saveAdminMemberAddress, updateAdminMember } from '../../../../../lib/services/admin-members';
+import { getAdminMember, listAdminMembers, saveAdminMemberAddress, updateAdminMember, updateAdminMemberNote } from '../../../../../lib/services/admin-members';
+import { isSyntheticProviderEmail } from '../../../../../lib/auth/policies.js';
 
 export const prerender = false;
 
@@ -16,6 +17,9 @@ const query = Astro.url.searchParams.get('q')?.trim() ?? '';
 const selectedUserId = Astro.url.searchParams.get('userId')?.trim() ?? '';
 let error: string | null = null;
 let message: string | null = null;
+let showMemberProfileForm = false;
+let showAddressFormId = '';
+let showNewAddressForm = false;
 
 if (Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
@@ -28,12 +32,14 @@ if (Astro.request.method === 'POST') {
 				userId,
 				name: String(form.get('name') ?? ''),
 				email: String(form.get('email') ?? ''),
-				displayName: String(form.get('displayName') ?? ''),
-				phone: String(form.get('phone') ?? ''),
-				bankAccountLastFive: String(form.get('bankAccountLastFive') ?? ''),
-				note: String(form.get('note') ?? ''),
-			});
+					displayName: String(form.get('displayName') ?? ''),
+					phone: String(form.get('phone') ?? ''),
+					bankAccountLastFive: String(form.get('bankAccountLastFive') ?? ''),
+				});
 			message = '會員資料已儲存';
+		} else if (action === 'update_member_note') {
+			await updateAdminMemberNote({ userId, note: String(form.get('note') ?? '') });
+			message = '後台備註已儲存';
 		} else if (action === 'save_address') {
 			await saveAdminMemberAddress({
 				userId,
@@ -53,6 +59,11 @@ if (Astro.request.method === 'POST') {
 		}
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : '儲存失敗';
+		showMemberProfileForm = String(form.get('_action') ?? '') === 'update_member';
+		if (String(form.get('_action') ?? '') === 'save_address') {
+			showAddressFormId = String(form.get('addressId') ?? '').trim();
+			showNewAddressForm = !showAddressFormId;
+		}
 	}
 }
 
@@ -61,57 +72,92 @@ const [members, selected] = await Promise.all([
 	selectedUserId ? getAdminMember(selectedUserId) : Promise.resolve(null),
 ]);
 const selectedHref = selected ? `${base}/shop/members?${new URLSearchParams({ ...(query ? { q: query } : {}), userId: selected.userId }).toString()}` : '';
+const linkedProviderIds = new Set(selected?.linkedAccounts.map((linkedAccount) => linkedAccount.providerId) ?? []);
+const selectedEmailIsSynthetic = selected ? isSyntheticProviderEmail(selected.email) : false;
+const loginProviders = [
+	{ id: 'credential', label: 'Email 密碼' },
+	{ id: 'google', label: 'Google' },
+	{ id: 'line', label: 'LINE' },
+];
 const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
 ---
 
 <AdminLayout title="會員管理｜水博館水族">
 	<header class="head page-heading">
-		<div class="heading-row"><div><h1>會員管理</h1><p>搜尋會員、編輯聯絡資料與收件地址，並查看完整訂單紀錄。</p></div><span class="total-count">{members.length} 位會員</span></div>
-		<form class="member-search" method="get" action={`${base}/shop/members`}>
-			<label for="member-query">搜尋會員</label>
-			<div><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="member-query" type="search" name="q" value={query} placeholder="姓名、電子郵件或手機號碼" /><button type="submit">搜尋</button>{query && <a href={`${base}/shop/members`}>清除</a>}</div>
-		</form>
+		<div class="heading-row"><h1>會員管理</h1></div>
 	</header>
 	{message && <p class="notice success" role="status">{message}</p>}
 	{error && <p class="notice error" role="alert">{error}</p>}
 
-	<div class="members-layout">
+	<div class:list={['members-layout', { 'has-selected-member': Boolean(selected) }]}>
 		<aside class="member-list panel" aria-label="會員搜尋結果">
 			<h2>會員名單</h2>
+			<form class="member-search" method="get" action={`${base}/shop/members`} role="search">
+				<div><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="member-query" type="search" name="q" value={query} placeholder="姓名、Email 或手機" aria-label="搜尋會員" /><button type="submit" aria-label="搜尋"><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>{query && <a href={`${base}/shop/members`}>清除</a>}</div>
+			</form>
 			{members.length ? <ul>{members.map((member) => <li><a class:list={{ selected: member.userId === selectedUserId }} href={`${base}/shop/members?${new URLSearchParams({ ...(query ? { q: query } : {}), userId: member.userId }).toString()}`}><span class="avatar">{member.name.slice(0, 1)}</span><span class="member-list-info"><strong>{member.name}</strong><span>{member.email}</span><span>{member.phone ?? '未填手機'}</span></span><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a></li>)}</ul> : <p class="empty">沒有符合條件的會員</p>}
 			{members.length === 500 && <p class="list-limit">目前顯示最新 500 位，請使用搜尋縮小範圍。</p>}
 		</aside>
 
 		{selected ? <section class="member-detail">
-			<header class="detail-head"><div><a class="back-members" href={`${base}/shop/members${query ? `?q=${encodeURIComponent(query)}` : ''}`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>會員名單</a><h2>{selected.displayName || selected.name}</h2><p>{selected.email}</p></div><span class:list={['verified', { yes: selected.emailVerified }]}>{selected.emailVerified ? '電子郵件已驗證' : '電子郵件未驗證'}</span></header>
+			<header class="detail-head"><div><a class="commerce-back-link" href={`${base}/shop/members${query ? `?q=${encodeURIComponent(query)}` : ''}`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回會員名單</a><h2>{selected.displayName || selected.name}</h2><p>{selectedEmailIsSynthetic ? '未提供 Email' : selected.email}</p></div><div class="member-statuses" aria-label="會員帳號狀態"><div class="member-status-row"><span class="member-status-label">Email 驗證</span><span class:list={['verified', { yes: selected.emailVerified && !selectedEmailIsSynthetic }]}>{selectedEmailIsSynthetic ? '未提供' : selected.emailVerified ? '已驗證' : '未驗證'}</span></div><div class="binding-row"><div class="binding-statuses" aria-label="帳號綁定狀態">{loginProviders.map((provider) => <span class:list={['binding-chip', { linked: linkedProviderIds.has(provider.id) }]}><strong>{provider.label}</strong><small>{linkedProviderIds.has(provider.id) ? '已綁定' : '未綁定'}</small></span>)}</div></div></div></header>
 
-			<section class="panel member-profile">
-				<div class="section-head"><h3>會員資料</h3><span>建立於 {formatDate(selected.createdAt)}</span></div>
-				<form method="post" action={selectedHref} class="profile-form">
+			<section class="panel internal-data-panel">
+				<div class="section-head"><h3>後台專用資料</h3><span>僅管理人員可見</span></div>
+				<div class="member-summary-grid">
+					<article><span>累積消費</span><strong>{formatTwd(selected.orderSummary.revenue)}</strong></article>
+					<article><span>累積訂單</span><strong>{selected.orderSummary.orderCount} 筆</strong></article>
+					<article><span>建立日期</span><strong>{formatDate(selected.createdAt)}</strong></article>
+				</div>
+				<form method="post" action={selectedHref} class="internal-note-form">
+					<input type="hidden" name="_action" value="update_member_note" /><input type="hidden" name="userId" value={selected.userId} />
+					<label for="member-note">備註</label>
+					<textarea id="member-note" name="note" rows="2" maxlength="2000">{selected.note ?? ''}</textarea>
+					<div class="form-footer"><span>更新於 {formatDate(selected.customerUpdatedAt ?? selected.updatedAt)}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存</button></div>
+				</form>
+			</section>
+
+			<section class="panel member-profile" data-member-profile>
+				<div class="section-head"><h3>會員資料</h3><button class="edit-profile-button" type="button" data-member-edit hidden={showMemberProfileForm}><i class="fa-solid fa-pen" aria-hidden="true"></i>編輯</button></div>
+				<dl class="member-overview" data-member-overview hidden={showMemberProfileForm}>
+					<div><dt>姓名</dt><dd>{selected.name}</dd></div>
+					<div><dt>Email</dt><dd>{selected.email}</dd></div>
+					<div><dt>顯示名稱</dt><dd>{selected.displayName || '—'}</dd></div>
+					<div><dt>手機</dt><dd>{selected.phone || '—'}</dd></div>
+					<div><dt>轉帳末五碼</dt><dd>{selected.bankAccountLastFive || '—'}</dd></div>
+				</dl>
+				<form method="post" action={selectedHref} class="profile-form" data-member-profile-form hidden={!showMemberProfileForm}>
 					<input type="hidden" name="_action" value="update_member" /><input type="hidden" name="userId" value={selected.userId} />
 					<div class="fields">
-						<label>登入姓名<input name="name" required maxlength="120" value={selected.name} /></label>
-						<label>登入電子郵件<input name="email" type="email" required value={selected.email} /><small>修改電子郵件後需重新驗證。</small></label>
-						<label>會員顯示名稱<input name="displayName" maxlength="120" value={selected.displayName ?? ''} /></label>
-						<label>手機號碼<input name="phone" type="tel" maxlength="40" value={selected.phone ?? ''} /></label>
-						<label>常用轉帳帳號末五碼<input name="bankAccountLastFive" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" value={selected.bankAccountLastFive ?? ''} placeholder="選填，5 位數字" /></label>
-						<label class="wide">會員備註<textarea name="note" rows="3" maxlength="2000">{selected.note ?? ''}</textarea></label>
+						<label>姓名<input name="name" required maxlength="120" value={selected.name} /></label>
+						<label>Email<input name="email" type="email" required value={selected.email} /><small>更改後需重新驗證</small></label>
+						<label>顯示名稱<input name="displayName" maxlength="120" value={selected.displayName ?? ''} /></label>
+						<label>手機<input name="phone" type="tel" maxlength="40" value={selected.phone ?? ''} /></label>
+						<label>轉帳末五碼<input name="bankAccountLastFive" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" value={selected.bankAccountLastFive ?? ''} placeholder="選填，5 位數字" /></label>
 					</div>
-					<div class="form-footer"><span>最後更新：{formatDate(selected.customerUpdatedAt ?? selected.updatedAt)}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存會員資料</button></div>
+					<div class="form-footer"><span>更新於 {formatDate(selected.customerUpdatedAt ?? selected.updatedAt)}</span><div class="profile-actions"><button class="cancel-profile-button" type="button" data-member-cancel>取消</button><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存</button></div></div>
 				</form>
 			</section>
 
 			<section class="panel addresses-panel">
-				<div class="section-head"><h3>收件地址 <span class="sub-count">{selected.addresses.length} 筆</span></h3><span>修改後僅影響會員儲存的地址，不會更改既有訂單快照。</span></div>
-				{selected.addresses.map((address) => <form class="address-card" method="post" action={selectedHref}>
-					<input type="hidden" name="_action" value="save_address" /><input type="hidden" name="userId" value={selected.userId} /><input type="hidden" name="addressId" value={address.id} />
-					<div class="address-card-head"><strong>{address.label || '收件地址'}</strong><label class="default-toggle"><input type="checkbox" name="isDefault" checked={address.isDefault} />設為預設</label></div>
-					<div class="fields address-fields">
-						<label>地址名稱<input name="label" maxlength="60" value={address.label ?? ''} placeholder="例如：住家" /></label><label>收件人<input name="recipientName" required value={address.recipientName} /></label><label>電話<input name="phone" type="tel" required maxlength="40" value={address.phone} /></label><label>郵遞區號<input name="postalCode" required value={address.postalCode} /></label><label>縣市<input name="city" required value={address.city} /></label><label>行政區<input name="district" required value={address.district} /></label><label class="wide">詳細地址<input name="addressLine" required maxlength="500" value={address.addressLine} /></label>
-					</div>
-					<div class="form-footer"><span>更新於 {formatDate(address.updatedAt)}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存地址</button></div>
-				</form>)}
-				<details class="new-address"><summary><i class="fa-solid fa-plus" aria-hidden="true"></i>新增收件地址</summary>
+				<div class="section-head"><h3>收件地址 <span class="sub-count">{selected.addresses.length} 筆</span></h3><span>更改不影響既有訂單</span></div>
+				{selected.addresses.map((address) => <div class="address-card" data-address-editor>
+					<div class="address-card-head"><div class="address-card-title"><strong>{address.label || '收件地址'}</strong>{address.isDefault && <span>預設</span>}</div><button class="edit-profile-button" type="button" data-address-edit aria-expanded={showAddressFormId === address.id} hidden={showAddressFormId === address.id}><i class="fa-solid fa-pen" aria-hidden="true"></i>編輯</button></div>
+					<dl class="address-overview" data-address-overview hidden={showAddressFormId === address.id}>
+						<div><dt>收件人</dt><dd>{address.recipientName}</dd></div><div><dt>電話</dt><dd>{address.phone}</dd></div>
+						<div class="wide"><dt>地址</dt><dd>{address.postalCode} {address.city}{address.district}{address.addressLine}</dd></div>
+					</dl>
+					<form class="address-edit-form" data-address-form method="post" action={selectedHref} hidden={showAddressFormId !== address.id}>
+						<input type="hidden" name="_action" value="save_address" /><input type="hidden" name="userId" value={selected.userId} /><input type="hidden" name="addressId" value={address.id} />
+						<div class="default-toggle address-default-edit"><label><input type="checkbox" name="isDefault" checked={address.isDefault} />設為預設地址</label></div>
+						<div class="fields address-fields">
+							<label>地址名稱<input name="label" maxlength="60" value={address.label ?? ''} placeholder="例如：住家" /></label><label>收件人<input name="recipientName" required value={address.recipientName} /></label><label>電話<input name="phone" type="tel" required maxlength="40" value={address.phone} /></label><label>郵遞區號<input name="postalCode" required value={address.postalCode} /></label><label>縣市<input name="city" required value={address.city} /></label><label>行政區<input name="district" required value={address.district} /></label><label class="wide">詳細地址<input name="addressLine" required maxlength="500" value={address.addressLine} /></label>
+						</div>
+						<div class="form-footer"><span>更新於 {formatDate(address.updatedAt)}</span><div class="profile-actions"><button class="cancel-profile-button" type="button" data-address-cancel>取消</button><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存地址</button></div></div>
+					</form>
+				</div>)}
+				<details class="new-address" open={showNewAddressForm}>
+					<summary><i class="fa-solid fa-plus" aria-hidden="true"></i>新增收件地址</summary>
 					<form class="address-card" method="post" action={selectedHref}><input type="hidden" name="_action" value="save_address" /><input type="hidden" name="userId" value={selected.userId} />
 						<div class="fields address-fields"><label>地址名稱<input name="label" maxlength="60" placeholder="例如：公司" /></label><label>收件人<input name="recipientName" required /></label><label>電話<input name="phone" type="tel" required maxlength="40" /></label><label>郵遞區號<input name="postalCode" required /></label><label>縣市<input name="city" required /></label><label>行政區<input name="district" required /></label><label class="wide">詳細地址<input name="addressLine" required maxlength="500" /></label></div>
 						<div class="form-footer"><label class="default-toggle"><input type="checkbox" name="isDefault" />設為預設地址</label><button type="submit"><i class="fa-solid fa-plus" aria-hidden="true"></i>新增地址</button></div>
@@ -121,23 +167,55 @@ const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asi
 
 			<section class="panel orders-panel">
 				<div class="section-head"><h3>訂單紀錄 <span class="sub-count">{selected.orders.length} 筆</span></h3><a href={`${base}/shop/orders?userId=${encodeURIComponent(selected.userId)}`}>前往此會員訂單 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></div>
-				{selected.orders.length ? <div class="orders-list">{selected.orders.map((order) => <a href={`${base}/shop/orders/${encodeURIComponent(order.orderNumber)}`}><span><strong>{order.orderNumber}</strong><small>{formatDate(order.createdAt)} · {order.itemCount} 件商品</small></span><span class="order-status">{orderStatusLabel(order.status)}</span><strong>{formatTwd(order.total)}</strong></a>)}</div> : <p class="empty">此會員目前沒有訂單。</p>}
+				{selected.orders.length ? <div class="orders-list">{selected.orders.map((order) => <a href={`${base}/shop/orders/${encodeURIComponent(order.orderNumber)}`}><div class="order-card-top"><strong>{order.orderNumber}</strong><span class={`order-status status--${order.status.toLowerCase()}`}>{orderStatusLabel(order.status)}</span></div><div class="order-card-bottom"><span>{formatDate(order.createdAt)} · {order.itemCount} 件商品</span><strong>{formatTwd(order.total)}</strong></div></a>)}</div> : <p class="empty">此會員目前沒有訂單。</p>}
 			</section>
 		</section> : <div class="select-hint panel"><i class="fa-solid fa-users" aria-hidden="true"></i><strong>選擇會員查看資料</strong><span>可用姓名、電子郵件或手機號碼搜尋。</span></div>}
 	</div>
+	<script>
+		const memberProfile = document.querySelector<HTMLElement>('[data-member-profile]');
+		if (memberProfile) {
+			const editButton = memberProfile.querySelector<HTMLButtonElement>('[data-member-edit]');
+			const cancelButton = memberProfile.querySelector<HTMLButtonElement>('[data-member-cancel]');
+			const overview = memberProfile.querySelector<HTMLElement>('[data-member-overview]');
+			const form = memberProfile.querySelector<HTMLFormElement>('[data-member-profile-form]');
+			const setEditing = (editing: boolean) => {
+				if (overview) overview.hidden = editing;
+				if (form) form.hidden = !editing;
+				if (editButton) editButton.hidden = editing;
+			};
+			editButton?.addEventListener('click', () => setEditing(true));
+			cancelButton?.addEventListener('click', () => setEditing(false));
+		}
+		document.querySelectorAll<HTMLElement>('[data-address-editor]').forEach((editor) => {
+			const editButton = editor.querySelector<HTMLButtonElement>('[data-address-edit]');
+			const cancelButton = editor.querySelector<HTMLButtonElement>('[data-address-cancel]');
+			const overview = editor.querySelector<HTMLElement>('[data-address-overview]');
+			const form = editor.querySelector<HTMLFormElement>('[data-address-form]');
+			const setEditing = (editing: boolean) => {
+				if (overview) overview.hidden = editing;
+				if (form) form.hidden = !editing;
+				if (editButton) {
+					editButton.hidden = editing;
+					editButton.setAttribute('aria-expanded', String(editing));
+				}
+			};
+			editButton?.addEventListener('click', () => setEditing(true));
+			cancelButton?.addEventListener('click', () => setEditing(false));
+		});
+	</script>
 </AdminLayout>
 
 <style>
-	.page-heading h1 { font-size: 34px; }
 	.heading-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); }
-	.total-count,.sub-count { padding: 7px 11px; border-radius: 999px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 13px; white-space: nowrap; }
-	.member-search { margin-top: 20px; padding: 15px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; }
-	.member-search > label { display: block; margin-bottom: 7px; color: #52676b; font-size: 13px; font-weight: 650; }
-	.member-search > div { display: flex; align-items: center; gap: 9px; }
+	.sub-count { padding: 7px 11px; border-radius: 999px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 13px; white-space: nowrap; }
+	.member-search { margin: 0 0 12px; padding: 0; border: 0; background: transparent; }
+	.member-search > div { display: flex; align-items: center; gap: 7px; }
 	.member-search i { color: #849497; }
-	.member-search input { flex: 1; min-width: 0; min-height: 42px; padding: 9px 11px; border: 1px solid var(--commerce-line); border-radius: 9px; font: inherit; }
+	.member-search input { flex: 1; min-width: 0; min-height: 38px; padding: 8px 9px; border: 1px solid var(--commerce-line); border-radius: 9px; font: inherit; font-size: 13px; }
 	.member-search button,.form-footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 9px 14px; border: 0; border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+	.member-search button { width: 38px; min-height: 38px; flex: none; padding: 0; }
+	.member-search button i { color: #fff; }
 	.member-search a { color: var(--commerce-primary-dark); font-size: 13px; }
 	.notice { padding: 12px 15px; border-radius: 10px; font-size: 14px; }
 	.notice.success { background: #edf8f1; color: #28734b; }
@@ -156,18 +234,42 @@ const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asi
 	.member-list-info span { color: var(--commerce-muted); font-size: 12px; }
 	.member-list a > i { color: #99a8a8; font-size: 11px; }
 	.list-limit,.empty { color: var(--commerce-muted); font-size: 13px; }
-	.member-detail { display: grid; gap: 14px; min-width: 0; }
+	.member-detail { display: grid; gap: 15px; min-width: 0; }
 	.detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 1px; }
 	.detail-head h2 { margin: 10px 0 3px; font-size: 25px; }
 	.detail-head p { margin: 0; color: var(--commerce-muted); }
-	.back-members { color: var(--commerce-primary-dark); font-size: 13px; text-decoration: none; }
-	.back-members i { margin-right: 6px; }
 	.verified { padding: 7px 10px; border-radius: 99px; background: #f5f1e9; color: #876a2c; font-size: 12px; white-space: nowrap; }
 	.verified.yes { background: #eaf6f2; color: #27775f; }
+	.member-statuses { display: grid; gap: 9px; width: min(100%,380px); box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 12px; background: #fff; }
+	.member-status-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+	.member-status-label { color: var(--commerce-muted); font-size: 12px; font-weight: 650; white-space: nowrap; }
+	.binding-row { display: grid; gap: 7px; padding-top: 8px; border-top: 1px solid #edf1ef; }
+	.binding-statuses { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 5px; }
+	.binding-chip { display: flex; align-items: center; justify-content: space-between; gap: 5px; min-width: 0; padding: 7px 9px; border: 1px solid var(--commerce-line); border-radius: 10px; background: #f7f9f8; color: var(--commerce-muted); white-space: nowrap; }
+	.binding-chip.linked { border-color: #cde7dc; background: #eaf6f2; color: #27775f; }
+	.binding-chip strong { min-width: 0; font-size: 11px; font-weight: 700; white-space: nowrap; }
+	.binding-chip small { flex: none; font-size: 10px; line-height: 1.2; white-space: nowrap; }
 	.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 	.section-head h3 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 19px; }
 	.section-head > span { color: var(--commerce-muted); font-size: 12px; }
 	.section-head a { color: var(--commerce-primary-dark); font-size: 13px; text-decoration: none; white-space: nowrap; }
+	.edit-profile-button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 11px; border: 1px solid var(--commerce-line); border-radius: 8px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+	.edit-profile-button:hover { border-color: var(--commerce-primary); background: var(--commerce-primary-soft); }
+	.member-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 22px; margin: 0; }
+	.member-overview > div { display: grid; grid-template-columns: 92px minmax(0,1fr); align-items: baseline; gap: 8px; padding: 10px 0; border-bottom: 1px solid #edf1ef; }
+	.member-overview dt { color: var(--commerce-muted); font-size: 12px; }
+	.member-overview dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--commerce-ink); font-size: 14px; }
+	.member-overview[hidden],.profile-form[hidden],.edit-profile-button[hidden] { display: none !important; }
+	.member-summary-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+	.member-summary-grid article { display: grid; gap: 7px; min-width: 0; padding: 13px; border: 1px solid var(--commerce-line); border-radius: 11px; background: #f8fbfa; }
+	.member-summary-grid article > span,.member-summary-grid article > small { color: var(--commerce-muted); font-size: 12px; }
+	.member-summary-grid article > strong { overflow-wrap: anywhere; color: var(--commerce-ink); font-size: 20px; font-variant-numeric: tabular-nums; }
+	.member-summary-grid article:last-child > strong { font-size: 14px; }
+	.internal-note-form { display: grid; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--commerce-line); }
+	.internal-note-form > label { color: #52676b; font-size: 13px; font-weight: 650; }
+	.internal-note-form textarea { width: 100%; box-sizing: border-box; min-height: 58px; padding: 8px 10px; border: 1px solid var(--commerce-line); border-radius: 9px; color: var(--commerce-ink); font: inherit; font-size: 14px; }
+	.internal-note-form .form-footer { margin-top: 4px; }
+	.internal-note-form .form-footer button { min-height: 36px; padding: 7px 12px; }
 	.sub-count { padding: 4px 8px; font-size: 11px; }
 	.fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 	.fields label { display: grid; align-content: start; gap: 6px; min-width: 0; color: #52676b; font-size: 13px; font-weight: 650; }
@@ -177,8 +279,20 @@ const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asi
 	.fields .wide { grid-column: 1 / -1; }
 	.form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
 	.form-footer > span { color: var(--commerce-muted); font-size: 12px; }
+	.profile-actions { display: inline-flex; gap: 8px; }
+	.form-footer .cancel-profile-button { border: 1px solid var(--commerce-line); background: #fff; color: var(--commerce-primary-dark); }
 	.address-card { padding: 15px 0; border-top: 1px solid var(--commerce-line); }
 	.address-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--commerce-primary-dark); }
+	.address-card-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+	.address-card-title > span { padding: 4px 8px; border-radius: 999px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 11px; white-space: nowrap; }
+	.address-overview { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 22px; margin: 0; }
+	.address-overview > div { display: grid; grid-template-columns: 72px minmax(0,1fr); align-items: baseline; gap: 8px; padding: 8px 0; border-top: 1px solid #edf1ef; }
+	.address-overview dt { color: var(--commerce-muted); font-size: 12px; }
+	.address-overview dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--commerce-ink); font-size: 14px; }
+	.address-overview .wide { grid-column: 1 / -1; }
+	.address-overview[hidden],.address-edit-form[hidden] { display: none !important; }
+	.address-default-edit { margin-bottom: 12px; }
+	.address-default-edit label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 	.default-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--commerce-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
 	.default-toggle input { accent-color: var(--commerce-primary); }
 	.new-address { border-top: 1px solid var(--commerce-line); padding-top: 14px; }
@@ -186,15 +300,36 @@ const formatDate = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asi
 	.new-address summary i { margin-right: 7px; }
 	.new-address .address-card { padding-bottom: 0; border-top: 0; }
 	.orders-list { display: grid; }
-	.orders-list a { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 14px; padding: 12px 2px; border-top: 1px solid var(--commerce-line); color: inherit; text-decoration: none; }
-	.orders-list a:hover strong:first-child { color: var(--commerce-primary); }
-	.orders-list a > span:first-child { display: grid; gap: 4px; min-width: 0; }
-	.orders-list a > span:first-child strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.orders-list small { color: var(--commerce-muted); font-size: 12px; }
-	.order-status { padding: 5px 9px; border-radius: 99px; background: #eaf6f2; color: var(--commerce-primary-dark); font-size: 12px; white-space: nowrap; }
+	.orders-list a { display: grid; gap: 9px; padding: 13px 2px; border-top: 1px solid var(--commerce-line); color: inherit; text-decoration: none; }
+	.orders-list a:hover .order-card-top > strong { color: var(--commerce-primary); }
+	.order-card-top,.order-card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; }
+	.order-card-top > strong { min-width: 0; overflow: hidden; color: var(--commerce-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+	.order-card-bottom > span { min-width: 0; color: var(--commerce-muted); font-size: 12px; }
+	.order-card-bottom > strong { flex: none; color: var(--commerce-ink); font-size: 14px; font-variant-numeric: tabular-nums; }
+	.order-status { flex: none; padding: 5px 9px; border: 1px solid transparent; border-radius: 99px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+	.order-status.status--pending_payment { border-color: #f2d7ab; background: #fff4e5; color: #8a5209; }
+	.order-status.status--payment_submitted { border-color: #d1ddfb; background: #edf3ff; color: #36599b; }
+	.order-status.status--paid { border-color: #c8e8d3; background: #e8f6ee; color: #236c43; }
+	.order-status.status--processing { border-color: #c7e4ed; background: #e8f5f9; color: #176176; }
+	.order-status.status--shipped { border-color: #d8d3fa; background: #efedff; color: #51488f; }
+	.order-status.status--completed { border-color: #bee2cb; background: #e4f4eb; color: #1e6840; }
+	.order-status.status--cancelled { border-color: #f1cfcb; background: #fff0ef; color: #a23c35; }
 	.select-hint { display: grid; justify-items: center; gap: 10px; min-height: 230px; align-content: center; color: var(--commerce-muted); text-align: center; }
 	.select-hint i { color: var(--commerce-primary); font-size: 30px; }
 	.select-hint strong { color: var(--commerce-ink); font-size: 18px; }
-	@media(max-width:900px) { .members-layout { grid-template-columns: minmax(200px,260px) minmax(0,1fr); gap: 12px; }.panel { padding: 15px; }.orders-list a { grid-template-columns: minmax(0,1fr) auto; }.orders-list .order-status { grid-column: 2; grid-row: 1; }.orders-list a > strong { grid-column: 2; grid-row: 2; text-align: right; } }
-	@media(max-width:680px) { .heading-row,.detail-head { align-items: flex-start; flex-direction: column; }.members-layout { grid-template-columns: 1fr; }.member-list { position: static; max-height: 280px; }.member-detail { gap: 11px; }.fields { grid-template-columns: 1fr; }.fields .wide { grid-column: auto; }.section-head { align-items: flex-start; flex-direction: column; }.form-footer { align-items: stretch; flex-direction: column; }.form-footer button { width: 100%; }.orders-list a { grid-template-columns: minmax(0,1fr) auto; gap: 8px; }.orders-list .order-status { grid-column: 2; grid-row: 1; }.orders-list a > strong { grid-column: 2; grid-row: 2; }.member-search > div { flex-wrap: wrap; }.member-search input { flex-basis: calc(100% - 50px); }.member-search button { flex: 1; } }
+	@media(max-width:900px) { .members-layout { grid-template-columns: minmax(200px,260px) minmax(0,1fr); gap: 12px; }.panel { padding: 15px; } }
+	@media(max-width:680px) { .heading-row { align-items: center; flex-direction: row; }.detail-head { align-items: flex-start; flex-direction: column; }.member-statuses { width: 100%; max-width: 420px; }.members-layout { grid-template-columns: 1fr; }.member-list { position: static; max-height: none; overflow: visible; }.members-layout.has-selected-member > .member-list,.members-layout:not(.has-selected-member) > .select-hint { display: none; }.member-detail { gap: 11px; }.fields { grid-template-columns: 1fr; }.fields .wide { grid-column: auto; }.member-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.member-summary-grid article:last-child { grid-column: 1 / -1; }.member-overview,.address-overview { grid-template-columns: 1fr; }.address-overview .wide { grid-column: auto; }.section-head { align-items: flex-start; flex-direction: row; }.form-footer { align-items: stretch; flex-direction: column; }.form-footer button { width: 100%; }.profile-actions { width: 100%; }.profile-actions button { flex: 1; }.order-card-top,.order-card-bottom { gap: 8px; }.order-card-bottom > span { font-size: 11px; }.order-card-bottom > strong { font-size: 13px; } }
+	@media(max-width:680px) {
+		.member-statuses { gap: 8px; padding: 11px; }
+		.member-status-row { min-height: 30px; }
+		.binding-row { gap: 7px; }
+		.binding-statuses { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+		.binding-chip { min-height: 40px; box-sizing: border-box; padding: 6px; }
+		.binding-chip strong { font-size: 10px; }
+		.binding-chip small { font-size: 10px; }
+		.member-detail .panel > .section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+		.member-detail .panel > .section-head h3 { flex: none; min-width: 0; flex-wrap: nowrap; gap: 7px; font-size: 18px; white-space: nowrap; }
+		.member-detail .panel > .section-head > span,.member-detail .panel > .section-head > a { min-width: 0; margin-left: auto; font-size: 11px; line-height: 1.3; text-align: right; white-space: nowrap; }
+		.member-detail .panel > .section-head > a { font-size: 12px; }
+	}
 </style>

@@ -1,5 +1,5 @@
 ---
-/** Shared shell for the ecommerce administration workspace. */
+/** Shared shell for the official website administration workspace. */
 import Layout from './Layout.astro';
 import { getAdminBasePath } from '../lib/admin/path';
 
@@ -8,7 +8,7 @@ interface Props {
 	description?: string;
 }
 
-const { title, description = '水博館水族電商管理後台' } = Astro.props;
+const { title, description = '水博館水族官方網站後台' } = Astro.props;
 const user = Astro.locals.user;
 const path = Astro.url.pathname;
 const base = getAdminBasePath();
@@ -17,43 +17,50 @@ const shop = `${base}/shop`;
 const links = [
 	{ href: shop, label: '營運總覽', icon: 'fa-chart-pie', match: (p: string) => p === shop || p === `${shop}/` },
 	{ href: `${shop}/orders`, label: '訂單管理', icon: 'fa-receipt', match: (p: string) => p.includes('/shop/orders') },
+	{ href: `${base}/dashboard?model=product`, label: '商品管理', icon: 'fa-box-open', match: (p: string) => p.includes('/dashboard') || p.includes('/shop/products') || p.includes('/shop/inventory') },
 	{ href: `${shop}/members`, label: '會員管理', icon: 'fa-users', match: (p: string) => p.includes('/shop/members') },
-	{ href: `${shop}/products`, label: '商品管理', icon: 'fa-box-open', match: (p: string) => p.includes('/shop/products') || p.includes('/shop/inventory') },
+	{ href: `${shop}/operations`, label: '營運管理', icon: 'fa-chart-line', match: (p: string) => p.includes('/shop/operations') },
 	{ href: `${shop}/shipping`, label: '運費設定', icon: 'fa-truck-fast', match: (p: string) => p.includes('/shop/shipping') },
 ];
 const today = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
+const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', weekday: 'short' }).format(new Date());
 ---
 
 <Layout title={title} description={description}>
 	<div class="commerce-admin">
-		<aside class="commerce-sidebar" aria-label="電商管理導覽">
-			<a href={shop} class="commerce-brand">
+		<aside class="commerce-sidebar" aria-label="官方網站後台導覽">
+			<button id="commerceSidebarToggle" class="commerce-sidebar-toggle" type="button" aria-expanded="true" aria-label="收折側邊欄" title="收折側邊欄">
+				<i class="fa-solid fa-angles-left collapse-button__icon" aria-hidden="true"></i>
+			</button>
+			<a href={shop} class="commerce-brand" title="水博館水族官方網站後台">
 				<span class="commerce-brand__mark"><i class="fa-solid fa-fish-fins" aria-hidden="true"></i></span>
-				<span class="commerce-brand__text"><strong>水博館水族</strong><small>電商管理</small></span>
+				<span class="commerce-brand__text"><strong>水博館水族</strong><small>官方網站後台</small></span>
 			</a>
 			<div class="commerce-sidebar__context">
-				<span class="commerce-sidebar__date"><i class="fa-regular fa-calendar" aria-hidden="true"></i>{today}</span>
+				<span class="commerce-sidebar__date"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span class="commerce-sidebar__date-full">{today}</span><span class="commerce-sidebar__date-compact">{todayCompact}</span></span>
 				<span class="commerce-sidebar__user"><span class="commerce-user__avatar">{String(user?.name ?? user?.email ?? '管').slice(0, 1).toUpperCase()}</span><strong>{user?.name ?? user?.email ?? '管理員'}</strong></span>
 			</div>
-			<nav class="commerce-nav">
-				{links.map((link) => (
-					<a href={link.href} class:list={[{ active: link.match(path) }]} aria-current={link.match(path) ? 'page' : undefined}>
-						<i class:list={['fa-solid', link.icon]} aria-hidden="true"></i>
-						<span><strong>{link.label}</strong></span>
-						<i class="fa-solid fa-chevron-right nav-chevron" aria-hidden="true"></i>
-					</a>
-				))}
-			</nav>
+			<div class="commerce-nav-wrap">
+				<button id="commerceNavScrollStart" class="commerce-nav-scroll-start" type="button" aria-label="導覽向左捲動" title="導覽向左捲動" hidden><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button>
+				<nav class="commerce-nav" aria-label="管理功能">
+					{links.map((link) => (
+						<a href={link.href} title={link.label} class:list={[{ active: link.match(path) }]} aria-current={link.match(path) ? 'page' : undefined}>
+							<i class:list={['fa-solid', link.icon]} aria-hidden="true"></i>
+							<span><strong>{link.label}</strong></span>
+							<i class="fa-solid fa-chevron-right nav-chevron" aria-hidden="true"></i>
+						</a>
+					))}
+				</nav>
+			</div>
 			<div class="commerce-sidebar__bottom">
-				<a href={`${base}/dashboard`}><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i><span>官網內容管理</span></a>
-				<a href="/"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>查看官網</span></a>
+				<a href="/" title="查看官網"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>查看官網</span></a>
 			</div>
 		</aside>
 
 		<div class="commerce-workspace">
 			<main class="commerce-main">
 				<div class="commerce-content"><slot /></div>
-				<footer class="commerce-footer"><span>水博館水族 · 電商管理系統</span><span>安全管理工作區</span></footer>
+				<footer class="commerce-footer"><span>水博館水族官方網站後台</span><span>官網內容與電商營運整合管理</span></footer>
 			</main>
 		</div>
 	</div>
@@ -76,34 +83,47 @@ const today = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 
 	body:has(.commerce-admin) { margin: 0; background: var(--commerce-canvas); color: var(--commerce-ink); }
 	body:has(.commerce-admin) .line-float,
 	body:has(.commerce-admin) .cart-float { display: none !important; }
-	.commerce-admin { min-height: 100vh; display: grid; grid-template-columns: 252px minmax(0, 1fr); }
-	.commerce-sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 23px 15px 18px; background: #fff; border-right: 1px solid var(--commerce-line); }
-	.commerce-brand { display: flex; align-items: center; gap: 12px; padding: 0 11px 27px; color: inherit; text-decoration: none; }
+	.commerce-admin { min-height: 100vh; min-height: 100dvh; display: grid; grid-template-columns: 252px minmax(0, 1fr); transition: grid-template-columns .2s ease; }
+	.commerce-sidebar { position: relative; top: auto; height: 100vh; min-width: 0; box-sizing: border-box; display: flex; flex-direction: column; padding: 23px 15px 18px; overflow: hidden; background: #fff; border-right: 1px solid var(--commerce-line); transition: padding .2s ease; }
+	.commerce-sidebar-toggle { position: absolute; top: 24px; right: 10px; z-index: 20; width: 46px; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0; border: 1px solid #b9ddd7; border-radius: 10px; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); box-shadow: 0 5px 14px rgba(8, 126, 120, .12); cursor: pointer; transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease, transform .16s ease; }
+	.commerce-sidebar-toggle:hover { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; transform: translateY(-1px); box-shadow: 0 7px 17px rgba(8, 126, 120, .2); }
+	.commerce-sidebar-toggle:focus-visible { outline: 3px solid #087e7833; outline-offset: 2px; }
+	.collapse-button__icon { display: grid; width: 22px; height: 22px; place-items: center; font-size: 14px; line-height: 1; }
+	.commerce-brand { display: flex; align-items: center; gap: 12px; padding: 0 58px 27px 11px; color: inherit; text-decoration: none; transition: padding .2s ease; }
 	.commerce-brand__mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #0c938a, #066963); color: #fff; font-size: 19px; box-shadow: 0 7px 15px #087e782e; }
-	.commerce-brand__text { display: grid; gap: 4px; }
+	.commerce-brand__text { display: grid; gap: 4px; min-width: 0; max-width: 170px; overflow: hidden; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-brand__text strong { font-size: 15px; letter-spacing: .04em; }
 	.commerce-brand__text small { color: #8a999c; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
-	.commerce-sidebar__context { display: grid; gap: 9px; margin: -8px 3px 19px; padding: 11px; border-radius: 12px; background: #f6f9f8; }
-	.commerce-sidebar__date { display: flex; align-items: center; gap: 8px; color: #6f8387; font-size: 12px; }
+	.commerce-sidebar__context { display: grid; gap: 9px; margin: -8px 3px 19px; padding: 11px; border-radius: 12px; background: #f6f9f8; transition: gap .2s ease, margin .2s ease, padding .2s ease; }
+	.commerce-sidebar__date { display: flex; align-items: center; gap: 8px; max-width: 220px; max-height: 22px; overflow: hidden; color: #6f8387; font-size: 12px; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, max-height .2s ease, visibility 0s linear; }
+	.commerce-sidebar__date-compact { display: none; }
 	.commerce-sidebar__user { display: flex; align-items: center; gap: 9px; min-width: 0; color: #40575c; font-size: 13px; }
-	.commerce-sidebar__user strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.commerce-sidebar__user strong { min-width: 0; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-nav { display: grid; gap: 5px; }
+	.commerce-nav-wrap { display: contents; }
+	.commerce-nav-scroll-start { display: none; }
 	.commerce-nav a { min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid transparent; border-radius: 12px; color: #73848a; text-decoration: none; transition: .18s ease; }
-	.commerce-nav a:hover { background: #f7faf9; color: var(--commerce-primary); }
-	.commerce-nav a.active { background: var(--commerce-primary-soft); border-color: #d5ebe6; color: var(--commerce-primary-dark); }
+		.commerce-nav a:hover { background: #f7faf9; color: var(--commerce-primary); }
+		.commerce-nav a.active { background: var(--commerce-primary-soft); border-color: #d5ebe6; color: var(--commerce-primary-dark); }
+		.commerce-nav a.active > i:first-child { color: var(--commerce-primary); }
 	.commerce-nav a > i:first-child { width: 20px; text-align: center; font-size: 15px; }
-	.commerce-nav a span { flex: 1; display: grid; gap: 2px; }
+	.commerce-nav a span { flex: 1; min-width: 0; max-width: 170px; display: grid; gap: 2px; overflow: hidden; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-nav a strong { font-size: 15px; font-weight: 680; }
 	.commerce-nav a small { color: #9aa8a9; font-size: 10px; }
-	.commerce-nav .nav-chevron { color: #a7b5b4; font-size: 10px; }
+	.commerce-nav .nav-chevron { flex: none; overflow: hidden; color: #a7b5b4; font-size: 10px; transition: opacity .12s ease, width .2s ease; }
 	.commerce-sidebar__bottom { margin-top: auto; padding-top: 15px; border-top: 1px solid #edf1ef; display: grid; gap: 3px; }
 	.commerce-sidebar__bottom a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; color: #718189; text-decoration: none; font-size: 12px; }
 	.commerce-sidebar__bottom a:hover,.commerce-sidebar__bottom a.active { background: #f2f7f6; color: var(--commerce-primary-dark); }
 	.commerce-sidebar__bottom i { width: 17px; text-align: center; }
+	.commerce-sidebar__bottom span { max-width: 170px; overflow: hidden; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-workspace { min-width: 0; }
 	.commerce-user__avatar { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: #e5f2ef; color: var(--commerce-primary-dark); font-weight: 750; }
-	.commerce-main { min-height: 100vh; display: flex; flex-direction: column; padding: 30px 36px 18px; }
+	.commerce-main { min-height: 100vh; display: flex; flex-direction: column; padding: 22px 36px 18px; }
 	.commerce-content { flex: 1; width: 100%; max-width: 1500px; margin: 0 auto; }
+	.commerce-back-link { display: inline-flex; min-height: 38px; box-sizing: border-box; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; transition: border-color .15s ease,background-color .15s ease,color .15s ease; }
+	.commerce-back-link:hover { border-color: #b9ddd7; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); }
+	.commerce-back-link:focus-visible { outline: 3px solid #087e7833; outline-offset: 2px; }
+	.commerce-back-link i { font-size: 12px; }
 	.commerce-footer { width: 100%; max-width: 1500px; margin: 26px auto 0; padding-top: 14px; display: flex; justify-content: space-between; gap: 12px; border-top: 1px solid #e3eae8; color: #9aa7a7; font-size: 10px; }
 	.commerce-content h1 { margin: 0; color: var(--commerce-ink); font-size: clamp(32px, 3.5vw, 40px); line-height: 1.18; letter-spacing: -.035em; }
 	.commerce-content h2 { color: var(--commerce-ink); font-size: 23px; }
@@ -120,22 +140,135 @@ const today = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 
 	.commerce-content .empty { padding: 28px; border: 1px dashed #d6e2df; border-radius: 14px; background: #fff; color: var(--commerce-muted); text-align: center; }
 	.commerce-content input,.commerce-content select,.commerce-content textarea { border: 1px solid #dce6e3; border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; }
 	.commerce-content input:focus,.commerce-content select:focus,.commerce-content textarea:focus { outline: 3px solid #087e781b; border-color: var(--commerce-primary); }
+	@media (min-width: 801px) {
+		.commerce-admin[data-sidebar-collapsed='true'] { grid-template-columns: 76px minmax(0, 1fr); }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar { padding-inline: 8px; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-brand { align-self: stretch; justify-content: center; gap: 0; padding: 42px 0 20px; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar-toggle { top: 10px; right: auto; left: 50%; width: 42px; height: 42px; transform: translateX(-50%); }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar-toggle:hover { transform: translate(-50%, -1px); }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-brand__text,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__date,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__user strong,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav .nav-chevron,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom span { visibility: hidden; max-width: 0; opacity: 0; transition-delay: 0s, 0s, .2s; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav .nav-chevron { width: 0; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__context { align-self: stretch; box-sizing: border-box; gap: 0; margin-inline: 0; padding: 8px; background: transparent; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__date { visibility: hidden; max-width: 0; max-height: 0; opacity: 0; transition-delay: 0s, 0s, 0s, .2s; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__user { display: grid; width: 100%; grid-template-columns: 30px; justify-content: center; padding: 0; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-user__avatar { width: 30px; height: 30px; margin: 0; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav a,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom a { position: relative; width: 100%; box-sizing: border-box; justify-content: center; gap: 0; padding-inline: 0; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav a > i:first-child,
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom i { position: relative; left: 0; width: 22px; height: 22px; display: grid; flex: none; place-items: center; margin-inline: auto; text-align: center; }
+	}
 	@media (max-width: 800px) {
-		.commerce-admin { grid-template-columns: 1fr; }
-		.commerce-sidebar { position: static; height: auto; padding: 11px 14px 9px; border-right: 0; border-bottom: 1px solid var(--commerce-line); }
-		.commerce-brand { padding: 0 2px 10px; }
+		.commerce-admin { display: block; }
+		.commerce-sidebar { position: relative; top: auto; z-index: auto; height: auto; display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "brand context" "nav nav"; align-items: center; gap: 8px 10px; padding: max(11px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 4px max(14px, env(safe-area-inset-left, 0px)); border-right: 0; border-bottom: 1px solid var(--commerce-line); }
+		.commerce-brand { grid-area: brand; min-width: 0; padding: 0 2px; }
 		.commerce-brand__mark { width: 34px; height: 34px; border-radius: 11px; font-size: 16px; }
 		.commerce-sidebar__bottom { display: none; }
-		.commerce-nav { display: flex; overflow-x: auto; gap: 6px; padding-bottom: 1px; }
+		.commerce-nav-wrap { position: relative; grid-area: nav; display: block; min-width: 0; padding-left: 0; }
+		.commerce-nav-wrap.has-left-scroll { padding-left: 30px; }
+		.commerce-nav-wrap::after { position: absolute; top: 0; right: 0; bottom: 0; z-index: 1; width: 24px; background: linear-gradient(90deg, transparent, #fff 88%); content: ''; opacity: 0; pointer-events: none; transition: opacity .16s ease; }
+		.commerce-nav-wrap.has-right-scroll::after { opacity: 1; }
+		.commerce-nav { display: flex; min-width: 0; overflow-x: auto; gap: 6px; padding-bottom: 7px; scrollbar-width: thin; scrollbar-color: #aabbb8 transparent; }
+		.commerce-nav::-webkit-scrollbar { height: 6px; }
+		.commerce-nav::-webkit-scrollbar-track { background: transparent; }
+		.commerce-nav::-webkit-scrollbar-thumb { border-radius: 999px; background: #aabbb8; }
+		.commerce-nav-scroll-start { position: absolute; top: 50%; z-index: 2; display: grid; width: 26px; height: 32px; place-items: center; padding: 0; transform: translateY(-50%); border: 1px solid #dce8e5; border-radius: 8px; background: #fff; color: var(--commerce-primary-dark); box-shadow: 0 3px 9px rgba(28,67,70,.1); cursor: pointer; }
+		.commerce-nav-scroll-start { left: 0; }
+		.commerce-nav-scroll-start:active { background: var(--commerce-primary-soft); }
+		.commerce-nav-scroll-start[hidden] { display: none; }
 		.commerce-nav a { flex: 0 0 auto; min-height: 38px; gap: 7px; padding: 6px 10px; border-color: #edf1ef; background: #fff; }
 		.commerce-nav a span { display: block; }
 		.commerce-nav a strong { font-size: 13px; }
 		.commerce-nav a small,.commerce-nav .nav-chevron { display: none; }
 		.commerce-nav a > i:first-child { font-size: 12px; }
-		.commerce-sidebar__context { grid-template-columns: 1fr auto; align-items: center; gap: 8px; margin: 0 0 10px; padding: 7px 9px; }
+		.commerce-sidebar__context { grid-area: context; display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; margin: 0; padding: 0; background: transparent; }
 		.commerce-sidebar__date { font-size: 11px; }
-		.commerce-sidebar__user { font-size: 12px; }
+		.commerce-sidebar__date-full { display: none; }
+		.commerce-sidebar__date-compact { display: inline; }
+		.commerce-sidebar__date { max-width: none; max-height: none; gap: 5px; overflow: visible; }
+		.commerce-sidebar__date > i { font-size: 10px; }
+		.commerce-sidebar__user { gap: 5px; font-size: 12px; }
+		.commerce-sidebar__user strong { max-width: 55px; }
 		.commerce-user__avatar { width: 26px; height: 26px; }
-		.commerce-main { min-height: calc(100vh - 150px); padding: 22px 15px 15px; }
+		.commerce-main { min-height: calc(100vh - 150px); min-height: calc(100dvh - 150px); padding: 13px max(15px, env(safe-area-inset-right, 0px)) max(15px, env(safe-area-inset-bottom, 0px)) max(15px, env(safe-area-inset-left, 0px)); }
+		.commerce-admin:has(.operations-heading) .operations-heading .heading-row { gap: 0; }
+		.commerce-sidebar-toggle { display: none; }
+		.commerce-content > header.page-heading:not(.order-heading) h1 { display: none; }
+		.commerce-content > header.page-heading:not(.order-heading) { margin-bottom: 0; }
+		.commerce-content > header.page-heading.order-list-heading { margin-bottom: 18px; }
 	}
+
+  @media(max-width:860px) {
+    .commerce-main:has(.adminx[data-model='product']) {
+      padding-left:max(6px, env(safe-area-inset-left, 0px));
+      padding-right:max(6px, env(safe-area-inset-right, 0px));
+    }
+  }
 </style>
+
+<script>
+	const adminShell = document.querySelector('.commerce-admin');
+	const sidebarToggle = document.getElementById('commerceSidebarToggle');
+	if (adminShell instanceof HTMLElement && sidebarToggle instanceof HTMLButtonElement) {
+		const storageKey = 'bo-admin-sidebar-collapsed';
+		const applySidebarState = (collapsed) => {
+			adminShell.dataset.sidebarCollapsed = collapsed ? 'true' : 'false';
+			sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+			sidebarToggle.setAttribute('aria-label', collapsed ? '展開側邊欄' : '收折側邊欄');
+			sidebarToggle.title = collapsed ? '展開側邊欄' : '收折側邊欄';
+			const icon = sidebarToggle.querySelector('.collapse-button__icon');
+			if (icon) {
+				icon.classList.toggle('fa-angles-right', collapsed);
+				icon.classList.toggle('fa-angles-left', !collapsed);
+			}
+			try { localStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch {}
+		};
+		let collapsed = false;
+		try { collapsed = localStorage.getItem(storageKey) === '1'; } catch {}
+		applySidebarState(collapsed);
+		sidebarToggle.addEventListener('click', () => {
+			applySidebarState(adminShell.dataset.sidebarCollapsed !== 'true');
+		});
+	}
+	const navScrollStart = document.getElementById('commerceNavScrollStart');
+	const commerceNav = document.querySelector<HTMLElement>('.commerce-nav');
+	if (commerceNav instanceof HTMLElement) {
+		const updateNavScrollButtons = () => {
+			const navWrap = commerceNav.closest('.commerce-nav-wrap');
+			const hasLeftScroll = commerceNav.scrollLeft > 2;
+			const hadLeftScroll = navWrap?.classList.contains('has-left-scroll') ?? false;
+			navWrap?.classList.toggle('has-left-scroll', hasLeftScroll);
+			if (hasLeftScroll && !hadLeftScroll) commerceNav.scrollLeft += 30;
+			if (navScrollStart) navScrollStart.hidden = !hasLeftScroll;
+			const hasRightScroll = commerceNav.scrollLeft + commerceNav.clientWidth < commerceNav.scrollWidth - 2;
+			navWrap?.classList.toggle('has-right-scroll', hasRightScroll);
+		};
+		const activeNavLink = commerceNav.querySelector<HTMLElement>('a[aria-current="page"]');
+		requestAnimationFrame(() => {
+			if (activeNavLink) {
+				const navWrap = commerceNav.closest('.commerce-nav-wrap');
+				if (activeNavLink !== commerceNav.firstElementChild) navWrap?.classList.add('has-left-scroll');
+				const isLastNavLink = activeNavLink === commerceNav.lastElementChild;
+				const navRect = commerceNav.getBoundingClientRect();
+				const activeRect = activeNavLink.getBoundingClientRect();
+				const currentLeft = commerceNav.scrollLeft;
+				const targetLeft = isLastNavLink
+					? commerceNav.scrollWidth - commerceNav.clientWidth
+					: activeRect.left < navRect.left
+						? currentLeft - (navRect.left - activeRect.left)
+						: activeRect.right > navRect.right
+							? currentLeft + (activeRect.right - navRect.right)
+							: currentLeft;
+				commerceNav.scrollTo({ left: targetLeft, behavior: 'auto' });
+			}
+			updateNavScrollButtons();
+		});
+		commerceNav.addEventListener('scroll', updateNavScrollButtons, { passive: true });
+		window.addEventListener('resize', updateNavScrollButtons);
+		navScrollStart?.addEventListener('click', () => commerceNav.scrollBy({ left: -Math.max(140, commerceNav.clientWidth * .8), behavior: 'smooth' }));
+	}
+</script>

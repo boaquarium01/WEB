@@ -1,4 +1,6 @@
 ---
+import { createHash } from 'node:crypto';
+import { defaultPurchasableSku } from '../../lib/sanity/specification-media';
 import SiteLayout from '../../layouts/SiteLayout.astro';
 import { portableTextToHtml } from '../../lib/portable-text';
 import {
@@ -18,15 +20,25 @@ if (!product) {
 	return Astro.redirect('/products');
 }
 
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+const productRevision = createHash('sha256').update(JSON.stringify(product)).digest('hex');
 const bodyHtml = portableTextToHtml(product.body);
-const images = [
-	...(product.imageUrl ? [product.imageUrl] : []),
-	...product.galleryUrls,
-];
-const user = Astro.locals.user;
 const error = Astro.url.searchParams.get('error');
-const added = Astro.url.searchParams.get('added');
-const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
+const defaultSku = defaultPurchasableSku(product.skus, product.minimumPurchaseQuantity);
+const defaultSkuId = defaultSku?.id ?? '';
+const displayPrices = product.skus.filter((sku) => sku.isActive && sku.sellingPrice > 0).map((sku) => sku.sellingPrice);
+const minimumPrice = displayPrices.length ? Math.min(...displayPrices) : 0;
+const maximumPrice = displayPrices.length ? Math.max(...displayPrices) : 0;
+const priceRange = minimumPrice > 0 ? (minimumPrice === maximumPrice ? formatTwd(minimumPrice) : `${formatTwd(minimumPrice)}–${new Intl.NumberFormat('zh-TW').format(maximumPrice)}`) : '價格洽詢';
+const defaultCanPurchase = Boolean(defaultSku?.isActive && defaultSku.sellingPrice > 0 && (defaultSku.available < 0 || defaultSku.available >= product.minimumPurchaseQuantity));
+const hasNamedVariants = product.specifications.length > 0 && product.skus.some((sku) => sku.optionIds?.length);
+const specificationImages = [...new Set(product.specifications[0]?.options.map((option) => option.imageUrl).filter((url): url is string => Boolean(url)) ?? [])];
+const images = [...new Set([
+	...(product.imageUrl ? [product.imageUrl] : []),
+	...product.galleryUrls.filter((url) => !specificationImages.includes(url)),
+	...specificationImages,
+	...(!product.imageUrl && !product.galleryUrls.length && !specificationImages.length && defaultSku?.imageUrl ? [defaultSku.imageUrl] : []),
+])];
 ---
 
 <SiteLayout
@@ -51,13 +63,12 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 	</p>
 
 	{error && <p class="banner error">{error}</p>}
-	{added && <p class="banner ok">已加入購物車</p>}
 
-	<article class="detail">
+	<article class="detail" data-product-revision={productRevision}>
 		<section class="media detail-media">
 			{
 				images.length > 0 ? (
-					<div class="product-carousel" data-product-carousel data-product-lightbox-group aria-roledescription="輪播" aria-label={`${product.name} 商品圖片`}>
+					<div class="product-carousel" data-product-carousel data-product-lightbox-group data-base-image={product.imageUrl ?? defaultSku?.imageUrl ?? product.galleryUrls[0] ?? ''} aria-roledescription="輪播" aria-label={`${product.name} 商品圖片`}>
 						<div class="carousel-main">
 							<div class="carousel-viewport" tabindex="0" aria-label="滑動瀏覽商品圖片">
 								<div class="carousel-track">
@@ -87,79 +98,83 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 		</section>
 
 		<section class="summary">
-			{product.categoryLabel && (
-				<span class="category-pill">{product.categoryLabel}</span>
-			)}
 			<h1>{product.name}</h1>
-			<p class="price">{product.sellingPrice > 0 ? formatTwd(product.sellingPrice) : '價格洽詢'}</p>
-			<p class:list={['stock', { out: !product.inStock }]}>
-				{product.inStock ? (product.available < 0 ? '庫存充足' : `可售庫存 ${product.available}`) : '暫無庫存'}
-			</p>
+			<p id="product-price" class="price">{priceRange}</p>
+			{product.minimumPurchaseQuantity > 1 && <p class="minimum-purchase-hint">最低購買數量：{product.minimumPurchaseQuantity} 件</p>}
+			{product.priceTiers.length > 0 && <p class="minimum-purchase-hint">多件優惠：{product.priceTiers.map((tier) => `${tier.minQuantity}${tier.maxQuantity ? `–${tier.maxQuantity}` : '+'} 件 NT$ ${tier.unitPrice}/件`).join('・')}</p>}
+			{!product.inStock && <p class="stock out" role="status">暫無庫存</p>}
 			{
 				product.requiresManualConfirmation && (
 					<p class="note">活體商品：出貨前可能需要人工確認。</p>
 				)
 			}
-			{product.excerpt && <p class="excerpt">{product.excerpt}</p>}
 
 			{
-				user && defaultSkuId && product.sellingPrice > 0 ? (
-					<form method="post" action="/api/cart/add" class="add-form">
+				defaultSkuId && product.skus.some((sku) => sku.sellingPrice > 0) ? (
+					<form method="post" action="/api/cart/add" data-minimum-purchase={product.minimumPurchaseQuantity} data-base-price={defaultSku?.sellingPrice ?? product.sellingPrice} data-price-tiers={JSON.stringify(product.priceTiers)} class:list={['add-form', { 'is-unavailable': !defaultCanPurchase }]}>
 						<input type="hidden" name="returnTo" value={`/product/${product.slug}`} />
-						{product.skus.length > 1 ? (
-							<label>
-								規格
-								<select name="productSkuId" required>
-									{product.skus.map((sku) => (
-										<option value={sku.id} selected={sku.id === defaultSkuId}>
-										{sku.name} · {formatTwd(sku.sellingPrice)}（{sku.available < 0 ? '庫存充足' : `庫存 ${sku.available}`}）
-										</option>
-									))}
-								</select>
-							</label>
-						) : (
-							<input type="hidden" name="productSkuId" value={defaultSkuId} />
-						)}
-						<label>
-							數量
+						<p class="selected-variant-price" data-selected-price aria-live="polite">{defaultSku && defaultSku.sellingPrice > 0 ? formatTwd(defaultSku.sellingPrice) : '價格洽詢'}</p>
+						{hasNamedVariants && <>
+							{product.specifications.map((specification) => <fieldset class="purchase-field spec-choice" data-spec-group={specification.id}>
+								<legend>{specification.name}</legend>
+								<div class="spec-choice__options">
+									{specification.options.map((option) => <button type="button" class="spec-choice__option" data-spec-option={option.id} disabled={!product.skus.some((sku) => sku.isActive && sku.sellingPrice > 0 && (sku.available < 0 || sku.available >= product.minimumPurchaseQuantity) && sku.optionIds?.includes(option.id))} aria-pressed={String(defaultSku?.optionIds?.includes(option.id) ?? false)}>
+										{option.imageUrl && <img src={option.imageUrl} alt="" loading="lazy" />}{option.name}
+									</button>)}
+								</div>
+							</fieldset>)}
+							<input type="hidden" name="productSkuId" data-product-spec value={defaultSkuId} />
+							<select data-product-variants hidden aria-hidden="true">
+								{product.skus.map((sku) => <option value={sku.id} disabled={!sku.isActive || (sku.available >= 0 && sku.available < product.minimumPurchaseQuantity) || sku.sellingPrice <= 0} data-available={sku.available} data-price={sku.sellingPrice} data-option-ids={JSON.stringify(sku.optionIds ?? [])} data-image={sku.imageUrl ?? ''}>{sku.name}</option>)}
+							</select>
+							<small class="variant-stock" data-variant-stock hidden={!defaultCanPurchase} role="status" aria-live="polite">{!defaultSku || defaultSku.available === 0 ? "暫無庫存" : defaultSku.available < 0 ? "庫存充足" : `庫存 ${defaultSku.available}`}</small>
+						</>}
+						<label class="purchase-field spec-field" hidden={hasNamedVariants}>
+							<span>規格</span>
+							<select name="productSkuId" required disabled={!defaultCanPurchase} data-product-spec>
+								{product.skus.map((sku) => (
+								<option value={sku.id} selected={sku.id === defaultSkuId} disabled={!sku.isActive || (sku.available >= 0 && sku.available < product.minimumPurchaseQuantity) || sku.sellingPrice <= 0} data-available={sku.available} data-price={sku.sellingPrice} data-option-ids={JSON.stringify(sku.optionIds ?? [])} data-image={sku.imageUrl ?? ''}>
+										{sku.name}{sku.sellingPrice !== product.sellingPrice ? ` · ${formatTwd(sku.sellingPrice)}` : ''}{sku.available === 0 ? '（暫無庫存）' : ''}
+									</option>
+								))}
+							</select>
+						</label>
+						<div class="purchase-field quantity-field">
+							<label for="product-quantity">數量</label>
+							<span class="quantity-control">
+								<button class="quantity-step" type="button" data-quantity-step="-1" aria-label="減少數量" disabled={!defaultCanPurchase}>−</button>
 							<input
 								type="number"
 								name="quantity"
-								min="1"
-								{...(product.available >= 0 ? { max: Math.max(product.available, 1) } : {})}
-								value="1"
+								id="product-quantity"
+								min={product.minimumPurchaseQuantity}
+								{...(defaultSku && defaultSku.available >= 0 ? { max: Math.max(defaultSku.available, 1) } : {})}
+							value={String(product.minimumPurchaseQuantity)}
+								disabled={!defaultCanPurchase}
+								data-product-quantity
 								required
 							/>
-						</label>
-						<button
-							class="btn-primary"
-							type="submit"
-							disabled={!product.inStock}
-						>
-							加入購物車
-						</button>
+								<button class="quantity-step" type="button" data-quantity-step="1" aria-label="增加數量" disabled={!defaultCanPurchase}>＋</button>
+							</span>
+						</div>
+						<div class="purchase-actions">
+							<button class="btn-cart" type="submit" disabled={!defaultCanPurchase}><i class="fa-solid fa-cart-plus" aria-hidden="true"></i>加入購物車</button>
+							<button class="btn-buy-now" type="submit" name="intent" value="buy-now" disabled={!defaultCanPurchase}>直接購買</button>
+						</div>
 					</form>
-				) : !user ? (
-					<p class="login-hint">
-						<a href={`/account/login?next=${encodeURIComponent(`/product/${product.slug}`)}`}>
-							登入
-						</a>
-						後即可加入購物車
-					</p>
 				) : <p class="note">商品價格尚待確認，請洽門市或 LINE 詢問。</p>
 			}
 
 			{
 				bodyHtml ? (
 					<section class="body">
-						<h2>商品介紹</h2>
 						<div class="prose" set:html={bodyHtml} />
 					</section>
 				) : (
 					<p class="product-body-empty">尚未填寫商品介紹。</p>
 				)
 			}
-			<p class="ref-note">網站價格／庫存供參考，實際以門市與訂單確認為準。</p>
+			<p class="ref-note">網站僅供參考，實際以門市與訂單確認為準。</p>
 			<div class="detail-back-actions">
 				<a href="/" class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>首頁</a>
 				<a href="/products/1" class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>全部</a>
@@ -229,7 +244,7 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 		}
 	}
 
-	.product-carousel,.carousel-main{position:relative}.carousel-viewport{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pinch-zoom}.carousel-viewport::-webkit-scrollbar{display:none}.carousel-track{display:flex}.carousel-slide{position:relative;flex:0 0 100%;aspect-ratio:4/3;overflow:hidden;padding:0;border:0;background:#e8e8e8;scroll-snap-align:start;scroll-snap-stop:always;cursor:zoom-in;-webkit-tap-highlight-color:transparent}.carousel-slide:focus-visible{outline:3px solid var(--aq-primary);outline-offset:-3px}.carousel-slide__stack{position:absolute;inset:0;overflow:hidden}.carousel-slide__blur{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;filter:blur(26px);transform:scale(1.14);opacity:.9;pointer-events:none}.carousel-slide__image{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain;object-position:center;background:transparent}.carousel-nav{position:absolute;top:50%;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:1px solid rgba(0,0,0,.08);border-radius:50%;color:#333;background:rgba(255,255,255,.9);box-shadow:0 1px 6px rgba(0,0,0,.08);transform:translateY(-50%);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease}.carousel-main:hover .carousel-nav,.carousel-main:focus-within .carousel-nav,.carousel-main.carousel-show-nav .carousel-nav{opacity:1;pointer-events:auto}.carousel-prev{left:10px}.carousel-next{right:10px}.carousel-dots{position:absolute;left:0;right:0;bottom:12px;z-index:2;display:flex;justify-content:center;gap:8px}.carousel-dot{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.2);cursor:pointer}.carousel-dot.is-active{background:#111;box-shadow:0 0 0 2px rgba(255,255,255,.9);transform:scale(1.2)}@media(prefers-reduced-motion:reduce){.carousel-slide__blur{filter:none;transform:none;opacity:.45}.carousel-nav{transition:none}}
+	.product-carousel,.carousel-main{position:relative}.carousel-viewport{overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scroll-behavior:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pinch-zoom}.carousel-viewport::-webkit-scrollbar{display:none}.carousel-track{display:flex;gap:2px}.carousel-slide{position:relative;flex:0 0 100%;min-width:0;box-sizing:border-box;isolation:isolate;contain:paint;clip-path:inset(0);aspect-ratio:4/3;overflow:hidden;padding:0;border:0;background:#e8e8e8;scroll-snap-align:start;scroll-snap-stop:always;cursor:zoom-in;-webkit-tap-highlight-color:transparent}.carousel-slide:focus-visible{outline:3px solid var(--aq-primary);outline-offset:-3px}.carousel-slide__stack{position:absolute;inset:0;overflow:hidden}.carousel-slide__blur{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;filter:blur(26px);transform:scale(1.14);opacity:.9;pointer-events:none}.carousel-slide__image{position:absolute;inset:0;z-index:1;display:block;width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain;object-position:center;background:transparent}.carousel-nav{position:absolute;top:50%;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;border:1px solid rgba(0,0,0,.08);border-radius:50%;color:#333;background:rgba(255,255,255,.9);box-shadow:0 1px 6px rgba(0,0,0,.08);transform:translateY(-50%);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s ease}.carousel-main:hover .carousel-nav,.carousel-main:focus-within .carousel-nav,.carousel-main.carousel-show-nav .carousel-nav{opacity:1;pointer-events:auto}.carousel-prev{left:10px}.carousel-next{right:10px}.carousel-dots{position:absolute;left:0;right:0;bottom:12px;z-index:2;display:flex;justify-content:center;gap:8px}.carousel-dot{width:9px;height:9px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.75);box-shadow:0 0 0 1px rgba(0,0,0,.2);cursor:pointer}.carousel-dot.is-active{background:#111;box-shadow:0 0 0 2px rgba(255,255,255,.9);transform:scale(1.2)}@media(prefers-reduced-motion:reduce){.carousel-slide__blur{filter:none;transform:none;opacity:.45}.carousel-nav{transition:none}}
 
 	.product-lightbox {
 		position: fixed;
@@ -337,7 +352,6 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 		min-width: 0;
 	}
 
-	.category-pill{display:inline-block;margin:0 0 12px;padding:4px 12px;border-radius:999px;background:#f0f0f0;color:#333;font-size:.8125rem;font-weight:600}
 
 	h1 {
 		margin: 0 0 12px;
@@ -355,15 +369,21 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 
 	.stock {
 		margin: 0.35rem 0 0;
-		color: var(--aq-muted);
+		width: fit-content;
+		padding: 0.35rem 0.65rem;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--aq-danger) 9%, white);
+		color: var(--aq-danger);
+		font-size: 0.875rem;
+		font-weight: 650;
 	}
+	.minimum-purchase-hint { margin: -.35rem 0 .6rem; color: var(--aq-muted); font-size: .84rem; line-height: 1.5; }
 
 	.stock.out {
 		color: var(--aq-danger);
 	}
 
 	.note,
-	.excerpt,
 	.ref-note,
 	.login-hint {
 		color: var(--aq-muted);
@@ -372,9 +392,28 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 
 	.add-form {
 		display: grid;
-		gap: 0.75rem;
+		gap: 0.9rem;
 		margin: 1.1rem 0;
+		padding: 1rem;
+		border: 1px solid color-mix(in srgb, var(--aq-primary) 14%, var(--aq-line));
+		border-radius: var(--aq-radius-lg);
+		background: color-mix(in srgb, var(--aq-primary-soft) 42%, white);
+		transition: opacity .2s ease, background .2s ease;
 	}
+
+	.add-form.is-unavailable .quantity-field,.add-form.is-unavailable .purchase-actions { opacity:.48; }
+	.purchase-field { display:grid; gap: .45rem; color: var(--aq-ink); font-weight: 650; }
+	.variant-stock { color: var(--aq-muted); font-size: .78rem; font-weight: 500; }
+	.spec-field[hidden] { display: none !important; }
+	.spec-choice { min-width: 0; margin: 0; padding: 0; border: 0; }
+	.spec-choice legend { margin-bottom: .45rem; }
+	.spec-choice__options { display: flex; flex-wrap: wrap; gap: .5rem; }
+	.spec-choice__option { display: inline-flex; align-items: center; gap: .45rem; min-height: 42px; padding: .35rem .65rem; border: 1px solid var(--aq-line); border-radius: 10px; background: #fff; color: var(--aq-ink); font: inherit; cursor: pointer; }
+	.spec-choice__option[aria-pressed="true"] { border-color: var(--aq-primary); background: var(--aq-primary-soft); color: var(--aq-primary-dark); box-shadow: 0 0 0 1px var(--aq-primary); }
+	.spec-choice__option img { width: 30px; height: 30px; border-radius: 6px; object-fit: cover; }
+	.purchase-field input, .purchase-field select { width: 100%; min-height: 48px; font-size: 1rem; }
+	.quantity-control{display:grid;grid-template-columns:48px minmax(0,1fr) 48px;align-items:stretch;min-height:48px;overflow:hidden;border:1px solid var(--aq-line);border-radius:12px;background:#fff}.quantity-control input{min-width:0;width:100%;min-height:46px;padding:.5rem;border:0;border-right:1px solid var(--aq-line);border-left:1px solid var(--aq-line);border-radius:0;background:transparent;text-align:center;font-variant-numeric:tabular-nums}.quantity-step{display:grid;place-items:center;border:0;background:#f5f8f6;color:var(--aq-primary-dark);font-size:1.25rem;font-weight:650;cursor:pointer;touch-action:manipulation}.quantity-step:hover:not(:disabled){background:var(--aq-primary-soft)}.purchase-actions{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}.purchase-actions button{display:flex;align-items:center;justify-content:center;gap:.45rem;min-width:0;min-height:48px;padding:.65rem .75rem;border-radius:12px;font-size:.95rem;font-weight:750;cursor:pointer;transition:background .15s,border-color .15s,transform .15s}.purchase-actions button:active:not(:disabled){transform:scale(.98)}.btn-cart{border:1px solid var(--aq-primary);background:white;color:var(--aq-primary-dark)}.btn-cart:hover:not(:disabled){background:var(--aq-primary-soft)}.btn-buy-now{border:1px solid var(--aq-primary);background:var(--aq-primary);color:white}.btn-buy-now:hover:not(:disabled){border-color:var(--aq-primary-dark);background:var(--aq-primary-dark)}.purchase-actions button:disabled,.quantity-step:disabled{cursor:not-allowed}
+	.add-form.is-unavailable .purchase-actions button:disabled { opacity: 1; }
 
 	label {
 		display: grid;
@@ -420,6 +459,52 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 
 	.product-body-empty{margin:1rem 0;padding:16px 18px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;color:#64748b;font-size:.9375rem;line-height:1.65}
 	.detail-media{overflow:hidden;border:1px solid #eee;border-radius:12px;background:#f5f5f5;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+
+	.btn-cart.is-complete{background:var(--aq-primary-soft);border-color:var(--aq-primary);color:var(--aq-primary-dark)}
+	.purchase-feedback{margin:0;color:#b43c32;font-size:.875rem}
+
+	.purchase-field.quantity-field { grid-template-columns:auto minmax(0,1fr); align-items:center; column-gap:16px; }
+	.quantity-field > label { margin:0; padding:0; line-height:1.4; white-space:nowrap; }
+	.quantity-field > .quantity-control { min-width:0; }
+	.add-form.is-unavailable .variant-stock { display:flex; align-items:center; gap:7px; padding:8px 10px; border:1px solid #e8b9a4; border-radius:8px; background:#fff0e7; color:#a64126; font-size:.875rem; font-weight:750; line-height:1.4; }
+	.add-form.is-unavailable .variant-stock::before { content:'!'; display:inline-grid; place-items:center; flex:none; width:17px; height:17px; border-radius:50%; background:#b94f30; color:white; font-size:12px; line-height:1; }
+
+	.variant-stock[hidden] { display:none !important; }
+	.spec-choice__option:disabled { opacity:.65; cursor:not-allowed; background:#e9eeeb; border-color:#cdd7d1; color:#65776d; box-shadow:none; }
+
+	:global(.purchase-dock) { display:none; }
+	:global(.purchase-sheet) { position:fixed; inset:auto 0 0; width:100%; max-width:600px; max-height:min(86dvh,760px); margin:0 auto; padding:0; border:0; border-radius:22px 22px 0 0; background:#fff; color:var(--aq-ink); box-shadow:0 -12px 48px #132c2533; overflow:hidden; }
+	:global(.purchase-sheet::backdrop) { background:rgba(15,31,27,.4); }
+	:global(.purchase-sheet[open]) { display:flex; flex-direction:column; animation:purchase-sheet-in .22s ease-out; }
+	:global(.purchase-sheet-header) { display:flex; align-items:center; gap:12px; flex:none; padding:18px 16px 14px; border-bottom:1px solid var(--aq-line); }
+	:global(.purchase-sheet-image) { width:64px; height:64px; flex:none; object-fit:cover; border:1px solid var(--aq-line); border-radius:10px; }
+	:global(.purchase-sheet-image[hidden]) { display:none; }
+	:global(.purchase-sheet-summary) { flex:1; min-width:0; }
+	:global(.purchase-sheet-summary h2) { margin:0; font-size:15px; font-weight:700; line-height:1.45; overflow-wrap:anywhere; }
+	:global(.purchase-sheet-price) { margin:5px 0 0; color:var(--aq-primary-dark); font-size:20px; font-weight:750; line-height:1.3; }
+	:global(.purchase-sheet-close) { display:grid; place-items:center; align-self:flex-start; flex:none; width:36px; height:36px; padding:0; border:0; border-radius:50%; background:#f0f4f1; color:#6a8177; font-size:18px; cursor:pointer; }
+	:global(.purchase-sheet-content) { min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; }
+	:global(.purchase-sheet) .add-form { margin:0; padding:16px 16px 0; border:0; border-radius:0; background:#fff; box-shadow:none; }
+	:global(.purchase-sheet) .purchase-actions { position:sticky; bottom:0; z-index:1; grid-template-columns:1fr; padding:12px 0 max(12px,env(safe-area-inset-bottom,0px)); background:#fff; box-shadow:0 -8px 12px #ffffffea; }
+	:global(.purchase-sheet[data-intent='cart']) .btn-buy-now,:global(.purchase-sheet[data-intent='buy']) .btn-cart { display:none; }
+	:global(.purchase-sheet) .purchase-feedback { margin-bottom:12px; }
+	@keyframes purchase-sheet-in { from { transform:translateY(100%); opacity:.7; } to { transform:translateY(0); opacity:1; } }
+	@media(max-width:760px) {
+		:global(.purchase-dock:not([hidden])) { position:fixed; bottom:0; left:0; right:0; z-index:9999; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:10px max(14px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-left,0px)); border-top:1px solid var(--aq-line); background:rgba(255,255,255,.98); box-shadow:0 -5px 20px #163d3010; }
+		:global(.purchase-dock button) { display:flex; align-items:center; justify-content:center; gap:7px; min-height:48px; padding:10px 8px; border:1px solid var(--aq-primary); border-radius:12px; font:inherit; font-size:15px; font-weight:750; cursor:pointer; }
+		:global(.purchase-dock-cart) { background:#fff; color:var(--aq-primary-dark); }
+		:global(.purchase-dock-buy) { background:var(--aq-primary); color:#fff; }
+		:global(.purchase-dock button:disabled) { opacity:.55; cursor:wait; }
+		:global(body:has(.purchase-dock:not([hidden]))) { padding-bottom:calc(78px + env(safe-area-inset-bottom,0px)); }
+		:global(body:has(.purchase-dock:not([hidden])) .line-float) { bottom:calc(90px + env(safe-area-inset-bottom,0px)); }
+		:global(body:has(.purchase-dock:not([hidden])) .cart-float) { bottom:calc(156px + env(safe-area-inset-bottom,0px)); }
+	}
+	@media(prefers-reduced-motion:reduce) { :global(.purchase-sheet[open]) { animation:none; } }
+
+	.selected-variant-price { margin:0; color:var(--aq-primary-dark); font-size:1.12rem; font-weight:700; }
+	:global(.purchase-sheet) .selected-variant-price { display:none; }
+
+	.ref-note { font-size:.75rem; line-height:1.5; }
 </style>
 
 <script>
@@ -440,26 +525,45 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 			let timer = 0;
 			let hideNavTimer = 0;
 			let ticking = false;
+			let scrollSettleTimer = 0;
+			let userInteracted = false;
 			const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-			const setIndex = (nextIndex, behavior = reducedMotion ? 'auto' : 'smooth') => {
-				index = (nextIndex + slides.length) % slides.length;
-				viewport.scrollTo({ left: index * viewport.clientWidth, behavior });
-				slides.forEach((slide, i) => slide.setAttribute('aria-hidden', String(i !== index)));
+			const paintIndex = (activeIndex) => {
+				slides.forEach((slide, i) => slide.setAttribute('aria-hidden', String(i !== activeIndex)));
 				dots.forEach((dot, i) => {
-					dot.classList.toggle('is-active', i === index);
-					dot.setAttribute('aria-selected', String(i === index));
+					dot.classList.toggle('is-active', i === activeIndex);
+					dot.setAttribute('aria-selected', String(i === activeIndex));
 				});
+			};
+			// Use real slide positions: clientWidth rounds fractional CSS pixels on mobile.
+			const slideLeft = (i: number) => slides[i].getBoundingClientRect().left - viewport.getBoundingClientRect().left + viewport.scrollLeft;
+			const visibleIndex = () => {
+				let closest = 0, distance = Number.POSITIVE_INFINITY;
+				slides.forEach((slide, i) => { const delta = Math.abs(slideLeft(i) - viewport.scrollLeft); if (delta < distance) { closest = i; distance = delta; } });
+				return closest;
+			};
+			const setIndex = (nextIndex, behavior = reducedMotion ? 'auto' : 'smooth') => {
+				index = ((nextIndex % slides.length) + slides.length) % slides.length;
+				window.clearTimeout(scrollSettleTimer);
+				viewport.scrollTo({ left: slideLeft(index), behavior });
+				paintIndex(index);
 			};
 			const stop = () => { if (timer) window.clearInterval(timer); timer = 0; };
 			const start = () => {
 				stop();
-				if (reducedMotion || document.hidden) return;
+				if (userInteracted || reducedMotion || document.hidden) return;
 				timer = window.setInterval(() => setIndex(index + 1, 'auto'), 5500);
 			};
-			prev?.addEventListener('click', () => { setIndex(index - 1); start(); });
-			next?.addEventListener('click', () => { setIndex(index + 1); start(); });
-			dots.forEach((dot, i) => dot.addEventListener('click', () => { setIndex(i); start(); }));
-			viewport.addEventListener('pointerdown', stop, { passive: true });
+			root.addEventListener('product:select-image', (event) => {
+				const url = (event as CustomEvent<{ url: string }>).detail.url;
+				const target = slides.findIndex((slide) => (slide as HTMLElement).dataset.src === url);
+				if (target >= 0) { userInteracted = true; stop(); setIndex(target, 'auto'); }
+			});
+			const navigate = (target) => { userInteracted = true; stop(); setIndex(target); };
+			prev?.addEventListener('click', () => navigate(index - 1));
+			next?.addEventListener('click', () => navigate(index + 1));
+			dots.forEach((dot, i) => dot.addEventListener('click', () => navigate(i)));
+			viewport.addEventListener('pointerdown', () => { userInteracted = true; stop(); }, { passive: true });
 			viewport.addEventListener('pointerup', start, { passive: true });
 			viewport.addEventListener('pointercancel', start, { passive: true });
 			main.addEventListener('pointerdown', (event) => {
@@ -469,20 +573,303 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 				hideNavTimer = window.setTimeout(() => main.classList.remove('carousel-show-nav'), 4200);
 			}, { passive: true });
 			viewport.addEventListener('scroll', () => {
+				window.clearTimeout(scrollSettleTimer);
+				scrollSettleTimer = window.setTimeout(() => { index = visibleIndex(); paintIndex(index); }, 150);
 				if (ticking) return;
 				ticking = true;
 				requestAnimationFrame(() => {
 					ticking = false;
-					const active = Math.round(viewport.scrollLeft / Math.max(1, viewport.clientWidth));
-					if (active !== index) setIndex(active, 'auto');
+					// Observe scrolling without issuing a second scroll that cancels the animation.
+					paintIndex(visibleIndex());
 				});
 			}, { passive: true });
 			main.addEventListener('mouseenter', stop);
 			main.addEventListener('mouseleave', start);
 			document.addEventListener('visibilitychange', () => document.hidden ? stop() : start());
 			window.addEventListener('resize', () => setIndex(index, 'auto'));
+			if ('ResizeObserver' in window) { const resize = new ResizeObserver(() => setIndex(index, 'auto')); resize.observe(viewport); document.addEventListener('astro:before-swap', () => resize.disconnect(), { once:true }); }
 			start();
 		});
+	}
+
+	function setupProductPurchase() {
+		const form = document.querySelector('.add-form');
+		if (!(form instanceof HTMLFormElement) || form.dataset.purchaseInit === '1') return;
+		form.dataset.purchaseInit = '1';
+		const quantity = form.querySelector('[data-product-quantity]');
+		const spec = form.querySelector('[data-product-spec]');
+		const groups = Array.from(form.querySelectorAll('[data-spec-group]'));
+		const variantData = form.querySelector('[data-product-variants]');
+		const price = document.getElementById('product-price');
+		const selectedPrice = form.querySelector('[data-selected-price]');
+		const stockStatus = form.querySelector('[data-variant-stock]');
+		const steps = Array.from(form.querySelectorAll('[data-quantity-step]'));
+		const selectedIds = new Map<string, string>();
+		groups.forEach((group) => {
+			const selected = group.querySelector<HTMLElement>('[data-spec-option][aria-pressed="true"]');
+			if (selected) selectedIds.set((group as HTMLElement).dataset.specGroup ?? "", selected.dataset.specOption ?? "");
+		});
+		const submitButtons = Array.from(form.querySelectorAll('button[type="submit"]'));
+		let purchasePending = false;
+		const minimumPurchase = Math.max(1, Number(form.dataset.minimumPurchase) || 1);
+		const mobilePurchase = window.matchMedia('(max-width: 760px)');
+		const formHome = document.createComment('product purchase form'); form.before(formHome);
+		const sheet = document.createElement('dialog'); sheet.className = 'purchase-sheet'; sheet.setAttribute('aria-labelledby', 'purchase-sheet-title');
+		const sheetHeader = document.createElement('header'); sheetHeader.className = 'purchase-sheet-header';
+		const sheetImage = document.createElement('img'); sheetImage.alt = ''; sheetImage.className = 'purchase-sheet-image';
+		const initialImage = document.querySelector<HTMLImageElement>('.product-carousel img');
+		if (initialImage) sheetImage.src = initialImage.currentSrc || initialImage.src; else sheetImage.hidden = true;
+		const sheetSummary = document.createElement('div'); sheetSummary.className = 'purchase-sheet-summary';
+		const sheetTitle = document.createElement('h2'); sheetTitle.id = 'purchase-sheet-title'; sheetTitle.textContent = document.querySelector('.summary h1')?.textContent || '選擇規格';
+		const sheetPrice = document.createElement('p'); sheetPrice.className = 'purchase-sheet-price'; sheetPrice.textContent = price?.textContent || ''; sheetPrice.setAttribute('aria-live', 'polite');
+		sheetSummary.append(sheetTitle, sheetPrice);
+		const closeButton = document.createElement('button'); closeButton.type = 'button'; closeButton.className = 'purchase-sheet-close'; closeButton.setAttribute('aria-label', '關閉規格面板'); closeButton.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+		sheetHeader.append(sheetImage, sheetSummary, closeButton);
+		const sheetContent = document.createElement('div'); sheetContent.className = 'purchase-sheet-content'; sheet.append(sheetHeader, sheetContent);
+		const dock = document.createElement('div'); dock.className = 'purchase-dock'; dock.hidden = true; dock.setAttribute('aria-label', '購買商品');
+		const dockCart = document.createElement('button'); dockCart.type = 'button'; dockCart.className = 'purchase-dock-cart'; dockCart.innerHTML = '<i class="fa-solid fa-cart-plus" aria-hidden="true"></i>加入購物車';
+		const dockBuy = document.createElement('button'); dockBuy.type = 'button'; dockBuy.className = 'purchase-dock-buy'; dockBuy.textContent = '直接購買';
+		for (const button of [dockCart, dockBuy]) { button.setAttribute('aria-haspopup', 'dialog'); button.setAttribute('aria-controls', 'purchase-sheet'); button.setAttribute('aria-expanded', 'false'); }
+		sheet.id = 'purchase-sheet'; dock.append(dockCart, dockBuy); document.body.append(sheet, dock);
+		let sheetTrigger: HTMLButtonElement | null = null, originalOverflow = '';
+		const closeSheet = (restoreFocus = true) => {
+			if (!sheet.open) return;
+			sheet.close(); document.documentElement.style.overflow = originalOverflow;
+			[dockCart, dockBuy].forEach((button) => button.setAttribute('aria-expanded', 'false'));
+			if (restoreFocus) sheetTrigger?.focus({ preventScroll:true });
+		};
+		const openSheet = (intent: 'cart' | 'buy', trigger: HTMLButtonElement) => {
+			if (!mobilePurchase.matches || purchasePending) return;
+			sheet.dataset.intent = intent; sheetTrigger = trigger;
+			displayPrice(currentBasePrice());
+			originalOverflow = document.documentElement.style.overflow;
+			sheet.showModal(); document.documentElement.style.overflow = 'hidden'; trigger.setAttribute('aria-expanded', 'true');
+			closeButton.focus({ preventScroll:true });
+		};
+		dockCart.addEventListener('click', () => openSheet('cart', dockCart)); dockBuy.addEventListener('click', () => openSheet('buy', dockBuy));
+		closeButton.addEventListener('click', () => closeSheet());
+		sheet.addEventListener('cancel', (event) => { event.preventDefault(); closeSheet(); });
+		sheet.addEventListener('click', (event) => { if (event.target !== sheet) return; const box = sheet.getBoundingClientRect(); if (event.clientY < box.top || event.clientY > box.bottom || event.clientX < box.left || event.clientX > box.right) closeSheet(); });
+		const syncPurchaseLayout = () => {
+			closeSheet(false);
+			if (mobilePurchase.matches) { sheetContent.appendChild(form); dock.hidden = false; }
+			else { formHome.parentNode?.insertBefore(form, formHome.nextSibling); dock.hidden = true; }
+		};
+		mobilePurchase.addEventListener('change', syncPurchaseLayout); syncPurchaseLayout();
+		document.addEventListener('astro:before-swap', () => { closeSheet(false); dock.remove(); sheet.remove(); mobilePurchase.removeEventListener('change', syncPurchaseLayout); }, { once:true });
+		let priceTiers: Array<{ minQuantity: number; maxQuantity: number | null; unitPrice: number }> = [];
+		try { priceTiers = JSON.parse(form.dataset.priceTiers ?? '[]'); } catch { priceTiers = []; }
+		const displayPrice = (base: number) => {
+			if (!price || !Number.isFinite(base)) return;
+			const qty = quantity instanceof HTMLInputElement ? Math.max(minimumPurchase, Number(quantity.value) || minimumPurchase) : minimumPurchase;
+			const tier = [...priceTiers].filter((item) => qty >= item.minQuantity && (item.maxQuantity == null || qty <= item.maxQuantity)).sort((a, b) => b.minQuantity - a.minQuantity)[0];
+			const amount = tier?.unitPrice ?? base;
+			const text = amount > 0 ? `NT$ ${new Intl.NumberFormat('zh-TW').format(amount)}${tier ? ' / 件（多件優惠）' : ''}` : '價格洽詢';
+			if (selectedPrice) selectedPrice.textContent = text;
+			sheetPrice.textContent = text;
+		};
+		const currentBasePrice = () => {
+			const option = spec instanceof HTMLSelectElement ? spec.selectedOptions[0] : spec instanceof HTMLInputElement && variantData instanceof HTMLSelectElement ? Array.from(variantData.options).find((item) => item.value === spec.value) : null;
+			const amount = Number(option?.dataset.price);
+			return Number.isFinite(amount) ? amount : Number(form.dataset.basePrice ?? 0);
+		};
+		const setUnavailable = (message: string) => {
+			form.classList.add('is-unavailable');
+			submitButtons.forEach((button) => { button.disabled = true; });
+			if (spec instanceof HTMLInputElement) spec.value = '';
+			if (stockStatus) { stockStatus.textContent = ''; (stockStatus as HTMLElement).hidden = true; }
+		};
+
+		const updateQuantityBounds = () => {
+			if (!(quantity instanceof HTMLInputElement)) return;
+			quantity.disabled = form.classList.contains('is-unavailable');
+			const selectedOption = spec instanceof HTMLSelectElement ? spec.selectedOptions[0] : spec instanceof HTMLInputElement && variantData instanceof HTMLSelectElement ? Array.from(variantData.options).find((option) => option.value === spec.value) : null;
+			const available = Number(selectedOption?.dataset.available);
+			if (Number.isFinite(available) && available >= 0) {
+				quantity.max = String(Math.max(available, 1));
+				if (Number(quantity.value) > available && available > 0) quantity.value = String(available);
+			} else {
+				quantity.removeAttribute('max');
+			}
+
+			quantity.min = String(minimumPurchase);
+			if (Number(quantity.value) < minimumPurchase) quantity.value = String(minimumPurchase);
+			const minimum = minimumPurchase;
+			const maximum = quantity.max ? Number(quantity.max) : Number.POSITIVE_INFINITY;
+			steps.forEach((step) => {
+				if (!(step instanceof HTMLButtonElement)) return;
+				const direction = Number(step.dataset.quantityStep);
+				step.disabled = form.classList.contains('is-unavailable') ||
+					(direction < 0 && Number(quantity.value) <= minimum) ||
+					(direction > 0 && Number(quantity.value) >= maximum);
+			});
+		};
+		const availableCombinations = () => variantData instanceof HTMLSelectElement ? Array.from(variantData.options).filter((option) => !option.disabled && Number(option.dataset.price) > 0 && (Number(option.dataset.available) < 0 || Number(option.dataset.available) >= minimumPurchase)) : [];
+		const optionIds = (option: HTMLOptionElement): string[] => { try { return JSON.parse(option.dataset.optionIds ?? '[]'); } catch { return []; } };
+		const updateOptionAvailability = () => {
+			const available = availableCombinations();
+			groups.forEach((group, index) => group.querySelectorAll<HTMLButtonElement>('[data-spec-option]').forEach((choice) => {
+				const possible = available.some((option) => { const ids = optionIds(option); return ids.includes(choice.dataset.specOption ?? '') && groups.slice(0, index).every((previous) => ids.includes(selectedIds.get((previous as HTMLElement).dataset.specGroup ?? '') ?? '')); });
+				choice.disabled = !possible; choice.setAttribute('aria-disabled', String(!possible));
+			}));
+		};
+		const updateVariantSelection = (switchImage = true) => {
+			updateOptionAvailability();
+			if (!(spec instanceof HTMLSelectElement || spec instanceof HTMLInputElement)) return;
+			const expectedIds = groups.map((group) => selectedIds.get((group as HTMLElement).dataset.specGroup ?? '') ?? '');
+			if (groups.length && expectedIds.some((id) => !id)) { setUnavailable('請選擇完整商品規格'); updateQuantityBounds(); return; }
+			const options = groups.length && variantData instanceof HTMLSelectElement ? Array.from(variantData.options) : spec instanceof HTMLSelectElement ? Array.from(spec.options) : [];
+			const match = groups.length ? options.find((option) => {
+				try { return JSON.stringify(JSON.parse(option.dataset.optionIds ?? '[]')) === JSON.stringify(expectedIds); } catch { return false; }
+			}) : spec instanceof HTMLSelectElement ? spec.selectedOptions[0] : null;
+			if (!match) {
+				if (spec instanceof HTMLSelectElement) spec.value = '';
+				setUnavailable('此規格組合目前無法購買');
+				updateQuantityBounds(); return;
+			}
+			if (spec instanceof HTMLSelectElement || spec instanceof HTMLInputElement) spec.value = match.value;
+			form.classList.toggle('is-unavailable', match.disabled);
+			form.querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = purchasePending || match.disabled; });
+			if (stockStatus) {
+				const available = Number(match.dataset.available);
+				(stockStatus as HTMLElement).hidden = match.disabled;
+				stockStatus.textContent = match.disabled ? '' : available < 0 ? '庫存充足' : `庫存 ${available}`;
+			}
+			const amount = Number(match.dataset.price);
+			if (Number.isFinite(amount)) displayPrice(amount);
+			const carousel = document.querySelector('.product-carousel');
+			const imageUrl = match.dataset.image || (carousel instanceof HTMLElement ? carousel.dataset.baseImage : '');
+			if (imageUrl) { sheetImage.src = imageUrl; sheetImage.hidden = false; }
+			if (switchImage && imageUrl && carousel) carousel.dispatchEvent(new CustomEvent('product:select-image', { detail: { url: imageUrl } }));
+			updateQuantityBounds();
+		};
+
+		if (quantity instanceof HTMLInputElement) {
+			steps.forEach((step) => step.addEventListener('click', () => {
+				if (!(step instanceof HTMLButtonElement)) return;
+				const minimum = Number(quantity.min) || 1;
+				const maximum = quantity.max ? Number(quantity.max) : Number.POSITIVE_INFINITY;
+				const next = Math.min(maximum, Math.max(minimum, (Number(quantity.value) || minimum) + Number(step.dataset.quantityStep)));
+				quantity.value = String(next);
+				updateQuantityBounds();
+			}));
+			quantity.addEventListener('input', () => { updateQuantityBounds(); displayPrice(currentBasePrice()); });
+		}
+		spec?.addEventListener('change', () => {
+			updateQuantityBounds();
+			if (!(spec instanceof HTMLSelectElement) || !price) { displayPrice(currentBasePrice()); return; }
+			const selectedOption = spec.selectedOptions[0];
+			const amount = Number(selectedOption?.dataset.price);
+			if (Number.isFinite(amount)) displayPrice(amount);
+		});
+		groups.forEach((group) => group.querySelectorAll('[data-spec-option]').forEach((button) => button.addEventListener('click', () => {
+			const parent = group as HTMLElement;
+			const groupId = parent.dataset.specGroup ?? '';
+			const optionId = (button as HTMLElement).dataset.specOption ?? '';
+			if (!groupId || !optionId || (button as HTMLButtonElement).disabled) return;
+			selectedIds.set(groupId, optionId);
+			const groupIndex = groups.indexOf(group);
+			const candidates = availableCombinations().filter((option) => { const ids = optionIds(option); return groups.slice(0, groupIndex + 1).every((previous) => ids.includes(selectedIds.get((previous as HTMLElement).dataset.specGroup ?? '') ?? '')); });
+			const chosen = candidates.find((option) => { const ids = optionIds(option); return groups.every((item) => ids.includes(selectedIds.get((item as HTMLElement).dataset.specGroup ?? '') ?? '')); }) ?? candidates[0];
+			if (chosen) {
+				const ids = optionIds(chosen);
+				groups.forEach((item) => item.querySelectorAll<HTMLElement>('[data-spec-option]').forEach((choice) => { const selected = ids.includes(choice.dataset.specOption ?? ''); choice.setAttribute('aria-pressed', String(selected)); if (selected) selectedIds.set((item as HTMLElement).dataset.specGroup ?? '', choice.dataset.specOption ?? ''); }));
+			}
+			updateVariantSelection();
+		})));
+
+		const cartButton = form.querySelector<HTMLButtonElement>('.btn-cart');
+		const feedback = document.createElement('p'); feedback.className = 'purchase-feedback'; feedback.setAttribute('role', 'status'); feedback.hidden = true; form.appendChild(feedback);
+		let completionTimer: ReturnType<typeof setTimeout> | undefined;
+		let cartAnimation: Animation | null = null;
+		const resetCartButton = () => {
+			if (!cartButton) return;
+			cartButton.innerHTML = '<i class="fa-solid fa-cart-plus" aria-hidden="true"></i>加入購物車';
+			cartButton.classList.remove('is-complete');
+			dockCart.innerHTML = '<i class="fa-solid fa-cart-plus" aria-hidden="true"></i>加入購物車';
+		};
+		const showCartAdded = (count?: number) => {
+			closeSheet();
+			dockCart.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>加入完成';
+			if (cartButton) {
+				cartButton.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>加入完成';
+				cartButton.classList.add('is-complete');
+			}
+			feedback.hidden = true; feedback.textContent = '';
+			const floatingCart = document.querySelector<HTMLElement>('.cart-float');
+			if (floatingCart) {
+				if (typeof count === 'number') {
+					const badge = floatingCart.querySelector('.cart-float-count'); if (badge) badge.textContent = String(count);
+					floatingCart.setAttribute('aria-label', '購物車，目前 ' + count + ' 件商品');
+				}
+				cartAnimation?.cancel(); cartAnimation = null;
+				if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+					const animation = floatingCart.animate([
+						{ transform: 'scale(1)', boxShadow: '0 0 0 0 rgba(21,106,102,.3)' },
+						{ transform: 'translateY(-6px) scale(1.1)', boxShadow: '0 0 0 9px rgba(21,106,102,.12)', offset: .4 },
+						{ transform: 'scale(1)', boxShadow: '0 0 0 16px rgba(21,106,102,0)' }
+					], { duration: 650, easing: 'ease-out', fill: 'none' });
+					cartAnimation = animation;
+					animation.finished.then(() => { animation.cancel(); if (cartAnimation === animation) cartAnimation = null; }, () => {});
+				}
+			}
+			clearTimeout(completionTimer);
+			completionTimer = setTimeout(() => { resetCartButton(); }, 2600);
+		};
+		form.addEventListener('keydown', (event) => {
+			if (sheet.open && event.key === 'Enter' && event.target instanceof HTMLInputElement) {
+				event.preventDefault();
+				const confirm = form.querySelector<HTMLButtonElement>(sheet.dataset.intent === 'buy' ? '.btn-buy-now' : '.btn-cart');
+				if (confirm && !confirm.disabled) form.requestSubmit(confirm);
+			}
+		});
+		form.addEventListener('submit', async (event) => {
+			if (purchasePending) { event.preventDefault(); return; }
+			if (event.submitter instanceof HTMLButtonElement && event.submitter.value === 'buy-now') return;
+			event.preventDefault();
+			if (!form.reportValidity() || form.classList.contains('is-unavailable')) return;
+			const body = new FormData(form);
+			purchasePending = true; dockCart.disabled = dockBuy.disabled = true; clearTimeout(completionTimer); feedback.hidden = true;
+			submitButtons.forEach((button) => { button.disabled = true; });
+			if (cartButton) { cartButton.classList.remove('is-complete'); cartButton.setAttribute('aria-busy', 'true'); cartButton.textContent = '加入中…'; }
+			try {
+				const response = await fetch(form.action, { method: 'POST', body, headers: { Accept: 'application/json' } });
+				const result = await response.json();
+				if (result.redirect) { window.location.assign(result.redirect); return; }
+				if (!response.ok) throw new Error(result.error || '加入購物車失敗');
+				showCartAdded(result.itemCount);
+			} catch (error) {
+				resetCartButton(); feedback.hidden = false; feedback.textContent = error instanceof Error ? error.message : '無法確認加入結果，請先查看購物車';
+			} finally {
+				purchasePending = false; dockCart.disabled = dockBuy.disabled = false; cartButton?.removeAttribute('aria-busy');
+				if (groups.length) updateVariantSelection(false);
+				else submitButtons.forEach((button) => { button.disabled = form.classList.contains('is-unavailable'); });
+			}
+		});
+		const currentUrl = new URL(window.location.href);
+		if (currentUrl.searchParams.get('added') === '1') {
+			showCartAdded(); currentUrl.searchParams.delete('added'); history.replaceState(history.state, '', currentUrl);
+		}
+		// Initialize from a complete purchasable combination, independently of restored form values.
+		const initialOptions = variantData instanceof HTMLSelectElement && groups.length ? Array.from(variantData.options) : spec instanceof HTMLSelectElement ? Array.from(spec.options) : [];
+		const initialChoice = initialOptions.find((option) => {
+			const available = Number(option.dataset.available), amount = Number(option.dataset.price);
+			if (option.disabled || !(amount > 0) || !(available < 0 || available >= minimumPurchase)) return false;
+			if (!groups.length) return true;
+			try { const ids = JSON.parse(option.dataset.optionIds ?? '[]'); return ids.length === groups.length && groups.every((group) => Array.from(group.querySelectorAll<HTMLElement>('[data-spec-option]')).some((choice) => ids.includes(choice.dataset.specOption))); } catch { return false; }
+		});
+		if (initialChoice) {
+			if (spec instanceof HTMLSelectElement || spec instanceof HTMLInputElement) spec.value = initialChoice.value;
+			if (groups.length) {
+				const ids: string[] = JSON.parse(initialChoice.dataset.optionIds ?? '[]');
+				groups.forEach((group) => group.querySelectorAll<HTMLElement>('[data-spec-option]').forEach((choice) => {
+					const chosen = ids.includes(choice.dataset.specOption ?? ''); choice.setAttribute('aria-pressed', String(chosen));
+					if (chosen) selectedIds.set((group as HTMLElement).dataset.specGroup ?? '', choice.dataset.specOption ?? '');
+				}));
+			}
+			updateVariantSelection(false);
+		} else { setUnavailable('暫無可購買規格'); updateOptionAvailability(); }
+		updateQuantityBounds();
 	}
 
 	function setupProductLightbox() {
@@ -509,8 +896,29 @@ const defaultSkuId = product.defaultSkuId ?? product.skus[0]?.id ?? '';
 		});
 	}
 
+	// Returning from the admin tab refreshes an already open product only when its data changed.
+	let productRefreshInFlight = false, lastProductRefresh = 0;
+	async function refreshProductIfChanged() {
+		const detail = document.querySelector<HTMLElement>('[data-product-revision]');
+		if (!detail || document.querySelector('.purchase-sheet[open]') || document.visibilityState !== 'visible' || productRefreshInFlight || Date.now() - lastProductRefresh < 1500 || document.querySelector('.btn-cart[aria-busy="true"]')) return;
+		productRefreshInFlight = true; lastProductRefresh = Date.now();
+		const pageUrl = window.location.href;
+		try {
+			const response = await fetch(pageUrl, { cache: 'no-store', headers: { Accept: 'text/html' } });
+			if (!response.ok || response.redirected) return;
+			const next = new DOMParser().parseFromString(await response.text(), 'text/html').querySelector<HTMLElement>('[data-product-revision]');
+			if (next?.dataset.productRevision && next.dataset.productRevision !== detail.dataset.productRevision && detail.isConnected && window.location.href === pageUrl && document.visibilityState === 'visible' && !document.querySelector('.btn-cart[aria-busy="true"]') && !document.querySelector('.purchase-sheet[open]')) window.location.reload();
+		} catch { /* Keep the current usable page when the freshness check is offline. */ }
+		finally { productRefreshInFlight = false; }
+	}
+	window.addEventListener('focus', refreshProductIfChanged);
+	document.addEventListener('visibilitychange', refreshProductIfChanged);
+	window.addEventListener('pageshow', (event) => { if (event.persisted) void refreshProductIfChanged(); });
+
 	setupProductLightbox();
 	setupProductCarousels();
+	setupProductPurchase();
 	document.addEventListener('astro:page-load', setupProductLightbox);
 	document.addEventListener('astro:page-load', setupProductCarousels);
+	document.addEventListener('astro:page-load', setupProductPurchase);
 </script>

@@ -1,0 +1,241 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../lib/admin/path';
+import { getAdminOperationsReport } from '../../../../lib/services/admin-orders';
+import { formatTwd } from '../../../../lib/services/catalog';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const report = await getAdminOperationsReport();
+const chartPeriods = [
+	{ key: 'day', label: '日', title: '每日', rows: report.daily.map((row) => ({ ...row, label: row.day.slice(5).replace('-', '/') })) },
+	{ key: 'week', label: '週', title: '每週', rows: report.weekly.map((row) => ({ ...row, label: row.week.slice(5).replace('-', '/') })) },
+	{ key: 'month', label: '月', title: '每月', rows: report.monthly.map((row) => ({ ...row, label: row.month.replace('-', '/') })) },
+];
+const topProductPeriods = [
+	{ key: 'day', label: '日', title: '今日', rows: report.topProducts.day },
+	{ key: 'week', label: '週', title: '本週', rows: report.topProducts.week },
+	{ key: 'month', label: '月', title: '本月', rows: report.topProducts.month },
+	{ key: 'year', label: '年', title: '本年', rows: report.topProducts.year },
+	{ key: 'all', label: '全部', title: '全部期間', rows: report.topProducts.all },
+];
+const chartColumnWidth = 56;
+function chartPointY(revenue: number, maxRevenue: number) {
+	return 132 - (revenue / maxRevenue) * 108;
+}
+function revenueLinePath(rows: ReadonlyArray<{ revenue: number }>, maxRevenue: number) {
+	const points = rows.map((row, index) => ({ x: index * chartColumnWidth + chartColumnWidth / 2, y: chartPointY(row.revenue, maxRevenue) }));
+	if (points.length === 0) return '';
+	return points.slice(1).reduce((path, point, index) => {
+		const previous = points[index];
+		const middleX = (previous.x + point.x) / 2;
+		return `${path} C ${middleX} ${previous.y}, ${middleX} ${point.y}, ${point.x} ${point.y}`;
+	}, `M ${points[0].x} ${points[0].y}`);
+}
+---
+
+<AdminLayout title="營運管理｜水博館水族官方網站後台">
+	<header class="page-heading operations-heading">
+		<div class="heading-row">
+			<div><h1>營運管理</h1></div>
+			<a class="commerce-back-link" href={`${base}/shop`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回營運總覽</a>
+		</div>
+	</header>
+
+	<section class="period-grid" aria-label="各期間營運統計">
+		{report.periods.map((period) => (
+			<article class="period-card">
+				<div class="period-card__heading"><span>{period.label}</span><i class="fa-solid fa-chart-column" aria-hidden="true"></i></div>
+				<strong class="period-revenue">{formatTwd(period.revenue)}</strong>
+				<div class="period-card__orders"><span>訂單數</span><strong>{period.orders}<small>筆</small></strong></div>
+			</article>
+		))}
+	</section>
+
+	<section class="panel daily-panel" aria-labelledby="daily-heading">
+		<div class="panel-head chart-head">
+			<div><h2 id="daily-heading">營收趨勢</h2></div>
+			<div class="chart-switch" role="group" aria-label="營收圖表期間">
+				{chartPeriods.map((period, index) => <button type="button" class:list={['chart-switch__button', { active: index === 0 }]} data-chart-period={period.key} aria-pressed={index === 0 ? 'true' : 'false'}>{period.label}</button>)}
+			</div>
+		</div>
+		<div class="chart-legend" aria-label="圖表圖例"><span><i class="chart-legend__swatch revenue" aria-hidden="true"></i>營收金額（NT$）</span></div>
+		<div data-revenue-chart>
+			{chartPeriods.map((period, index) => {
+				const maxRevenue = Math.max(1, ...period.rows.map((row) => row.revenue));
+				const plotWidth = Math.max(period.rows.length * chartColumnWidth, chartColumnWidth);
+				return <div class="chart-view" data-chart-view={period.key} aria-label={`${period.title}營收折線圖；訂單筆數以數字顯示`} hidden={index !== 0}>
+					<div class="chart-columns">
+						<div class="chart-track" style={`min-width:${plotWidth}px`}>
+							<svg class="chart-line" viewBox={`0 0 ${plotWidth} 150`} preserveAspectRatio="none" aria-hidden="true">
+								<path d={revenueLinePath(period.rows, maxRevenue)} />
+								{period.rows.map((row, pointIndex) => <circle cx={pointIndex * chartColumnWidth + chartColumnWidth / 2} cy={chartPointY(row.revenue, maxRevenue)} r="3.5" />)}
+							</svg>
+							<div class="chart-axis-grid" style={`grid-template-columns:repeat(${period.rows.length},minmax(${chartColumnWidth}px,1fr))`}>
+								{period.rows.map((row) => {
+							return <div class="chart-column" role="img" aria-label={`${row.label}：營收 ${formatTwd(row.revenue)}，訂單 ${row.orders} 筆`} title={`${row.label}｜營收 ${formatTwd(row.revenue)}｜訂單 ${row.orders} 筆`}>
+								<div class="chart-plot-space"></div>
+								<span class="chart-label">{row.label}</span>
+								<div class="chart-values" aria-hidden="true"><span class="chart-value revenue">{'$' + row.revenue.toLocaleString('en-US')}</span><span class="chart-value orders">{row.orders}</span></div>
+							</div>;
+								})}
+							</div>
+						</div>
+					</div>
+				</div>;
+			})}
+		</div>
+	</section>
+
+	<script>
+		const chart = document.querySelector<HTMLElement>('[data-revenue-chart]');
+		if (chart) {
+			const periodButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-chart-period]'));
+			const chartViews = Array.from(chart.querySelectorAll<HTMLElement>('[data-chart-view]'));
+			const scrollViewToLatest = (view: HTMLElement) => {
+				const scroller = view.querySelector<HTMLElement>('.chart-columns');
+				if (scroller) scroller.scrollLeft = scroller.scrollWidth;
+			};
+			requestAnimationFrame(() => {
+				const activeView = chartViews.find((view) => !view.hidden);
+				if (activeView) scrollViewToLatest(activeView);
+			});
+			periodButtons.forEach((button) => {
+				button.addEventListener('click', () => {
+					const period = button.dataset.chartPeriod;
+					periodButtons.forEach((item) => {
+						const selected = item === button;
+						item.classList.toggle('active', selected);
+						item.setAttribute('aria-pressed', String(selected));
+					});
+					chartViews.forEach((view) => { view.hidden = view.dataset.chartView !== period; });
+					const activeView = chartViews.find((view) => view.dataset.chartView === period);
+					if (activeView) requestAnimationFrame(() => scrollViewToLatest(activeView));
+				});
+			});
+		}
+		const topProducts = document.querySelector<HTMLElement>('[data-top-products]');
+		if (topProducts) {
+			const productPeriodButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-top-products-period]'));
+			const productViews = Array.from(topProducts.querySelectorAll<HTMLElement>('[data-top-products-view]'));
+			productPeriodButtons.forEach((button) => {
+				button.addEventListener('click', () => {
+					const period = button.dataset.topProductsPeriod;
+					productPeriodButtons.forEach((item) => {
+						const selected = item === button;
+						item.classList.toggle('active', selected);
+						item.setAttribute('aria-pressed', String(selected));
+					});
+					productViews.forEach((view) => { view.hidden = view.dataset.topProductsView !== period; });
+				});
+			});
+		}
+	</script>
+
+	<div class="rank-grid">
+		<section class="panel ranking-panel" aria-labelledby="products-heading">
+			<div class="panel-head chart-head">
+				<div><h2 id="products-heading">熱銷商品</h2></div>
+				<div class="chart-switch" role="group" aria-label="熱銷商品期間">
+					{topProductPeriods.map((period) => <button type="button" class:list={['chart-switch__button', { active: period.key === 'all' }]} data-top-products-period={period.key} aria-pressed={period.key === 'all' ? 'true' : 'false'}>{period.label}</button>)}
+				</div>
+			</div>
+			<div data-top-products>
+				{topProductPeriods.map((period) => <div data-top-products-view={period.key} hidden={period.key !== 'all'}>
+					{period.rows.length === 0 ? (
+						<div class="empty"><i class="fa-solid fa-box-open" aria-hidden="true"></i><strong>{period.title}尚無已付款商品</strong></div>
+					) : (
+						<div class="table-wrap"><table class="report-table ranking-table"><thead><tr><th>#</th><th>商品</th><th>售出件數</th><th>商品營收</th></tr></thead><tbody>
+							{period.rows.map((row, rowIndex) => <tr><td><span class="rank-number">{rowIndex + 1}</span></td><td>{row.productName}</td><td>{row.units} 件</td><td>{formatTwd(row.revenue)}</td></tr>)}
+						</tbody></table></div>
+					)}
+				</div>)}
+			</div>
+		</section>
+
+		<section class="panel ranking-panel" aria-labelledby="vip-heading">
+			<div class="panel-head"><div><h2 id="vip-heading">VIP 客戶排行</h2></div><a href={`${base}/shop/members`}>會員管理 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></div>
+			{report.vipCustomers.length === 0 ? (
+				<div class="empty"><i class="fa-solid fa-users" aria-hidden="true"></i><strong>目前尚無已付款客戶紀錄</strong></div>
+			) : (
+				<div class="table-wrap"><table class="report-table ranking-table"><thead><tr><th>#</th><th>客戶</th><th>已付款訂單</th><th>累積消費</th></tr></thead><tbody>
+							{report.vipCustomers.map((row, index) => <tr><td><span class="rank-number">{index + 1}</span></td><td><a class="vip-member-link" href={`${base}/shop/members?${new URLSearchParams({ userId: row.userId }).toString()}`}><strong>{row.displayName || row.accountName || '顧客'}</strong><small>{row.contactEmail || row.accountEmail}</small></a></td><td>{row.orderCount} 筆</td><td>{formatTwd(row.revenue)}</td></tr>)}
+				</tbody></table></div>
+			)}
+		</section>
+	</div>
+</AdminLayout>
+
+<style>
+	.page-heading { margin-bottom: 18px; }
+	h1 { margin: 0; }
+	.heading-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+	.heading-row p { margin: 7px 0 0; color: var(--commerce-muted); font-size: 13px; }
+	.period-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 18px 0 10px; }
+	.period-card { display: grid; gap: 12px; min-width: 0; padding: 17px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.period-card__heading { display: flex; align-items: center; justify-content: space-between; color: #587075; font-size: 13px; font-weight: 700; }
+	.period-card__heading i { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; background: #e8f5f2; color: var(--commerce-primary); }
+	.period-revenue { overflow: hidden; color: #1c3941; font-size: clamp(20px,2vw,29px); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+	.period-card__orders { display: flex; justify-content: space-between; align-items: baseline; padding-top: 10px; border-top: 1px solid #edf1ef; color: var(--commerce-muted); font-size: 12px; }
+	.period-card__orders strong { color: #29454a; font-size: 16px; }
+	.period-card__orders small { margin-left: 4px; font-size: 11px; font-weight: 500; }
+	.panel { margin-bottom: 16px; padding: 0 !important; overflow: hidden; }
+	.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #edf1ef; }
+	.panel-head h2 { margin: 0; font-size: 21px; }
+	.panel-head p { margin: 4px 0 0; color: var(--commerce-muted); font-size: 12px; }
+	.panel-head a { color: var(--commerce-primary); font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+	.table-wrap { overflow-x: auto; }
+	.report-table { width: 100%; border-collapse: collapse; }
+	.report-table th,.report-table td { padding: 11px 16px; border-bottom: 1px solid #edf1ef; text-align: left; }
+	.report-table th { background: #f7f9f8; color: #6c8083; font-size: 11px; font-weight: 700; }
+	.report-table td { color: #29454a; font-size: 13px; }
+	.report-table tbody tr:last-child td { border-bottom: 0; }
+	.daily-table td:last-child,.daily-table th:last-child { width: 120px; text-align: right; }
+	.revenue-cell { display: grid; grid-template-columns: 100px minmax(70px,1fr); align-items: center; gap: 12px; }
+	.revenue-cell strong { font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.bar-track { height: 7px; overflow: hidden; border-radius: 999px; background: #edf3f1; }
+	.bar-track > span { display: block; height: 100%; min-width: 0; border-radius: inherit; background: linear-gradient(90deg,#64b9a4,#087e78); }
+	.rank-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 15px; }
+	.ranking-panel { min-width: 0; }
+	.ranking-table td:first-child { width: 42px; }
+	.rank-number { display: inline-grid; width: 25px; height: 25px; place-items: center; border-radius: 8px; background: #edf5f2; color: var(--commerce-primary-dark); font-size: 11px; font-weight: 800; }
+	.ranking-table td small { display: block; margin-top: 4px; color: var(--commerce-muted); font-size: 10px; }
+	.vip-member-link { display: grid; width: fit-content; gap: 1px; color: inherit; text-decoration: none; }
+	.vip-member-link:hover strong,.vip-member-link:focus-visible strong { color: var(--commerce-primary); text-decoration: underline; text-underline-offset: 2px; }
+	.vip-member-link:focus-visible { border-radius: 3px; outline: 2px solid var(--commerce-primary); outline-offset: 3px; }
+	.ranking-table td:nth-last-child(-n+2) { white-space: nowrap; }
+	.empty { display: grid; justify-items: center; gap: 7px; padding: 34px 15px; color: var(--commerce-muted); }
+	.empty i { color: #9eb8b3; font-size: 22px; }
+	.empty strong { color: #41575e; font-size: 13px; }
+	@media (max-width: 1000px) { .period-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }.rank-grid { grid-template-columns: 1fr; } }
+	@media (max-width: 700px) { .heading-row { align-items: flex-start; flex-direction: column; }.period-grid { gap: 8px; margin-top: 14px; }.period-card { gap: 9px; padding: 12px; }.period-revenue { font-size: 19px; }.panel-head { padding: 14px; }.panel-head h2 { font-size: 18px; }.report-table th,.report-table td { padding: 10px 11px; }.revenue-cell { grid-template-columns: 82px minmax(50px,1fr); gap: 8px; } }
+</style>
+
+<style is:global>
+	.chart-switch{display:inline-flex!important;flex:none;gap:4px;padding:4px;border:1px solid var(--commerce-line);border-radius:10px;background:#f7faf9}
+	.chart-switch__button{min-width:42px;min-height:32px;padding:0 10px;border:0;border-radius:7px;background:transparent;color:#587075;font:inherit;font-size:12px;font-weight:750;cursor:pointer}
+	.chart-switch__button.active{background:var(--commerce-primary);color:#fff;box-shadow:0 2px 6px rgba(8,126,120,.2)}
+	.chart-legend{display:flex;flex-wrap:wrap;gap:16px;padding:14px 18px 0;color:#587075;font-size:11px}
+	.chart-legend span{display:inline-flex;align-items:center;gap:6px}
+	.chart-legend__swatch{width:9px;height:9px;border-radius:3px}
+	.chart-legend__swatch.revenue{background:#07877e}
+	.chart-view[hidden]{display:none!important}
+	.chart-columns{min-width:0;overflow-x:auto;padding:14px 18px 12px}
+	.chart-track{position:relative;width:100%}
+	.chart-axis-grid{position:relative;display:grid;gap:0}
+	.chart-line{position:absolute;z-index:2;inset:0 0 auto;width:100%;height:150px;overflow:visible;pointer-events:none}
+	.chart-line path{fill:none;stroke:#07877e;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+	.chart-line circle{fill:#fff;stroke:#07877e;stroke-width:2.5;vector-effect:non-scaling-stroke}
+	.chart-column{display:grid;grid-template-rows:150px auto auto;justify-items:center;align-content:start;gap:5px;min-width:56px}
+	.chart-plot-space{width:100%;height:150px;box-sizing:border-box;border-bottom:1px solid #dfe8e4}
+	.chart-label{color:#6c8083;font-size:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+	.chart-values{display:grid;justify-items:center;gap:2px;font-size:9px;font-variant-numeric:tabular-nums;line-height:1.15;white-space:nowrap}
+	.chart-value.revenue{color:#087e78;font-weight:750}
+	.chart-value.orders{color:#6c8083;font-weight:650}
+	@media(max-width:700px){.chart-head{align-items:flex-start;flex-wrap:wrap}.chart-switch{margin-left:auto}.chart-columns{padding:14px 12px 12px}.chart-legend{padding-left:14px}}
+</style>

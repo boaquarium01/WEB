@@ -19,8 +19,24 @@ export type SanityCategoryRef = {
 	slug: string | null;
 };
 
+export type SanityProductVariant = {
+	_key?: string;
+	optionIds?: string[];
+	/** Legacy Sanity documents are adapted until their next specification save. */
+	option1Value?: string;
+	option2Value?: string;
+	image?: SanityImageAsset | null;
+};
+
+export type SanitySpecification = {
+	_key?: string;
+	name?: string;
+	options?: Array<{ _key?: string; name?: string; image?: SanityImageAsset | null }>;
+};
+
 export type SanityProductDocument = {
 	_id: string;
+	_createdAt?: string;
 	_type: 'product';
 	name: string;
 	slug: string | null;
@@ -35,6 +51,11 @@ export type SanityProductDocument = {
 	heroSpotlightActivatedAt: string | null;
 	image: SanityImageAsset | null;
 	gallery: SanityImageAsset[] | null;
+	specificationsEnabled?: boolean | null;
+	option1Name?: string | null;
+	option2Name?: string | null;
+	specifications?: SanitySpecification[] | null;
+	variants?: SanityProductVariant[] | null;
 	seoTitle: string | null;
 	seoKeywords: string[] | null;
 	seoDescription: string | null;
@@ -45,6 +66,7 @@ export type SanityProductDocument = {
  * Transaction fields (price, stock) live in PostgreSQL, not here.
  */
 export type ProductContent = {
+	createdAt?: string;
 	sanityProductId: string;
 	name: string;
 	slug: string;
@@ -61,6 +83,9 @@ export type ProductContent = {
 	heroSpotlight: boolean;
 	imageUrl: string | null;
 	galleryUrls: string[];
+	specificationsEnabled: boolean;
+	specifications: Array<{ id: string; name: string; order: number; options: Array<{ id: string; name: string; order: number; imageUrl: string | null }> }>;
+	variants: Array<{ sku: string; variantKey: string; optionIds: string[]; optionNames: string[] }>;
 	seoTitle: string | null;
 	seoKeywords: string[];
 	seoDescription: string | null;

@@ -30,7 +30,10 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 <html lang="zh-Hant">
 	<head>
 		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#faf8f4" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
 		<link rel="shortcut icon" href="/favicon.ico" />
@@ -149,6 +152,7 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	}
 
 	.cart-float{position:fixed;right:18px;bottom:calc(86px + env(safe-area-inset-bottom, 0px));z-index:9998;display:grid;place-items:center;width:56px;height:56px;border:1px solid rgba(255,255,255,.65);border-radius:50%;background:var(--aq-primary,#156a66);color:#fff!important;text-decoration:none;box-shadow:0 10px 26px rgba(21,106,102,.3);transition:transform .18s ease,box-shadow .18s ease}.cart-float:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(21,106,102,.36)}.cart-float>i{font-size:1.25rem}.cart-float-count{position:absolute;top:-4px;right:-5px;display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:999px;background:#e33e46;color:#fff;font-size:.69rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(107,22,28,.2)}
+	html{min-height:100%;scroll-padding-top:5rem}body{min-height:100vh;min-height:100dvh;overflow-x:clip}button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}
 
 	.line-float:hover {
 		transform: translateY(-2px);
@@ -171,13 +175,16 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	}
 
 	@media (max-width: 639px) {
+		.page-main{padding:1rem .8rem calc(7.5rem + env(safe-area-inset-bottom, 0px))}
+		.page-main.wide{max-width:100%;}
+		input,select,textarea{font-size:16px}
 		.line-float {
-			right: 14px;
+			right: max(14px, env(safe-area-inset-right, 0px));
 			bottom: calc(14px + env(safe-area-inset-bottom, 0px));
 			/* 與桌機同尺寸，避免與 scale 疊加後視覺比例不一致 */
 			width: 56px;
 			height: 56px;
 		}
-		.cart-float{right:14px;bottom:calc(82px + env(safe-area-inset-bottom, 0px));width:56px;height:56px}
+		.cart-float{right:max(14px, env(safe-area-inset-right, 0px));bottom:calc(82px + env(safe-area-inset-bottom, 0px));width:56px;height:56px}
 	}
 </style>

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
 	bigint,
 	boolean,
+	check,
 	integer,
 	jsonb,
 	pgEnum,
@@ -12,7 +13,7 @@ import {
 	uuid,
 	index,
 } from 'drizzle-orm/pg-core';
-import { relations } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 
 // ─── Enums（含未來 POS / ERP 預留值；目前不實作對應功能）───
 
@@ -215,6 +216,8 @@ export const products = pgTable(
 		requiresManualConfirmation: boolean('requires_manual_confirmation')
 			.notNull()
 			.default(false),
+		/** Minimum total quantity required to buy this product, across its variants. */
+		minimumPurchaseQuantity: integer('minimum_purchase_quantity').notNull().default(1),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	},
@@ -222,6 +225,7 @@ export const products = pgTable(
 		uniqueIndex('products_sanity_product_id_uidx').on(t.sanityProductId),
 		uniqueIndex('products_slug_uidx').on(t.slug),
 		index('products_is_online_idx').on(t.isOnline),
+		check('products_min_purchase_quantity_check', sql`${t.minimumPurchaseQuantity} >= 1`),
 	],
 );
 
@@ -233,17 +237,27 @@ export const productSkus = pgTable(
 			.notNull()
 			.references(() => products.id, { onDelete: 'cascade' }),
 		sku: text('sku').notNull(),
+		/** Stable variant key remains fixed when a seller edits the displayed SKU code. */
+		variantKey: text('variant_key'),
+		/** Original Sanity-generated code used only as a sync fallback for older rows. */
+		sourceSku: text('source_sku'),
 		barcode: text('barcode'),
 		name: text('name').notNull(),
+		/** Expected order preparation days, optional per SKU. */
+		preparationDays: integer('preparation_days'),
 		unit: text('unit').notNull().default('pcs'),
 		sellingPrice: integer('selling_price').notNull(),
 		isActive: boolean('is_active').notNull().default(true),
+		saleEnabled: boolean('sale_enabled').notNull().default(true),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => [
 		uniqueIndex('product_skus_sku_uidx').on(t.sku),
+		uniqueIndex('product_skus_product_variant_key_uidx').on(t.productId, t.variantKey),
+		uniqueIndex('product_skus_source_sku_uidx').on(t.sourceSku),
 		index('product_skus_product_id_idx').on(t.productId),
+		check('product_skus_preparation_days_check', sql`${t.preparationDays} IS NULL OR ${t.preparationDays} >= 0`),
 	],
 );
 
@@ -272,6 +286,28 @@ export const shippingMethods = pgTable(
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	},
 	(table) => [index('shipping_methods_active_sort_idx').on(table.isActive, table.sortOrder)],
+);
+
+/** Product-level quantity price breaks; order items snapshot the final unit price. */
+export const productPriceTiers = pgTable(
+	'product_price_tiers',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		productId: uuid('product_id').notNull().references(() => products.id, { onDelete: 'cascade' }),
+		minQuantity: integer('min_quantity').notNull(),
+		maxQuantity: integer('max_quantity'),
+		unitPrice: integer('unit_price').notNull(),
+		sortOrder: integer('sort_order').notNull().default(0),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	},
+	(t) => [
+		uniqueIndex('product_price_tiers_product_min_uidx').on(t.productId, t.minQuantity),
+		index('product_price_tiers_product_sort_idx').on(t.productId, t.sortOrder),
+		check('product_price_tiers_min_check', sql`${t.minQuantity} >= 2`),
+		check('product_price_tiers_max_check', sql`${t.maxQuantity} IS NULL OR ${t.maxQuantity} >= ${t.minQuantity}`),
+		check('product_price_tiers_price_check', sql`${t.unitPrice} >= 0`),
+	],
 );
 
 export const inventory = pgTable(
@@ -426,6 +462,7 @@ export const orderItems = pgTable(
 		/** Snapshots — do not rely on live product data after order creation. */
 		productName: text('product_name').notNull(),
 		sku: text('sku').notNull(),
+		skuNameSnapshot: text('sku_name_snapshot'),
 		unitPrice: integer('unit_price').notNull(),
 		quantity: integer('quantity').notNull(),
 		subtotal: integer('subtotal').notNull(),

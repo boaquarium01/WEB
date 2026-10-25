@@ -4,9 +4,11 @@ import {
 	getAdminBasePath,
 	isValidAdminSecretParam,
 } from '../../../../lib/admin/path';
-import { getAdminDashboardStats } from '../../../../lib/services/admin-orders';
+import {
+	getAdminDashboardStats,
+	listAdminOrders,
+} from '../../../../lib/services/admin-orders';
 import { formatTwd } from '../../../../lib/services/catalog';
-import { listAdminOrders } from '../../../../lib/services/admin-orders';
 import { orderStatusLabel } from '../../../../lib/services/order';
 
 export const prerender = false;
@@ -18,111 +20,274 @@ if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
 const base = getAdminBasePath();
 const stats = await getAdminDashboardStats();
 const recent = await listAdminOrders({ limit: 8 });
+
+function formatOrderAge(date: Date): string {
+	const hours = Math.max(0, Math.floor((Date.now() - date.getTime()) / 3_600_000));
+	if (hours < 1) return '不到 1 小時前';
+	if (hours < 24) return `${hours} 小時前`;
+	const days = Math.floor(hours / 24);
+	const remainingHours = hours % 24;
+	return remainingHours ? `${days} 天 ${remainingHours} 小時前` : `${days} 天前`;
+}
+
+function formatOrderTime(date: Date): string {
+	return date.toLocaleString('zh-TW', {
+		timeZone: 'Asia/Taipei',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: false,
+	});
+}
+
+const longestWaitLabel = stats.oldestAwaitingShipmentHours < 1
+	? '不到 1 小時'
+	: stats.oldestAwaitingShipmentHours < 24
+		? `${stats.oldestAwaitingShipmentHours} 小時`
+		: `${Math.floor(stats.oldestAwaitingShipmentHours / 24)} 天 ${stats.oldestAwaitingShipmentHours % 24} 小時`;
 ---
 
-<AdminLayout title="電商營運總覽｜水博館水族">
+<AdminLayout title="營運總覽｜水博館水族官方網站後台">
 	<header class="head page-heading">
-		<div class="heading-row">
-			<div><h1>電商總覽</h1></div>
-			<a class="btn-primary" href={`${base}/shop/orders`}><i class="fa-solid fa-list-check" aria-hidden="true"></i>前往訂單管理</a>
-		</div>
+		<h1>營運總覽</h1>
 	</header>
 
-	<section class="stats">
+	<section class="stats" aria-label="待處理事項與今日摘要">
 		<a class="stat stat--teal" href={`${base}/shop/orders`}>
 			<span class="stat-icon"><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i></span>
 			<span class="label">今日訂單</span>
 			<strong class="num">{stats.todayOrders}<small>筆</small></strong>
 		</a>
-		<a class="stat stat--amber" href={`${base}/shop/orders?status=PAYMENT_REVIEW`}>
-			<span class="stat-icon"><i class="fa-solid fa-clock" aria-hidden="true"></i></span>
-			<span class="label">待付款核對</span>
+		<a class="stat stat--amber" href={`${base}/shop/orders?status=PENDING_PAYMENT`}>
+			<span class="stat-icon"><i class="fa-regular fa-clock" aria-hidden="true"></i></span>
+			<span class="label">等待付款</span>
 			<strong class="num">{stats.pendingPayment}<small>筆</small></strong>
+		</a>
+		<a class="stat stat--rose" href={`${base}/shop/orders?status=PAYMENT_SUBMITTED`}>
+			<span class="stat-icon"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span>
+			<span class="label">付款資料待核對</span>
+			<strong class="num">{stats.pendingVerification}<small>筆</small></strong>
 		</a>
 		<a class="stat stat--blue" href={`${base}/shop/orders?status=AWAITING_SHIPMENT`}>
 			<span class="stat-icon"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i></span>
 			<span class="label">待出貨</span>
 			<strong class="num">{stats.awaitingShipment}<small>筆</small></strong>
-		</a>
-		<a class="stat stat--rose" href={`${base}/shop/products?sort=stock&direction=asc`}>
-			<span class="stat-icon"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i></span>
-			<span class="label">低庫存品項</span>
-			<strong class="num">{stats.lowStock}<small>項</small></strong>
+			<span class="stat-note">{stats.awaitingShipment === 0 ? '目前無待出貨訂單' : `最久等待 ${longestWaitLabel}`}</span>
 		</a>
 	</section>
 
-	<section class="quick-links" aria-label="常用功能">
-		<a href={`${base}/shop/orders`}><span class="quick-icon"><i class="fa-solid fa-receipt" aria-hidden="true"></i></span><span><strong>處理訂單</strong></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-		<a href={`${base}/shop/products`}><span class="quick-icon"><i class="fa-solid fa-box-open" aria-hidden="true"></i></span><span><strong>商品目錄</strong></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
-		<a href={`${base}/shop/products`}><span class="quick-icon"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></span><span><strong>商品管理</strong></span><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+	<section class="panel trend-panel" aria-labelledby="trend-heading">
+		<div class="panel-head">
+			<h2 id="trend-heading">營收趨勢</h2>
+			<a href={`${base}/shop/operations`}>營運管理 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+		</div>
+		<div class="trend-metrics">
+			<div class="trend-metric">
+				<span>今日營收</span>
+				<strong>{formatTwd(stats.todayRevenue)}</strong>
+				<small>已付款</small>
+			</div>
+			<div class="trend-metric">
+				<span>近 7 日營收</span>
+				<strong>{formatTwd(stats.weekRevenue)}</strong>
+				<small>前 7 日 {formatTwd(stats.previousWeekRevenue)}</small>
+			</div>
+			<div class="trend-metric">
+				<span>近 7 日訂單</span>
+				<strong>{stats.weekOrders}<small>筆</small></strong>
+				<small>前 7 日 {stats.previousWeekOrders} 筆</small>
+			</div>
+		</div>
 	</section>
 
 	<section class="panel recent-panel">
-		<div class="panel-head">
-			<div><h2>最近訂單</h2></div>
-			<a href={`${base}/shop/orders`}>查看全部訂單 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+		<div class="panel-head recent-panel-head">
+			<h2>最近訂單</h2>
+			<a href={`${base}/shop/orders`}>全部訂單 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
 		</div>
-		{
-			recent.length === 0 ? (
-				<div class="empty"><i class="fa-regular fa-clipboard" aria-hidden="true"></i><strong>目前還沒有訂單</strong></div>
-			) : (
-				<div class="recent table-wrap"><table><thead><tr><th>訂單編號</th><th>顧客</th><th>狀態</th><th>訂購金額</th><th></th></tr></thead><tbody>
-					{recent.map((row) => (
-						<tr>
-			<td><a class="mono order-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</a></td>
-			<td>{row.customerName ?? '—'}</td>
-							<td><span class="status-pill">{orderStatusLabel(row.status)}</span></td>
-							<td class="amount">{formatTwd(row.total)}</td>
-							<td><a class="row-arrow" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} aria-label={`查看訂單 ${row.orderNumber}`}><i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a></td>
-						</tr>
-					))}
-				</tbody></table></div>
-			)
-		}
+		{recent.length === 0 ? (
+			<div class="empty"><i class="fa-regular fa-clipboard" aria-hidden="true"></i><strong>目前還沒有訂單</strong></div>
+		) : (
+			<div class="recent table-wrap">
+				<table>
+					<thead><tr><th>訂單</th><th>顧客</th><th>狀態</th><th>金額</th><th>操作</th></tr></thead>
+					<tbody>
+						{recent.map((row) => (
+							<tr>
+								<td>
+									<a class="mono order-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</a>
+									<div class="order-time-customer">
+										<time class="order-time" datetime={row.createdAt.toISOString()}>{formatOrderTime(row.createdAt)}</time>
+										<span class="mobile-customer-name">{row.customerName ?? '—'}</span>
+									</div>
+									<small class="order-age">{formatOrderAge(row.createdAt)}</small>
+									<a class="order-row-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} aria-label={`查看訂單 ${row.orderNumber}`}></a>
+								</td>
+								<td>
+									<div class="customer-summary"><strong>{row.customerName ?? '—'}</strong><small>{row.customerEmail ?? ''}</small></div>
+									{row.items[0] && (
+										<div class="order-item-summary">
+											<div class="order-item-feature">
+												<strong class="order-item-name">{row.items[0].productName}</strong>
+												<span class="order-item-unit-price">{formatTwd(row.items[0].unitPrice)}</span>
+												{row.items[0].skuName && <small class="order-item-spec">{row.items[0].skuName}</small>}
+												<span class="order-item-quantity">×{row.items[0].quantity}</span>
+											</div>
+											{row.itemLineCount > 1 && <small class="order-more-items">另有 {row.itemLineCount - 1} 項商品，查看更多</small>}
+										</div>
+									)}
+								</td>
+								<td><span class={`status-pill status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span></td>
+								<td class="amount"><span class="mobile-cell-label">金額</span>{formatTwd(row.total)}</td>
+								<td>
+									<div class="order-actions">
+										<div class="mobile-order-total-group">
+											<strong class="mobile-order-total">{formatTwd(row.total)}</strong>
+											<small class="mobile-order-count">共 {row.itemLineCount} 項・{row.itemCount} 件</small>
+										</div>
+										<div class="order-action-buttons">
+										{row.status === 'PAYMENT_SUBMITTED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認已收到這筆訂單的款項？');"><input type="hidden" name="_action" value="confirm_payment" /><button class="row-action row-action--payment" type="submit">確認付款</button></form>}
+											{['PAID', 'PROCESSING'].includes(row.status) && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成出貨？');"><input type="hidden" name="_action" value="mark_shipped" /><button class="row-action row-action--shipping" type="submit">標記出貨</button></form>}
+											{row.status === 'SHIPPED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成？');"><input type="hidden" name="_action" value="complete" /><button class="row-action row-action--complete" type="submit">完成訂單</button></form>}
+											<a class="row-action" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>查看</a>
+										</div>
+									</div>
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		)}
 	</section>
 </AdminLayout>
 
 <style>
-	.eyebrow { margin: 0 0 7px; color: #8c9b9c; font-size: 14px; font-weight: 800; letter-spacing: .08em; }
-	.eyebrow span { color: var(--commerce-primary); }
-	.head h1 { font-size: 40px; }
-	.heading-row { display: flex; justify-content: space-between; align-items: end; gap: 16px; }
-	.heading-row .btn-primary { display: inline-flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 10px; background: var(--commerce-primary); color: #fff; font-size: 15px; font-weight: 700; text-decoration: none; }
-	.stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin: 24px 0 17px; }
-	.stat { position: relative; display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto auto; align-items: center; column-gap: 12px; min-height: 130px; padding: 17px; overflow: hidden; border: 1px solid var(--commerce-line); border-radius: 15px; background: #fff; color: inherit; text-decoration: none; box-shadow: var(--commerce-shadow); transition: transform .16s ease,box-shadow .16s ease; }
-	.stat:hover { transform: translateY(-2px); box-shadow: 0 16px 32px #21454512; }
-	.stat-icon { grid-row: 1 / 4; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: #e8f5f2; color: #078177; }
+	.head { margin-bottom: 1rem; }
+	.head h1 { margin: 0; }
+	.stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 10px; margin: 20px 0 16px; }
+	.stat { position: relative; display: grid; grid-template-columns: 34px minmax(0,1fr); grid-template-rows: auto auto auto; align-items: center; column-gap: 8px; min-height: 100px; padding: 12px; overflow: hidden; border: 1px solid var(--commerce-line); border-radius: 15px; background: #fff; color: inherit; text-decoration: none; box-shadow: var(--commerce-shadow); }
+	a.stat { transition: transform .16s ease,box-shadow .16s ease; }
+	a.stat:hover { transform: translateY(-2px); box-shadow: 0 16px 32px #21454512; }
+	.stat-icon { grid-row: 1 / 4; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 11px; background: #e8f5f2; color: #078177; }
 	.stat--amber .stat-icon { background: #fff3df; color: #b87922; }
 	.stat--blue .stat-icon { background: #e9f1ff; color: #4d75bd; }
 	.stat--rose .stat-icon { background: #fff0ed; color: #be665c; }
-	.label { color: #52676b; font-size: 15px; font-weight: 700; }
-	.num { display: flex; align-items: baseline; gap: 5px; margin: 7px 0 1px; color: #1c3941; font-size: 38px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
-	.num small { color: #52676b; font-size: 15px; font-weight: 650; }
-	.quick-links { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-bottom: 22px; }
-	.quick-links > a { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 13px 15px; border: 1px solid var(--commerce-line); border-radius: 13px; background: #fff; color: inherit; text-decoration: none; transition: border-color .16s,transform .16s; }
-	.quick-links > a:hover { transform: translateY(-1px); border-color: #acd6ce; }
-	.quick-icon { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border-radius: 11px; background: #eff7f5; color: var(--commerce-primary); }
-	.quick-links > a > span:nth-child(2) { flex: 1; display: grid; gap: 3px; }
-	.quick-links strong { font-size: 15px; }
-	.quick-links > a > i { color: #9aabaa; font-size: 11px; }
-	.panel { padding: 0 !important; }
-	.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 17px 20px; border-bottom: 1px solid #edf1ef; }
-	.panel-head h2 { margin: 0; font-size: 26px; }
-	.panel-head .eyebrow { margin-bottom: 3px; }
-	.panel-head a { display: inline-flex; align-items: center; gap: 8px; color: var(--commerce-primary); font-size: 14px; font-weight: 700; text-decoration: none; }
+	.label { color: #52676b; font-size: 12px; font-weight: 700; }
+	.num { display: flex; align-items: baseline; gap: 5px; min-width: 0; margin: 5px 0 0; color: #1c3941; font-size: 27px; line-height: 1.1; font-weight: 750; font-variant-numeric: tabular-nums; }
+	.num small { color: #52676b; font-size: 13px; font-weight: 650; }
+	.num--currency { font-size: clamp(20px, 2vw, 29px); white-space: nowrap; }
+	.stat-note { grid-column: 2; margin-top: 2px; color: var(--commerce-muted); font-size: 10px; line-height: 1.3; }
+	.panel { margin-bottom: 16px; padding: 0 !important; overflow: hidden; }
+	.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 19px; border-bottom: 1px solid #edf1ef; }
+	.panel-head h2 { margin: 0; font-size: 22px; }
+	.panel-head p { margin: 4px 0 0; color: var(--commerce-muted); font-size: 12px; }
+	.panel-head > a { display: inline-flex; flex: none; align-items: center; gap: 7px; color: var(--commerce-primary); font-size: 13px; font-weight: 700; text-decoration: none; }
+	.trend-panel .panel-head { min-height: 56px; padding: 12px 18px; }
+	.trend-panel .panel-head h2 { font-size: 20px; }
+	.trend-metrics { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 0; padding: 4px 18px 8px; }
+	.trend-metric { display: grid; align-content: start; gap: 5px; min-width: 0; padding: 9px 14px; }
+	.trend-metric + .trend-metric { border-left: 1px solid var(--commerce-line); }
+	.trend-metric > span { color: #52676b; font-size: 12px; font-weight: 700; }
+	.trend-metric > strong { color: #1c3941; font-size: 23px; font-variant-numeric: tabular-nums; }
+	.trend-metric > strong small { margin-left: 5px; color: var(--commerce-muted); font-size: 13px; }
+	.trend-metric > div { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 7px; }
+	.trend-metric small { color: var(--commerce-muted); font-size: 10px; }
 	.recent { border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
-	.recent th { font-size: 14px; }
-	.recent td { font-size: 15px; }
-	.recent small { display: block; margin-top: 3px; color: #65797c; font-size: 13px; }
+	.recent table { width: 100%; }
+	.recent th { font-size: 12px; }
+	.recent td { font-size: 13px; vertical-align: middle; }
+	.recent small { display: block; margin-top: 4px; color: #65797c; font-size: 11px; }
+	.mobile-cell-label { display: none; }
 	.recent .order-link { color: var(--commerce-primary-dark); text-decoration: none; font-weight: 750; }
-	.recent .status-pill { display: inline-block; padding: 5px 10px; border-radius: 999px; background: #eef5f2; color: #56766f; font-size: 13px; }
+	.recent .order-time { display: block; margin-top: 3px; color: #28464e; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+	.recent .order-age { color: #65797c; }
+	.mobile-order-total-group,.mobile-customer-name { display: none; }
+	.recent tbody tr { position: relative; cursor: pointer; transition: background-color .15s ease; }
+	.recent tbody tr:hover { background: #f7fbfa; }
+	.order-row-link { position: absolute; inset: 0; z-index: 2; display: block; border-radius: 14px; }
+	.order-row-link:focus-visible { outline: 3px solid var(--commerce-primary); outline-offset: -3px; }
+	.customer-summary strong,.order-item-summary strong { display: block; font-size: 12px; font-weight: 700; }
+	.order-item-summary { display: none; margin-top: 5px; color: #34535a; }
+	.order-item-summary small { margin-top: 2px; }
+	.recent .status-pill { display: inline-block; padding: 5px 9px; border-radius: 999px; background: #eef5f2; color: #56766f; font-size: 11px; white-space: nowrap; }
+	.recent .status-pill.status--pending_payment { border: 1px solid #f2d7ab; background: #fff4e5; color: #8a5209; }
+	.recent .status-pill.status--payment_submitted { border: 1px solid #d1ddfb; background: #edf3ff; color: #36599b; }
+	.recent .status-pill.status--paid { border: 1px solid #c8e8d3; background: #e8f6ee; color: #236c43; }
+	.recent .status-pill.status--processing { border: 1px solid #c7e4ed; background: #e8f5f9; color: #176176; }
+	.recent .status-pill.status--shipped { border: 1px solid #d8d3fa; background: #efedff; color: #51488f; }
+	.recent .status-pill.status--completed { border: 1px solid #bee2cb; background: #e4f4eb; color: #1e6840; }
+	.recent .status-pill.status--cancelled { border: 1px solid #f1cfcb; background: #fff0ef; color: #a23c35; }
 	.recent .amount { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-	.recent .row-arrow { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 8px; background: #f3f7f6; color: #718a89; text-decoration: none; }
-	.empty { display: grid; justify-items: center; gap: 6px; margin: 0; padding: 38px 20px; border: 0 !important; background: #fff !important; }
-	.empty i { margin-bottom: 3px; color: #9eb8b3; font-size: 24px; }
-	.empty strong { color: #41575e; font-size: 16px; }
+	.mobile-order-total { display: none; }
+	.order-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+	.order-action-buttons { position: relative; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+	.order-actions form { margin: 0; }
+	.row-action { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 0 9px; border: 1px solid var(--commerce-line); border-radius: 7px; background: #fff; color: #4c696c; font-size: 11px; font-weight: 700; text-decoration: none; white-space: nowrap; cursor: pointer; }
+	.row-action--payment { border-color: #c47b24; background: #c47b24; color: #fff; }
+	.row-action--shipping { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
+	.row-action--complete { border-color: #21834b; background: #21834b; color: #fff; }
+	.empty { display: grid; justify-items: center; gap: 6px; margin: 0; padding: 30px 20px; border: 0 !important; background: #fff !important; }
+	.empty i { margin-bottom: 3px; color: #9eb8b3; font-size: 22px; }
+	.empty strong { color: #41575e; font-size: 14px; }
 	.mono { font-variant-numeric: tabular-nums; }
-	:global(body:has(.stats) .commerce-brand__text small), :global(body:has(.stats) .commerce-footer) { display: none; }
-	@media (max-width: 1000px) { .stats { grid-template-columns: repeat(2,minmax(0,1fr)); } }
-	@media (max-width: 700px) { .head h1 { font-size: 34px; }.heading-row { align-items: start; flex-direction: column; }.quick-links { grid-template-columns: 1fr; gap: 8px; }.stats { gap: 9px; margin: 18px 0 12px; }.stat { min-height: 112px; grid-template-columns: 34px 1fr; gap: 3px 9px; padding: 12px; }.stat-icon { width: 34px; height: 34px; }.num { font-size: 24px; }.panel-head { padding: 14px; }.panel-head a { font-size: 13px; } }
+	@media (max-width: 900px) { .stats { grid-template-columns: repeat(3,minmax(0,1fr)); } }
+	@media (max-width: 700px) {
+		.stats { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0 0 18px; }
+		.stat { min-height: 100px; grid-template-columns: 34px minmax(0,1fr); grid-template-rows: auto 1fr auto; gap: 4px 8px; padding: 11px 12px; }
+		.stat-icon { grid-column: 1; grid-row: 2 / 4; align-self: center; width: 34px; height: 34px; border-radius: 10px; }
+		.label { grid-column: 1 / -1; align-self: start; font-size: 13px; line-height: 1.3; }
+		.num { grid-column: 2; grid-row: 2; justify-self: end; align-self: center; margin: 0; font-size: 32px; }
+		.num--currency { font-size: clamp(16px, 5vw, 22px); }
+		.stat-note { grid-column: 2; grid-row: 3; justify-self: end; margin: 0; text-align: right; font-size: 10px; }
+		.panel-head { align-items: flex-start; padding: 14px; }
+		.panel-head h2 { font-size: 18px; }
+		.panel-head > a { font-size: 11px; }
+		.recent-panel-head { align-items: center; gap: 8px; min-height: 54px; padding: 12px 14px; }
+		.trend-panel .panel-head { align-items: center; padding: 12px; }
+		.trend-panel .panel-head h2 { font-size: 18px; }
+		.trend-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); padding: 3px 8px 6px; }
+		.trend-metric { gap: 5px; padding: 8px 7px; }
+		.trend-metric + .trend-metric { border-left: 1px solid var(--commerce-line); }
+		.trend-metric > span { font-size: 10px; }
+		.trend-metric > strong { font-size: 15px; overflow-wrap: anywhere; }
+		.recent .table-wrap { overflow: visible; }
+		.recent table,.recent tbody { display: block; width: 100%; }
+		.recent thead { display: none; }
+		.recent tbody { padding: 9px 10px; }
+		.recent tbody tr { position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "order status" "customer customer" "actions actions"; gap: 7px 10px; margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; cursor: pointer; }
+		.recent tbody tr:last-child { margin-bottom: 0; }
+		.recent tbody td { display: block; min-width: 0; padding: 0; border: 0; font-size: 12px; }
+		.recent tbody td:nth-child(1) { grid-area: order; align-self: center; }
+		.recent tbody td:nth-child(2) { grid-area: customer; }
+		.recent tbody td:nth-child(3) { grid-area: status; justify-self: end; align-self: center; }
+		.recent tbody td:nth-child(4) { display: none; }
+		.recent tbody td:nth-child(5) { grid-area: actions; }
+		.recent td small { overflow-wrap: anywhere; }
+		.mobile-cell-label { display: block; margin-bottom: 3px; color: var(--commerce-muted); font-size: 10px; font-weight: 650; }
+		.recent .order-link { display: none; }
+		.order-time-customer { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }
+		.recent .order-time { margin: 0; color: #183d45; font-size: 16px; line-height: 1.2; font-weight: 800; }
+		.mobile-customer-name { display: inline; color: #52676b; font-size: 14px; font-weight: 700; }
+		.recent .order-age,.customer-summary small { display: none; }
+		.customer-summary { display: none; }
+		.recent .status-pill { padding: 6px 10px; font-size: 11px; font-weight: 750; }
+		.customer-summary { min-width: 0; }
+		.customer-summary strong { font-size: 13px; }
+		.order-item-summary { display: block; min-width: 0; margin-top: 6px; padding-top: 6px; border-top: 1px solid #edf1ef; }
+		.order-item-feature { display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-rows: auto auto; align-items: baseline; gap: 4px 8px; }
+		.order-item-name { grid-column: 1; grid-row: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px !important; }
+		.order-item-unit-price { grid-column: 2; grid-row: 1; white-space: nowrap; font-size: 12px; font-weight: 700; }
+		.order-item-spec { grid-column: 1; grid-row: 2; margin: 0 !important; color: var(--commerce-muted) !important; font-size: 10px !important; }
+		.order-item-quantity { grid-column: 2; grid-row: 2; justify-self: end; white-space: nowrap; font-size: 11px; }
+		.order-more-items { margin-top: 5px !important; color: var(--commerce-primary) !important; text-align: right; font-size: 10px !important; }
+		.recent .amount { display: none; }
+		.order-actions { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding-top: 8px; border-top: 1px solid #edf1ef; }
+		.mobile-order-total-group { display: grid; align-self: center; gap: 2px; min-width: 0; }
+		.mobile-order-total { display: block; align-self: center; color: #193b43; font-size: 18px; line-height: 1.25; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+		.mobile-order-count { color: var(--commerce-muted); font-size: 10px !important; white-space: nowrap; }
+		.order-action-buttons { position: relative; z-index: 3; justify-content: flex-end; gap: 7px; }
+		.row-action { min-height: 36px; padding: 0 12px; font-size: 12px; }
+	}
 </style>
