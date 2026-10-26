@@ -77,6 +77,18 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		}
 	}
 
+	// Admin APIs (Sanity write/upload, product commerce) use the server's write token,
+	// so they must require a signed-in admin just like the /admin pages.
+	if (path === '/api/admin' || path.startsWith('/api/admin/')) {
+		const deny = (status: number, message: string) =>
+			new Response(JSON.stringify({ error: { message } }), {
+				status,
+				headers: { 'Content-Type': 'application/json; charset=utf-8' },
+			});
+		if (!context.locals.user) return deny(401, '未登入');
+		if (!context.locals.isAdmin) return deny(403, '此帳號沒有後台權限');
+	}
+
 	if (
 		((isAccountArea && !isPublicAccount) || isCartArea || isCheckoutArea) &&
 		!context.locals.user
