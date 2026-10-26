@@ -13,19 +13,15 @@ export const GET: APIRoute = async () => {
 	try {
 		checks.database = await pingDatabase();
 	} catch (error) {
-		checks.database = {
-			ok: false,
-			error: error instanceof Error ? error.message : 'Unknown database error',
-		};
+		console.error('[health] database check failed', error);
+		checks.database = { ok: false };
 	}
 
 	try {
 		checks.sanity = await pingSanity();
 	} catch (error) {
-		checks.sanity = {
-			ok: false,
-			error: error instanceof Error ? error.message : 'Unknown Sanity error',
-		};
+		console.error('[health] Sanity check failed', error);
+		checks.sanity = { ok: false };
 	}
 
 	const databaseOk =
