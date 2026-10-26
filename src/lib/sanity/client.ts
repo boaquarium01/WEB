@@ -1,6 +1,7 @@
 import { createImageUrlBuilder } from '@sanity/image-url';
 import { createClient, type SanityClient } from '@sanity/client';
-import { getPublicEnv, getServerEnv } from '../env';
+import { getServerEnv } from '../env';
+import { readSanityProjectDataset } from './env';
 
 let readClient: SanityClient | null = null;
 
@@ -13,7 +14,9 @@ export function getSanityClient(): SanityClient {
 		return readClient;
 	}
 
-	const publicEnv = getPublicEnv();
+	// Only the Sanity project/dataset are needed here; falls back to jt3vrzpz/production
+	// so a missing PUBLIC_SITE_URL or Sanity variable never knocks out product images.
+	const { projectId, dataset } = readSanityProjectDataset();
 	let token: string | undefined;
 	try {
 		token = getServerEnv().SANITY_API_READ_TOKEN;
@@ -22,8 +25,8 @@ export function getSanityClient(): SanityClient {
 	}
 
 	readClient = createClient({
-		projectId: publicEnv.PUBLIC_SANITY_PROJECT_ID,
-		dataset: publicEnv.PUBLIC_SANITY_DATASET,
+		projectId,
+		dataset,
 		apiVersion: '2025-03-18',
 		useCdn: !token,
 		perspective: 'published',
@@ -47,11 +50,7 @@ export async function pingSanity(): Promise<{
 	dataset: string;
 }> {
 	const client = getSanityClient();
-	const publicEnv = getPublicEnv();
+	const { projectId, dataset } = readSanityProjectDataset();
 	await client.fetch('*[0]._id');
-	return {
-		ok: true,
-		projectId: publicEnv.PUBLIC_SANITY_PROJECT_ID,
-		dataset: publicEnv.PUBLIC_SANITY_DATASET,
-	};
+	return { ok: true, projectId, dataset };
 }
