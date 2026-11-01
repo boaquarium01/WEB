@@ -1,5 +1,6 @@
 ---
 import AccountLayout from '../../../layouts/AccountLayout.astro';
+import PushOptIn from '../../../components/PushOptIn.astro';
 import { formatTwd } from '../../../lib/services/catalog';
 import {
 	listOrdersForUser,
@@ -9,7 +10,32 @@ import { orderStatusLabel } from '../../../lib/services/order';
 export const prerender = false;
 
 const user = Astro.locals.user!;
-const rows = await listOrdersForUser(user.id);
+const allRows = await listOrdersForUser(user.id);
+
+/** 狀態篩選（網址 ?status=）與分頁（?page=），不需 JavaScript */
+const statusGroups = [
+	{ key: 'all', label: '全部', statuses: [] as string[] },
+	{ key: 'unpaid', label: '待付款', statuses: ['PENDING_PAYMENT', 'PAYMENT_SUBMITTED'] },
+	{ key: 'processing', label: '處理中', statuses: ['PAID', 'PROCESSING'] },
+	{ key: 'shipped', label: '已出貨', statuses: ['SHIPPED'] },
+	{ key: 'completed', label: '已完成', statuses: ['COMPLETED'] },
+	{ key: 'cancelled', label: '已取消', statuses: ['CANCELLED'] },
+];
+const countFor = (statuses: string[]) => (statuses.length ? allRows.filter((row) => statuses.includes(row.status)).length : allRows.length);
+const requestedStatus = Astro.url.searchParams.get('status') ?? 'all';
+const activeGroup = statusGroups.find((group) => group.key === requestedStatus) ?? statusGroups[0];
+const filteredRows = activeGroup.statuses.length ? allRows.filter((row) => activeGroup.statuses.includes(row.status)) : allRows;
+const PAGE_SIZE = 10;
+const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+const page = Math.min(pageCount, Math.max(1, Number.parseInt(Astro.url.searchParams.get('page') ?? '1', 10) || 1));
+const rows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+const listHref = (status: string, targetPage = 1) => {
+	const params = new URLSearchParams();
+	if (status !== 'all') params.set('status', status);
+	if (targetPage > 1) params.set('page', String(targetPage));
+	const query = params.toString();
+	return `/account/orders${query ? `?${query}` : ''}`;
+};
 const orderTime = (date: Date) => {
 	const parts = new Intl.DateTimeFormat('en-CA', {
 		timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -21,24 +47,43 @@ const orderTime = (date: Date) => {
 ---
 
 <AccountLayout title="我的訂單｜水博館水族">
+	<PushOptIn title="訂單通知" />
+	{allRows.length > 0 && (
+		<nav class="status-tabs" aria-label="依訂單狀態篩選">
+			{statusGroups.map((group) => {
+				const count = countFor(group.statuses);
+				return (
+					<a
+						href={listHref(group.key)}
+						class:list={['status-tab', { 'is-active': group.key === activeGroup.key, 'is-empty': count === 0 }]}
+						aria-current={group.key === activeGroup.key ? 'page' : undefined}
+					>
+						{group.label}<span class="status-tab__count">{count}</span>
+					</a>
+				);
+			})}
+		</nav>
+	)}
 	{
 		rows.length === 0 ? (
 			<div class="empty">
-				<p>尚無訂單。</p>
-				<a class="btn-primary" href="/products">
-					去選購商品
-				</a>
+				<p>{allRows.length === 0 ? '尚無訂單。' : `沒有「${activeGroup.label}」的訂單。`}</p>
+				{allRows.length === 0 ? (
+					<a class="btn-primary" href="/products/1">去選購商品</a>
+				) : (
+					<a class="btn-primary" href={listHref('all')}>查看全部訂單</a>
+				)}
 			</div>
 		) : (
 			<ul class="list">
 				{rows.map((row) => (
 					<li>
 						<a class="card" href={`/account/orders/${encodeURIComponent(row.orderNumber)}`}>
+							<span class="order-no">訂單編號 <b>{row.orderNumber}</b></span>
 							<div class="top">
-								<strong class="product-title">{row.items[0]?.productName ?? '商品訂單'}</strong>
+								<strong class="product-title">{row.items[0]?.productName ?? '商品訂單'}{row.items.length > 1 && <span class="item-more">等 {row.items.length} 項</span>}</strong>
 								<span class={`status status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span>
 							</div>
-							{row.items.length > 1 && <span class="more-items">檢視其他商品<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span>}
 							<div class="bottom">
 								<time datetime={row.createdAt.toISOString()}>{orderTime(row.createdAt)}</time>
 								<strong>訂單金額：{formatTwd(row.total)}</strong>
@@ -49,6 +94,13 @@ const orderTime = (date: Date) => {
 			</ul>
 		)
 	}
+	{pageCount > 1 && (
+		<nav class="pager" aria-label="訂單分頁">
+			{page > 1 ? <a class="pager-btn" href={listHref(activeGroup.key, page - 1)}><i class="fa-solid fa-chevron-left" aria-hidden="true"></i>上一頁</a> : <span class="pager-btn is-disabled"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i>上一頁</span>}
+			<span class="pager-info">第 {page} / {pageCount} 頁</span>
+			{page < pageCount ? <a class="pager-btn" href={listHref(activeGroup.key, page + 1)}>下一頁<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a> : <span class="pager-btn is-disabled">下一頁<i class="fa-solid fa-chevron-right" aria-hidden="true"></i></span>}
+		</nav>
+	)}
 </AccountLayout>
 
 <style>
@@ -157,4 +209,22 @@ const orderTime = (date: Date) => {
 		.bottom{gap:.3rem;font-size:.72rem}
 		.bottom strong{font-size:.72rem}
 	}
+
+	/* B5：狀態篩選、訂單編號、分頁 */
+	.status-tabs { display: flex; gap: 0.4rem; margin: 0 0 0.85rem; padding-bottom: 2px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+	.status-tabs::-webkit-scrollbar { display: none; }
+	.status-tab { display: inline-flex; flex: none; align-items: center; gap: 0.35rem; min-height: 38px; padding: 0 0.85rem; border: 1px solid var(--aq-line); border-radius: 999px; background: #fff; color: var(--aq-muted); font-size: 0.85rem; font-weight: 650; text-decoration: none; white-space: nowrap; }
+	.status-tab__count { display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; padding: 0 0.35rem; border-radius: 999px; background: #f0f3f1; color: var(--aq-muted); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+	.status-tab.is-active { border-color: var(--aq-primary); background: var(--aq-primary); color: #fff; }
+	.status-tab.is-active .status-tab__count { background: rgba(255, 255, 255, 0.22); color: #fff; }
+	.status-tab.is-empty:not(.is-active) { opacity: 0.55; }
+	.order-no { color: var(--aq-muted); font-size: 0.76rem; letter-spacing: 0.02em; }
+	.order-no b { color: var(--aq-primary-dark); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 750; }
+	.card { gap: 0.45rem; }
+	.item-more { margin-left: 0.4rem; color: var(--aq-muted); font-size: 0.8rem; font-weight: 600; }
+	.empty .btn-primary { display: inline-flex; margin-top: 0.5rem; }
+	.pager { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-top: 1rem; }
+	.pager-btn { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 40px; padding: 0 0.9rem; border: 1px solid var(--aq-line); border-radius: 10px; background: #fff; color: var(--aq-primary-dark); font-size: 0.85rem; font-weight: 650; text-decoration: none; }
+	.pager-btn.is-disabled { color: #b5bdb9; }
+	.pager-info { color: var(--aq-muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
 </style>

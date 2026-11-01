@@ -100,6 +100,7 @@ const images = [...new Set([
 		<section class="summary">
 			<h1>{product.name}</h1>
 			<p id="product-price" class="price">{priceRange}</p>
+			{hasNamedVariants && <button type="button" class="spec-summary" data-open-spec aria-label="選擇規格"><span class="spec-summary__rows">{product.specifications.map((specification) => <span class="spec-summary__row"><span class="spec-summary__label">{specification.name}</span><span class="spec-summary__values">{specification.options.map((option) => option.name).join('、')}</span></span>)}</span><i class="fa-solid fa-chevron-right spec-summary__arrow" aria-hidden="true"></i></button>}
 			{product.minimumPurchaseQuantity > 1 && <p class="minimum-purchase-hint">最低購買數量：{product.minimumPurchaseQuantity} 件</p>}
 			{product.priceTiers.length > 0 && <p class="minimum-purchase-hint">多件優惠：{product.priceTiers.map((tier) => `${tier.minQuantity}${tier.maxQuantity ? `–${tier.maxQuantity}` : '+'} 件 NT$ ${tier.unitPrice}/件`).join('・')}</p>}
 			{!product.inStock && <p class="stock out" role="status">暫無庫存</p>}
@@ -505,6 +506,29 @@ const images = [...new Set([
 	:global(.purchase-sheet) .selected-variant-price { display:none; }
 
 	.ref-note { font-size:.75rem; line-height:1.5; }
+	/* 商品頁規格摘要（價格下方，僅手機） */
+	.spec-summary { display: flex; align-items: center; gap: .5rem; width: 100%; margin: .25rem 0 .6rem; padding: .45rem .7rem; border: 1px solid var(--aq-line); border-radius: 10px; background: #fff; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+	.spec-summary:hover { border-color: var(--aq-primary); }
+	.spec-summary__rows { display: grid; flex: 1; gap: .1rem; min-width: 0; }
+	.spec-summary__row { display: flex; gap: .5rem; min-width: 0; font-size: .82rem; line-height: 1.45; }
+	.spec-summary__label { flex: none; color: var(--aq-muted); }
+	.spec-summary__values { overflow: hidden; color: var(--aq-ink); text-overflow: ellipsis; white-space: nowrap; }
+	.spec-summary__arrow { flex: none; color: var(--aq-muted); font-size: .75rem; }
+	@media (min-width: 900px) { .spec-summary { display: none; } }
+	/* 加入購物車提示 */
+	:global(.cart-added-toast) { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 80; display: flex; align-items: center; gap: .75rem; width: min(calc(100vw - 24px), 460px); padding: .7rem .75rem .7rem .95rem; border-radius: 14px; background: #1c3a3f; color: #fff; box-shadow: 0 12px 30px rgba(15, 35, 38, .28); opacity: 0; transform: translate(-50%, 12px); transition: opacity .2s ease, transform .2s ease; }
+	:global(.cart-added-toast.is-open) { opacity: 1; transform: translate(-50%, 0); }
+	:global(.cart-added-toast__msg) { display: flex; flex: 1; align-items: center; gap: .55rem; min-width: 0; font-size: .9rem; font-weight: 700; }
+	:global(.cart-added-toast__msg i) { color: #7fd9b5; font-size: 1.1rem; }
+	:global(.cart-added-toast__msg > span) { display: grid; min-width: 0; }
+	:global(.cart-added-toast__msg small) { overflow: hidden; color: rgba(255,255,255,.75); font-size: .78rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+	:global(.cart-added-toast__actions) { display: flex; flex: none; gap: .4rem; }
+	:global(.cart-added-toast__ghost), :global(.cart-added-toast__primary) { display: inline-flex; align-items: center; min-height: 38px; padding: 0 .8rem; border-radius: 10px; font: inherit; font-size: .84rem; font-weight: 750; text-decoration: none; cursor: pointer; }
+	:global(.cart-added-toast__ghost) { border: 1px solid rgba(255,255,255,.35); background: transparent; color: #fff; }
+	:global(.cart-added-toast__primary) { border: 0; background: #fff; color: #1c3a3f; }
+	:global(.cart-added-toast[hidden]) { display: none; }
+	@media (min-width: 900px) { :global(.cart-added-toast) { bottom: 28px; } }
+	@media (prefers-reduced-motion: reduce) { :global(.cart-added-toast) { transition: none; } }
 </style>
 
 <script>
@@ -557,7 +581,15 @@ const images = [...new Set([
 			root.addEventListener('product:select-image', (event) => {
 				const url = (event as CustomEvent<{ url: string }>).detail.url;
 				const target = slides.findIndex((slide) => (slide as HTMLElement).dataset.src === url);
-				if (target >= 0) { userInteracted = true; stop(); setIndex(target, 'auto'); }
+				// 顧客已選規格：一律停止自動輪播，找得到該規格圖片就切過去
+				userInteracted = true;
+				stop();
+				if (target >= 0) setIndex(target, 'auto');
+			});
+			// 只要碰到規格／數量／購買區，就停止自動輪播，避免輪播換到和已選規格不符的圖片
+			document.querySelectorAll('[data-spec-option], .add-form, .purchase-sheet, .purchase-dock').forEach((el) => {
+				el.addEventListener('pointerdown', () => { userInteracted = true; stop(); }, { passive: true });
+				el.addEventListener('focusin', () => { userInteracted = true; stop(); });
 			});
 			const navigate = (target) => { userInteracted = true; stop(); setIndex(target); };
 			prev?.addEventListener('click', () => navigate(index - 1));
@@ -788,6 +820,22 @@ const images = [...new Set([
 			cartButton.classList.remove('is-complete');
 			dockCart.innerHTML = '<i class="fa-solid fa-cart-plus" aria-hidden="true"></i>加入購物車';
 		};
+		const addedToast = document.createElement('div'); addedToast.className = 'cart-added-toast'; addedToast.setAttribute('role', 'status'); addedToast.hidden = true; document.body.appendChild(addedToast);
+		let toastTimer: ReturnType<typeof setTimeout> | undefined;
+		const selectedLabel = () => {
+			const names = groups.map((group) => group.querySelector<HTMLElement>('[data-spec-option][aria-pressed="true"]')?.textContent?.trim() ?? '').filter(Boolean);
+			const qty = form.querySelector<HTMLInputElement>('[data-product-quantity]')?.value ?? '1';
+			return (names.length ? names.join(' / ') + ' ' : '') + '×' + qty;
+		};
+		function hideAddedToast() { document.documentElement.classList.remove('floats-tucked'); addedToast.classList.remove('is-open'); clearTimeout(toastTimer); setTimeout(() => { if (!addedToast.classList.contains('is-open')) addedToast.hidden = true; }, 220); }
+		const showAddedToast = () => {
+			addedToast.innerHTML = '<span class="cart-added-toast__msg"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>已加入購物車<small></small></span></span><span class="cart-added-toast__actions"><button type="button" class="cart-added-toast__ghost" data-toast-close>繼續逛</button><a class="cart-added-toast__primary" href="/cart">去結帳</a></span>';
+			const small = addedToast.querySelector('small'); if (small) small.textContent = selectedLabel();
+			addedToast.hidden = false; document.documentElement.classList.add('floats-tucked'); requestAnimationFrame(() => addedToast.classList.add('is-open'));
+			addedToast.querySelector('[data-toast-close]')?.addEventListener('click', hideAddedToast);
+			clearTimeout(toastTimer); toastTimer = setTimeout(hideAddedToast, 5000);
+		};
+		document.querySelector('[data-open-spec]')?.addEventListener('click', () => dockCart.click());
 		const showCartAdded = (count?: number) => {
 			closeSheet();
 			dockCart.innerHTML = '<i class="fa-solid fa-check" aria-hidden="true"></i>加入完成';
@@ -813,6 +861,7 @@ const images = [...new Set([
 					animation.finished.then(() => { animation.cancel(); if (cartAnimation === animation) cartAnimation = null; }, () => {});
 				}
 			}
+			showAddedToast();
 			clearTimeout(completionTimer);
 			completionTimer = setTimeout(() => { resetCartButton(); }, 2600);
 		};

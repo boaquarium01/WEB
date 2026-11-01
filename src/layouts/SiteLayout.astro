@@ -26,6 +26,14 @@ if (user) {
 }
 
 const categories = await getAllCategories();
+const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const isCurrent = (href: string) => (href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`));
+const promoLinks = [
+	{ href: '/promo/weekly-new', label: '每週新進' },
+	{ href: '/promo/special-offers', label: '預定優惠' },
+	{ href: '/promo/equipment-sale', label: '器材促銷' },
+];
+const accountLink = user ? { href: '/account', label: '會員中心' } : { href: '/account/login', label: '登入' };
 ---
 
 <Layout title={title} description={description}>
@@ -39,7 +47,33 @@ const categories = await getAllCategories();
 					<i class="fa-solid fa-arrow-left" aria-hidden="true"></i>
 				</a>
 				<a href="/" class="product-brand">水博館水族</a>
-				<span class="product-header-spacer" aria-hidden="true"></span>
+				<nav class="nav-desktop product-nav" aria-label="主要導覽">
+					<a href="/" aria-current={isCurrent('/') ? 'page' : undefined}>首頁</a>
+					{promoLinks.map((l) => <a href={l.href} aria-current={isCurrent(l.href) ? 'page' : undefined}>{l.label}</a>)}
+					<details class="nav-cat">
+						<summary class:list={{ 'is-current': currentPath.startsWith('/products') || currentPath.startsWith('/product/') }}>本店商品</summary>
+						<ul>
+							<li><a href="/products/1">全部商品</a></li>
+							{categories.map((c) => <li><a href={`/products/1?category=${encodeURIComponent(c.id)}`}>{c.label}</a></li>)}
+						</ul>
+					</details>
+					<a href="/cart" aria-current={isCurrent('/cart') ? 'page' : undefined}>購物車{cartCount > 0 ? `（${cartCount}）` : ''}</a>
+					<a href={accountLink.href} aria-current={currentPath.startsWith('/account') ? 'page' : undefined}>{accountLink.label}</a>
+				</nav>
+				<details class="mobile-menu">
+					<summary aria-label="開啟選單"><i class="fa-solid fa-bars" aria-hidden="true"></i></summary>
+					<nav class="mobile-menu-panel" aria-label="主要導覽">
+						<a href="/" aria-current={isCurrent('/') ? 'page' : undefined}><i class="fa-solid fa-house" aria-hidden="true"></i>首頁</a>
+						<a href="/products/1"><i class="fa-solid fa-fish" aria-hidden="true"></i>全部商品</a>
+						<div class="mobile-menu-cats">
+							{categories.map((c) => <a href={`/products/1?category=${encodeURIComponent(c.id)}`}>{c.label}</a>)}
+						</div>
+						{promoLinks.map((l) => <a href={l.href} aria-current={isCurrent(l.href) ? 'page' : undefined}><i class="fa-solid fa-tag" aria-hidden="true"></i>{l.label}</a>)}
+						<hr />
+						<a href="/cart" aria-current={isCurrent('/cart') ? 'page' : undefined}><i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>購物車{cartCount > 0 ? `（${cartCount}）` : ''}</a>
+						<a href={accountLink.href}><i class="fa-solid fa-user" aria-hidden="true"></i>{accountLink.label}</a>
+					</nav>
+				</details>
 			</div>
 		) : (
 		<div class="header-inner">
@@ -101,6 +135,23 @@ const categories = await getAllCategories();
 	</footer>
 </Layout>
 
+<script>
+	function initHeaderMenus() {
+		document.addEventListener('click', (event) => {
+			document.querySelectorAll<HTMLDetailsElement>('.mobile-menu[open], .nav-cat[open]').forEach((menu) => {
+				if (!menu.contains(event.target as Node)) menu.open = false;
+			});
+		});
+		document.addEventListener('keydown', (event) => {
+			if (event.key !== 'Escape') return;
+			document.querySelectorAll<HTMLDetailsElement>('.mobile-menu[open], .nav-cat[open]').forEach((menu) => {
+				menu.open = false;
+			});
+		});
+	}
+	initHeaderMenus();
+</script>
+
 <style>
 	.header-inner {
 		max-width: 72rem;
@@ -127,10 +178,131 @@ const categories = await getAllCategories();
 		padding: 0.75rem 1rem;
 	}
 
-	.product-back,
-	.product-header-spacer {
+	.product-back {
 		width: 40px;
 		height: 40px;
+	}
+
+	/* 內頁：手機用選單按鈕，桌面直接顯示主選單 */
+	.product-nav {
+		display: none;
+	}
+
+	.nav-desktop a[aria-current='page'],
+	.nav-desktop summary.is-current {
+		color: var(--aq-primary-dark);
+		font-weight: 700;
+	}
+
+	.mobile-menu {
+		position: relative;
+		justify-self: end;
+	}
+
+	.mobile-menu > summary {
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 10px;
+		color: #111;
+		font-size: 1.1rem;
+		list-style: none;
+		cursor: pointer;
+	}
+
+	.mobile-menu > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.mobile-menu[open] > summary {
+		background: color-mix(in srgb, var(--aq-primary) 10%, white);
+		color: var(--aq-primary-dark);
+	}
+
+	.mobile-menu-panel {
+		position: absolute;
+		top: calc(100% + 8px);
+		right: 0;
+		z-index: 200;
+		display: grid;
+		gap: 2px;
+		width: min(78vw, 260px);
+		padding: 0.5rem;
+		border: 1px solid var(--aq-line);
+		border-radius: 14px;
+		background: #fff;
+		box-shadow: 0 18px 40px rgba(26, 34, 33, 0.16);
+	}
+
+	.mobile-menu-panel > a {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-height: 44px;
+		padding: 0 0.75rem;
+		border-radius: 10px;
+		color: var(--aq-ink);
+		font-size: 0.95rem;
+		font-weight: 600;
+		text-decoration: none;
+	}
+
+	.mobile-menu-panel > a i {
+		width: 1.1rem;
+		color: var(--aq-primary);
+		text-align: center;
+	}
+
+	.mobile-menu-panel > a:hover,
+	.mobile-menu-panel > a[aria-current='page'] {
+		background: color-mix(in srgb, var(--aq-primary) 8%, white);
+		color: var(--aq-primary-dark);
+	}
+
+	.mobile-menu-cats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
+		padding: 0.15rem 0.75rem 0.45rem 2.5rem;
+	}
+
+	.mobile-menu-cats a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 32px;
+		padding: 0 0.7rem;
+		border: 1px solid var(--aq-line);
+		border-radius: 999px;
+		color: var(--aq-muted);
+		font-size: 0.82rem;
+		text-decoration: none;
+	}
+
+	.mobile-menu-panel hr {
+		margin: 0.25rem 0.5rem;
+		border: 0;
+		border-top: 1px solid var(--aq-line);
+	}
+
+	@media (min-width: 900px) {
+		.product-header-inner {
+			grid-template-columns: 40px auto 1fr;
+			column-gap: 0.75rem;
+		}
+
+		.product-header-inner .product-brand {
+			justify-self: start;
+		}
+
+		.product-nav {
+			display: flex;
+			justify-self: end;
+		}
+
+		.mobile-menu {
+			display: none;
+		}
 	}
 
 	.product-back {

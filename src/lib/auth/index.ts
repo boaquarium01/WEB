@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { genericOAuth, line } from 'better-auth/plugins/generic-oauth';
 import { eq } from 'drizzle-orm';
@@ -7,7 +8,7 @@ import * as schema from '../db/schema';
 import { getServerEnv } from '../env';
 import { sendAuthEmail } from '../email/adapter';
 import { ensureCustomerForUser } from '../services/customer';
-import { isSyntheticProviderEmail } from './policies.js';
+import { isSyntheticProviderEmail, passwordPolicyMessage } from './policies.js';
 
 function createAuth() {
 	const env = getServerEnv();
@@ -77,6 +78,15 @@ function createAuth() {
 				allowDifferentEmails: true,
 				allowUnlinkingAll: false,
 			},
+		},
+		// 註冊、重設、修改、設定密碼一律套用同一份密碼規則（見 policies.js）
+		hooks: {
+			before: createAuthMiddleware(async (ctx) => {
+				const field = ctx.path === '/sign-up/email' ? 'password' : ['/reset-password', '/change-password', '/set-password'].includes(ctx.path) ? 'newPassword' : null;
+				if (!field) return;
+				const message = passwordPolicyMessage(String(ctx.body?.[field] ?? ''));
+				if (message) throw new APIError('BAD_REQUEST', { message });
+			}),
 		},
 		emailAndPassword: {
 			enabled: true,

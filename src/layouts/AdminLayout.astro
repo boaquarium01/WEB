@@ -19,6 +19,7 @@ const links = [
 	{ href: `${shop}/orders`, label: '訂單管理', icon: 'fa-receipt', match: (p: string) => p.includes('/shop/orders') },
 	{ href: `${base}/dashboard?model=product`, label: '商品管理', icon: 'fa-box-open', match: (p: string) => p.includes('/dashboard') || p.includes('/shop/products') || p.includes('/shop/inventory') },
 	{ href: `${shop}/members`, label: '會員管理', icon: 'fa-users', match: (p: string) => p.includes('/shop/members') },
+	{ href: `${shop}/home-display`, label: '首頁陳列', icon: 'fa-house', match: (p: string) => p.includes('/shop/home-display') },
 	{ href: `${shop}/operations`, label: '營運管理', icon: 'fa-chart-line', match: (p: string) => p.includes('/shop/operations') },
 	{ href: `${shop}/shipping`, label: '運費設定', icon: 'fa-truck-fast', match: (p: string) => p.includes('/shop/shipping') },
 ];
@@ -51,6 +52,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 						</a>
 					))}
 				</nav>
+				<button id="commerceNavScrollEnd" class="commerce-nav-scroll-end" type="button" aria-label="導覽向右捲動，還有更多功能" title="還有更多功能" hidden><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button>
 			</div>
 			<div class="commerce-sidebar__bottom">
 				<a href="/" title="查看官網"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>查看官網</span></a>
@@ -68,14 +70,14 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 
 <style is:global>
 	:root {
-		--commerce-ink: #18323b;
-		--commerce-muted: #72828a;
-		--commerce-line: #e2e9e8;
+		--commerce-ink: #1a2221;
+		--commerce-muted: #5c6563;
+		--commerce-line: #e3e7e5;
 		--commerce-paper: #ffffff;
-		--commerce-canvas: #f3f7f6;
-		--commerce-primary: #087e78;
-		--commerce-primary-dark: #075d59;
-		--commerce-primary-soft: #e8f5f2;
+		--commerce-canvas: #eef1ef;
+		--commerce-primary: #156a66;
+		--commerce-primary-dark: #0f4d4a;
+		--commerce-primary-soft: #e7f0ef;
 		--commerce-warn: #b96a16;
 		--commerce-danger: #bd4d4d;
 		--commerce-shadow: 0 12px 34px rgba(28, 67, 70, 0.055);
@@ -90,7 +92,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 	.commerce-sidebar-toggle:focus-visible { outline: 3px solid #087e7833; outline-offset: 2px; }
 	.collapse-button__icon { display: grid; width: 22px; height: 22px; place-items: center; font-size: 14px; line-height: 1; }
 	.commerce-brand { display: flex; align-items: center; gap: 12px; padding: 0 58px 27px 11px; color: inherit; text-decoration: none; transition: padding .2s ease; }
-	.commerce-brand__mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: linear-gradient(145deg, #0c938a, #066963); color: #fff; font-size: 19px; box-shadow: 0 7px 15px #087e782e; }
+	.commerce-brand__mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 14px; background: var(--commerce-primary); color: #fff; font-size: 19px; box-shadow: 0 7px 15px rgba(21, 106, 102, 0.18); }
 	.commerce-brand__text { display: grid; gap: 4px; min-width: 0; max-width: 170px; overflow: hidden; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-brand__text strong { font-size: 15px; letter-spacing: .04em; }
 	.commerce-brand__text small { color: #8a999c; font-size: 11px; font-weight: 700; letter-spacing: .04em; }
@@ -101,7 +103,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 	.commerce-sidebar__user strong { min-width: 0; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
 	.commerce-nav { display: grid; gap: 5px; }
 	.commerce-nav-wrap { display: contents; }
-	.commerce-nav-scroll-start { display: none; }
+	.commerce-nav-scroll-start, .commerce-nav-scroll-end { display: none; }
 	.commerce-nav a { min-height: 56px; display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid transparent; border-radius: 12px; color: #73848a; text-decoration: none; transition: .18s ease; }
 		.commerce-nav a:hover { background: #f7faf9; color: var(--commerce-primary); }
 		.commerce-nav a.active { background: var(--commerce-primary-soft); border-color: #d5ebe6; color: var(--commerce-primary-dark); }
@@ -178,6 +180,11 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 		.commerce-nav::-webkit-scrollbar-thumb { border-radius: 999px; background: #aabbb8; }
 		.commerce-nav-scroll-start { position: absolute; top: 50%; z-index: 2; display: grid; width: 26px; height: 32px; place-items: center; padding: 0; transform: translateY(-50%); border: 1px solid #dce8e5; border-radius: 8px; background: #fff; color: var(--commerce-primary-dark); box-shadow: 0 3px 9px rgba(28,67,70,.1); cursor: pointer; }
 		.commerce-nav-scroll-start { left: 0; }
+		/* B8：右側「還有更多」按鈕，提示分頁可以橫向滑動 */
+		.commerce-nav-scroll-end { position: absolute; top: calc(50% - 3px); right: 0; z-index: 2; display: grid; width: 26px; height: 32px; place-items: center; padding: 0; transform: translateY(-50%); border: 1px solid #dce8e5; border-radius: 8px; background: #fff; color: var(--commerce-primary); box-shadow: -6px 0 12px rgba(255, 255, 255, 0.9); font-size: 11px; }
+		.commerce-nav-scroll-end[hidden] { display: none; }
+		.commerce-nav-scroll-end:active { background: var(--commerce-primary-soft); }
+		.commerce-nav-wrap.has-right-scroll { padding-right: 30px; }
 		.commerce-nav-scroll-start:active { background: var(--commerce-primary-soft); }
 		.commerce-nav-scroll-start[hidden] { display: none; }
 		.commerce-nav a { flex: 0 0 auto; min-height: 38px; gap: 7px; padding: 6px 10px; border-color: #edf1ef; background: #fff; }
@@ -208,6 +215,15 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
       padding-right:max(6px, env(safe-area-inset-right, 0px));
     }
   }
+
+	/* A5：手機上輸入框至少 16px，避免 iPhone 聚焦時整頁自動放大 */
+	@media (max-width: 767px) {
+		.commerce-main input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']),
+		.commerce-main select,
+		.commerce-main textarea {
+			font-size: 16px !important;
+		}
+	}
 </style>
 
 <script>
@@ -235,6 +251,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 		});
 	}
 	const navScrollStart = document.getElementById('commerceNavScrollStart');
+	const navScrollEnd = document.getElementById('commerceNavScrollEnd');
 	const commerceNav = document.querySelector<HTMLElement>('.commerce-nav');
 	if (commerceNav instanceof HTMLElement) {
 		const updateNavScrollButtons = () => {
@@ -246,6 +263,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 			if (navScrollStart) navScrollStart.hidden = !hasLeftScroll;
 			const hasRightScroll = commerceNav.scrollLeft + commerceNav.clientWidth < commerceNav.scrollWidth - 2;
 			navWrap?.classList.toggle('has-right-scroll', hasRightScroll);
+			if (navScrollEnd) navScrollEnd.hidden = !hasRightScroll;
 		};
 		const activeNavLink = commerceNav.querySelector<HTMLElement>('a[aria-current="page"]');
 		requestAnimationFrame(() => {
@@ -270,5 +288,6 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 		commerceNav.addEventListener('scroll', updateNavScrollButtons, { passive: true });
 		window.addEventListener('resize', updateNavScrollButtons);
 		navScrollStart?.addEventListener('click', () => commerceNav.scrollBy({ left: -Math.max(140, commerceNav.clientWidth * .8), behavior: 'smooth' }));
+		navScrollEnd?.addEventListener('click', () => commerceNav.scrollBy({ left: Math.max(140, commerceNav.clientWidth * .8), behavior: 'smooth' }));
 	}
 </script>

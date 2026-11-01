@@ -9,6 +9,7 @@ import { getShippingFee, listShippingMethods } from '../../lib/services/shipping
 import { getOrderForUser } from '../../lib/services/order';
 import { getBankTransferInfo } from '../../lib/services/payment';
 import { sendAuthEmail } from '../../lib/email/adapter';
+import { notifyShopEvent } from '../../lib/services/shop-notify';
 import { isSyntheticProviderEmail } from '../../lib/auth/policies.js';
 
 export const prerender = false;
@@ -113,6 +114,7 @@ if (Astro.request.method === 'POST') {
 				console.error(`Failed to send order confirmation email for order ${result.orderNumber}:`, emailError);
 			}
 		}
+		await notifyShopEvent('SHOP_NEW_ORDER', user.id, result.orderNumber, Astro.url.origin);
 		return Astro.redirect(
 			`/account/orders/${encodeURIComponent(result.orderNumber)}`,
 		);
@@ -123,6 +125,9 @@ if (Astro.request.method === 'POST') {
 		selectedCartItemIds = Astro.url.searchParams.getAll('item').map((id) => id.trim()).filter(Boolean);
 }
 
+const checkoutReturnTo = encodeURIComponent(Astro.url.pathname + Astro.url.search);
+const addAddressHref = `/account/addresses?returnTo=${checkoutReturnTo}&new=1`;
+const manageAddressHref = `/account/addresses?returnTo=${checkoutReturnTo}`;
 const [cartView, addresses, shippingMethods] = await Promise.all([
 	getCartView(user.id),
 	listAddressesForUser(user.id),
@@ -152,6 +157,8 @@ const discount = 0;
 const total = cart.subtotal + shippingFee - discount;
 const defaultAddressId =
 	addresses.find((a) => a.isDefault)?.id ?? addresses[0]?.id ?? '';
+/** 結帳頁畫面上的金額不顯示「NT」，只用 $ 開頭（訂單通知信仍用 formatTwd） */
+const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(amount)}`;
 ---
 
 <SiteLayout title="結帳｜桃園中壢水博館水族" description="結帳" wide legacyFooter productBack={{ href: '/cart', label: '購物車' }}>
@@ -160,6 +167,11 @@ const defaultAddressId =
 			<a href="/">首頁</a> / <a href="/cart">購物車</a> / 結帳
 		</p>
 		<h1>結帳</h1>
+		<div class="steps" aria-label="結帳流程">
+			<a class="step done" href="/cart"><b><i class="fa-solid fa-check" aria-hidden="true"></i></b>購物車</a><i></i>
+			<span class="step active" aria-current="step"><b>2</b>配送與付款</span><i></i>
+			<span class="step"><b>3</b>完成訂單</span>
+		</div>
 	</header>
 
 	{error && <p class="banner error">{error}</p>}
@@ -176,13 +188,20 @@ const defaultAddressId =
 			<form method="post" class="checkout">
 				{cart.items.map((item) => <input type="hidden" name="cartItemIds" value={item.cartItemId} />)}
 				<section class="panel">
-					<h2>收件地址</h2>
+					<div class="addr-head">
+						<h2>收件地址</h2>
+						{addresses.length > 0 && (
+							<div class="addr-tools">
+								<a class="addr-tool" href={addAddressHref}><i class="fa-solid fa-plus" aria-hidden="true"></i>新增</a>
+								<a class="addr-tool" href={manageAddressHref}><i class="fa-solid fa-pen" aria-hidden="true"></i>修改</a>
+							</div>
+						)}
+					</div>
 					{addresses.length === 0 ? (
-						<p class="hint">
-							尚未新增收件地址。請先
-							<a href="/account/addresses">新增地址</a>
-							再結帳。
-						</p>
+						<div class="addr-empty">
+							<p class="hint">還沒有收件地址，新增後會自動回到這裡繼續結帳。</p>
+							<a class="addr-tool addr-tool--primary" href={addAddressHref}><i class="fa-solid fa-plus" aria-hidden="true"></i> 新增收件地址</a>
+						</div>
 					) : (
 						<ul class="addrs">
 							{addresses.map((a) => (
@@ -210,8 +229,9 @@ const defaultAddressId =
 							))}
 						</ul>
 					)}
+
 					<h2 class="shipping-heading">配送方式</h2>
-					{shippingMethods.length === 0 ? <p class="hint">目前尚未提供配送方式，請聯絡商店。</p> : <ul class="shipping-options">{shippingMethods.map((method) => <li><label class="shipping-option" data-fee={method.fee} data-threshold={method.freeShippingThreshold ?? ''}><input type="radio" name="shippingMethodId" value={method.id} required checked={method.id === selectedShippingMethod?.id} /><span><strong>{method.name}</strong><small>運費 {formatTwd(method.fee)}{method.freeShippingThreshold !== null ? ` · 滿 ${formatTwd(method.freeShippingThreshold)} 免運` : ''}</small></span></label></li>)}</ul>}
+					{shippingMethods.length === 0 ? <p class="hint">目前尚未提供配送方式，請聯絡商店。</p> : <ul class="shipping-options">{shippingMethods.map((method) => <li><label class="shipping-option" data-fee={method.fee} data-threshold={method.freeShippingThreshold ?? ''}><input type="radio" name="shippingMethodId" value={method.id} required checked={method.id === selectedShippingMethod?.id} /><span><strong>{method.name}</strong><small>運費 {dollars(method.fee)}{method.freeShippingThreshold !== null ? ` · 滿 ${dollars(method.freeShippingThreshold)} 免運` : ''}</small></span></label></li>)}</ul>}
 					<h2 class="payment-heading">付款方式</h2>
 					<div class="payment-method" aria-label="付款方式：銀行轉帳，目前僅提供此方式">
 						<span class="payment-method-icon" aria-hidden="true"><i class="fa-solid fa-building-columns"></i></span>
@@ -240,28 +260,28 @@ const defaultAddressId =
 										{item.skuName} × {item.quantity}
 									</small>
 								</span>
-								<strong>{formatTwd(item.lineTotal)}</strong>
+								<strong class="line-amount">{dollars(item.lineTotal)}</strong>
 							</li>
 						))}
 					</ul>
 					<dl class="totals">
 						<div>
 							<dt>小計</dt>
-							<dd>{formatTwd(cart.subtotal)}</dd>
+							<dd>{dollars(cart.subtotal)}</dd>
 						</div>
 						<div>
 							<dt>運費</dt>
-							<dd id="checkout-shipping-fee" data-subtotal={cart.subtotal}>{formatTwd(shippingFee)}</dd>
+							<dd id="checkout-shipping-fee" data-subtotal={cart.subtotal}>{dollars(shippingFee)}</dd>
 						</div>
 						{discount > 0 && (
 							<div>
 								<dt>折扣</dt>
-								<dd>-{formatTwd(discount)}</dd>
+								<dd>-{dollars(discount)}</dd>
 							</div>
 						)}
 						<div class="grand">
 							<dt>應付總額</dt>
-							<dd>{formatTwd(total)}</dd>
+							<dd>{dollars(total)}</dd>
 						</div>
 					</dl>
 				</section>
@@ -330,7 +350,7 @@ const defaultAddressId =
 	const shippingFeeLabel = document.querySelector<HTMLElement>('#checkout-shipping-fee');
 	const totalLabel = document.querySelector<HTMLElement>('.totals .grand dd');
 	const fixedTotalLabel = document.querySelector<HTMLElement>('[data-checkout-fixed-total]');
-	const formatTwd = (value: number) => `NT$ ${new Intl.NumberFormat('zh-TW').format(value)}`;
+	const formatTwd = (value: number) => `$${new Intl.NumberFormat('zh-TW').format(value)}`;
 	const updateShippingTotal = () => {
 		const selected = shippingLabels.find((label) => label.querySelector<HTMLInputElement>('input')?.checked);
 		if (!selected || !shippingFeeLabel || !totalLabel) return;
@@ -341,14 +361,40 @@ const defaultAddressId =
 		shippingFeeLabel.textContent = formatTwd(actualFee);
 		const total = formatTwd(subtotal + actualFee);
 		totalLabel.textContent = total;
-		if (fixedTotalLabel) fixedTotalLabel.textContent = total;
+		// 手機底部「總金額（含運費）」保留 NT$
+		if (fixedTotalLabel) fixedTotalLabel.textContent = `NT$ ${new Intl.NumberFormat('zh-TW').format(subtotal + actualFee)}`;
 	};
 	shippingLabels.forEach((label) => label.querySelector('input')?.addEventListener('change', updateShippingTotal));
 	const checkoutForm = document.querySelector<HTMLFormElement>('form.checkout');
 	const confirmButton = checkoutForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
 	let confirmReadyToSubmit = false;
+	// 建立訂單需要幾秒：按鈕改成「建立訂單中…」並蓋上半透明提示，避免顧客以為沒反應而重複按
+	const confirmLabel = confirmButton?.innerHTML ?? '';
+	let submittingOverlay: HTMLElement | null = null;
+	const showSubmitting = () => {
+		if (!confirmButton) return;
+		confirmButton.disabled = true;
+		confirmButton.setAttribute('aria-busy', 'true');
+		confirmButton.innerHTML = '<span class="checkout-spinner" aria-hidden="true"></span>建立訂單中…';
+		submittingOverlay ??= Object.assign(document.createElement('div'), { className: 'checkout-submitting', role: 'status' });
+		submittingOverlay.innerHTML = '<div class="checkout-submitting__card"><span class="checkout-spinner checkout-spinner--lg" aria-hidden="true"></span><strong>正在建立訂單</strong><span>請稍候，不要關閉或重新整理頁面</span></div>';
+		document.body.append(submittingOverlay);
+	};
+	// 從下一頁按「上一頁」回來時（瀏覽器快取），還原按鈕
+	window.addEventListener('pageshow', (event) => {
+		if (!event.persisted || !confirmButton) return;
+		confirmReadyToSubmit = false;
+		confirmButton.disabled = false;
+		confirmButton.removeAttribute('aria-busy');
+		confirmButton.classList.remove('is-confirming');
+		confirmButton.innerHTML = confirmLabel;
+		submittingOverlay?.remove();
+	});
 	checkoutForm?.addEventListener('submit', (event) => {
-		if (confirmReadyToSubmit || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !confirmButton) return;
+		if (confirmReadyToSubmit || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !confirmButton) {
+			if (!event.defaultPrevented) showSubmitting();
+			return;
+		}
 		event.preventDefault();
 		if (confirmButton.classList.contains('is-confirming')) return;
 		confirmButton.classList.add('is-confirming');
@@ -459,7 +505,13 @@ const defaultAddressId =
 		display: flex;
 		justify-content: space-between;
 		gap: 1rem;
-		align-items: baseline;
+		/* 金額與下一行的「規格 × 數量」對齊 */
+		align-items: flex-end;
+	}
+
+	.lines .line-amount {
+		flex: none;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.lines small {
@@ -554,4 +606,58 @@ const defaultAddressId =
 	.terms-sheet__agree{width:100%;min-height:54px;border:0;border-radius:12px;background:var(--aq-primary);color:#fff;font:inherit;font-size:1rem;font-weight:750;cursor:pointer}
 	@media(prefers-reduced-motion:reduce){.terms-backdrop,.terms-sheet{transition:none}}
 	:global(body:has(.checkout) > footer.site-footer){display:none!important}
+
+	.addr-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.65rem; }
+	.addr-head h2 { margin: 0; }
+	.addr-tools { display: flex; flex-wrap: nowrap; gap: 0.35rem; }
+	.addr-empty { display: grid; gap: 0.65rem; justify-items: start; }
+	.addr-tool {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 30px;
+		padding: 0 0.7rem;
+		border: 1px solid color-mix(in srgb, var(--aq-primary) 28%, transparent);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--aq-primary-dark);
+		font-size: 0.78rem;
+		font-weight: 700;
+		line-height: 1;
+		white-space: nowrap;
+		text-decoration: none;
+		transition: background 0.15s ease, border-color 0.15s ease;
+	}
+	/* 視覺縮小但保留足夠的點擊範圍 */
+	.addr-tool::after { content: ''; position: absolute; inset: -6px -2px; }
+	.addr-empty .addr-tool { min-height: 40px; padding: 0 0.95rem; font-size: 0.88rem; }
+	.addr-tool:hover { background: color-mix(in srgb, var(--aq-primary) 8%, white); border-color: var(--aq-primary); }
+	.addr-tool--primary { background: var(--aq-primary); border-color: var(--aq-primary); color: #fff; }
+	.addr-tool--primary:hover { background: var(--aq-primary-dark); color: #fff; }
+	.addr-tool i { font-size: 0.8em; }
+
+	/* B4：與購物車相同的步驟條 */
+	.steps { display: flex; align-items: center; gap: 0.8rem; max-width: 560px; margin-inline: auto; padding: 0.8rem 0 0.2rem; }
+	.steps > i { height: 1px; flex: 1; background: #e5e8e4; }
+	.step { display: flex; align-items: center; gap: 0.45rem; white-space: nowrap; color: #9aa39f; font-size: 0.8rem; font-weight: 650; text-decoration: none; }
+	.step b { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid #dfe4df; border-radius: 50%; font-size: 0.7rem; }
+	.step.active { color: var(--aq-primary-dark); }
+	.step.active b { border-color: var(--aq-primary); background: var(--aq-primary); color: #fff; }
+	.step.done { color: var(--aq-primary-dark); }
+	.step.done b { border-color: var(--aq-primary); background: color-mix(in srgb, var(--aq-primary) 12%, white); color: var(--aq-primary-dark); font-size: 0.62rem; }
+	@media (max-width: 520px) {
+		.steps { gap: 0.45rem; padding: 0.35rem 0 0; }
+		.step { font-size: 0.7rem; }
+		.step b { width: 22px; height: 22px; }
+	}
+	/* 送出訂單中：按鈕轉圈＋全頁半透明提示（由程式產生，需用 :global） */
+	:global(.checkout-spinner) { display: inline-block; width: 1rem; height: 1rem; flex: none; border: 2px solid rgba(255, 255, 255, 0.45); border-top-color: #fff; border-radius: 50%; animation: checkout-spin 0.7s linear infinite; }
+	:global(.checkout-spinner--lg) { width: 34px; height: 34px; border-width: 3px; border-color: rgba(21, 106, 102, 0.18); border-top-color: var(--aq-primary); }
+	:global(.checkout-submitting) { position: fixed; inset: 0; z-index: 20000; display: grid; place-items: center; padding: 24px; background: rgba(246, 245, 241, 0.72); backdrop-filter: blur(2px); }
+	:global(.checkout-submitting__card) { display: grid; justify-items: center; gap: 8px; padding: 22px 26px; border: 1px solid #e3e7e5; border-radius: 16px; background: #fff; box-shadow: 0 14px 38px rgba(33, 45, 41, 0.12); text-align: center; }
+	:global(.checkout-submitting__card strong) { margin-top: 4px; color: var(--aq-ink); font-size: 16px; }
+	:global(.checkout-submitting__card span:last-child) { color: var(--aq-muted); font-size: 13px; }
+	@keyframes checkout-spin { to { transform: rotate(360deg); } }
+	@media (prefers-reduced-motion: reduce) { :global(.checkout-spinner) { animation-duration: 2s; } }
 </style>

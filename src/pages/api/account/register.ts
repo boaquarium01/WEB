@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { getAuth } from '../../../lib/auth';
 import { jsonError } from '../../../lib/http';
+import { passwordPolicyMessage } from '../../../lib/auth/policies.js';
 import { isAuthEmailConfigured } from '../../../lib/email/adapter';
 import { getDb } from '../../../lib/db/client';
 import { customers } from '../../../lib/db/schema';
@@ -48,9 +49,8 @@ export const POST: APIRoute = async (context) => {
 	if (!confirmPassword || password !== confirmPassword) return jsonError('兩次輸入的密碼不一致');
 	if (!isAuthEmailConfigured()) return jsonError('目前尚未設定驗證信服務，請稍後再試。', 503);
 
-	if (password.length < 8) {
-		return jsonError('密碼至少 8 個字元');
-	}
+	const passwordProblem = passwordPolicyMessage(password);
+	if (passwordProblem) return jsonError(passwordProblem);
 
 	try {
 		const response = await getAuth().api.signUpEmail({

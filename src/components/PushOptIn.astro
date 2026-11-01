@@ -1,0 +1,155 @@
+---
+/**
+ * 「開啟訂單通知」：讓顧客在這台裝置訂閱網頁推播（確認收款、出貨時通知）。
+ * - Android／電腦：按下後跳出瀏覽器的允許通知視窗
+ * - iPhone：必須先「加入主畫面」並從主畫面開啟，否則顯示加入主畫面教學
+ * - LINE 等 App 內建瀏覽器：提示改用 Safari／Chrome 開啟
+ * 推播金鑰未設定時不顯示。
+ */
+import { getVapidPublicKey, isPushConfigured } from '../lib/services/push';
+
+interface Props {
+	/** compact：放在訂單頁的精簡卡片；預設為會員中心的完整卡片 */
+	variant?: 'compact' | 'full';
+	title?: string;
+}
+
+const { variant = 'full', title = '出貨時通知我' } = Astro.props;
+const enabled = isPushConfigured() && Boolean(Astro.locals.user);
+const publicKey = getVapidPublicKey();
+---
+
+{enabled && (
+	<section class:list={['push-optin', `push-optin--${variant}`]} data-push-optin data-vapid-key={publicKey} hidden>
+		<span class="push-optin__icon" aria-hidden="true"><i class="fa-solid fa-bell"></i></span>
+		<div class="push-optin__text">
+			<strong data-push-title>{title}</strong>
+			<span data-push-desc>確認收款、出貨時，手機會跳出通知</span>
+		</div>
+		<button type="button" class="push-optin__btn btn-plain" data-push-toggle>開啟通知</button>
+		<div class="push-optin__guide" data-push-guide hidden>
+			<p><strong>iPhone 請先把網站加入主畫面：</strong></p>
+			<ol>
+				<li>點下方 Safari 的 <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>「分享」</li>
+				<li>選「加入主畫面」</li>
+				<li>從主畫面的「水博館水族」圖示打開，再回到這裡按「開啟通知」</li>
+			</ol>
+		</div>
+	</section>
+)}
+
+<script>
+	type State = 'off' | 'on' | 'denied' | 'ios-install' | 'in-app' | 'unsupported';
+
+	const ua = navigator.userAgent;
+	const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+	const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+	const isInApp = /Line\/|FBAN|FBAV|Instagram/i.test(ua);
+	const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+	const urlBase64ToUint8Array = (base64: string) => {
+		const padded = (base64 + '='.repeat((4 - (base64.length % 4)) % 4)).replace(/-/g, '+').replace(/_/g, '/');
+		const raw = atob(padded);
+		return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+	};
+
+	const getRegistration = () => navigator.serviceWorker.register('/sw.js', { scope: '/' });
+
+	document.querySelectorAll<HTMLElement>('[data-push-optin]').forEach(async (box) => {
+		const button = box.querySelector<HTMLButtonElement>('[data-push-toggle]')!;
+		const desc = box.querySelector<HTMLElement>('[data-push-desc]')!;
+		const guide = box.querySelector<HTMLElement>('[data-push-guide]')!;
+		const key = box.dataset.vapidKey ?? '';
+
+		const render = (state: State) => {
+			box.dataset.state = state;
+			guide.hidden = state !== 'ios-install';
+			button.disabled = state === 'denied' || state === 'unsupported';
+			button.hidden = state === 'in-app';
+			const text: Record<State, [string, string]> = {
+				off: ['開啟通知', '確認收款、出貨時，手機會跳出通知'],
+				on: ['已開啟', '確認收款、出貨時會通知這台裝置（再按一次可關閉）'],
+				denied: ['已封鎖', '通知被瀏覽器封鎖了，請到瀏覽器設定允許本網站通知'],
+				'ios-install': ['我加好了', 'iPhone 需要先把網站加入主畫面才能收到通知'],
+				'in-app': ['', '請用 Safari 或 Chrome 開啟本頁，才能開啟通知'],
+				unsupported: ['不支援', '這個瀏覽器不支援通知，請改用 Chrome 或 Safari'],
+			};
+			[button.textContent, desc.textContent] = text[state];
+		};
+
+		const detect = async (): Promise<State> => {
+			if (isInApp) return 'in-app';
+			if (isIOS && !isStandalone) return 'ios-install';
+			if (!supported) return 'unsupported';
+			if (Notification.permission === 'denied') return 'denied';
+			try {
+				const reg = await navigator.serviceWorker.getRegistration('/');
+				const sub = await reg?.pushManager.getSubscription();
+				return sub && Notification.permission === 'granted' ? 'on' : 'off';
+			} catch {
+				return 'off';
+			}
+		};
+
+		box.hidden = false;
+		render(await detect());
+
+		button.addEventListener('click', async () => {
+			const state = box.dataset.state as State;
+			if (state === 'ios-install') {
+				render(await detect());
+				return;
+			}
+			button.disabled = true;
+			try {
+				const reg = await getRegistration();
+				if (state === 'on') {
+					const sub = await reg.pushManager.getSubscription();
+					if (sub) {
+						await fetch('/api/push/subscribe', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+						await sub.unsubscribe();
+					}
+					render('off');
+					return;
+				}
+				const permission = await Notification.requestPermission();
+				if (permission !== 'granted') {
+					render(permission === 'denied' ? 'denied' : 'off');
+					return;
+				}
+				const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) }));
+				const res = await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+				if (!res.ok) throw new Error('save failed');
+				render('on');
+			} catch (error) {
+				console.error('[push] 開啟通知失敗', error);
+				desc.textContent = '開啟失敗，請稍後再試';
+			} finally {
+				if (box.dataset.state !== 'denied' && box.dataset.state !== 'unsupported') button.disabled = false;
+			}
+		});
+	});
+</script>
+
+<style>
+	.push-optin { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; margin: 0 0 .85rem; padding: .85rem 1rem; border: 1px solid #d6e9e4; border-radius: 14px; background: linear-gradient(135deg, #f1f8f6, #fbfdfc); }
+	.push-optin[hidden] { display: none; }
+	.push-optin__icon { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--aq-primary); color: #fff; font-size: 1rem; }
+	.push-optin__text { display: grid; gap: .15rem; min-width: 0; }
+	.push-optin__text strong { color: var(--aq-ink); font-size: .95rem; }
+	.push-optin__text span { color: var(--aq-muted); font-size: .8rem; line-height: 1.45; }
+	.push-optin__btn { min-height: 38px; padding: 0 1rem; border: 1px solid var(--aq-primary); border-radius: 999px; background: var(--aq-primary); color: #fff; font: inherit; font-size: .88rem; font-weight: 750; white-space: nowrap; cursor: pointer; }
+	.push-optin__btn:disabled { opacity: .55; cursor: not-allowed; }
+	.push-optin[data-state='on'] .push-optin__btn { background: #fff; color: var(--aq-primary-dark); }
+	.push-optin[data-state='on'] .push-optin__icon { background: #21834b; }
+	.push-optin[data-state='denied'] .push-optin__icon, .push-optin[data-state='unsupported'] .push-optin__icon { background: #9aa8a5; }
+	.push-optin__btn[hidden] { display: none; }
+	.push-optin__guide { grid-column: 1 / -1; padding: .7rem .85rem; border-radius: 10px; background: #fff; color: #3d4945; font-size: .84rem; }
+	.push-optin__guide[hidden] { display: none; }
+	.push-optin__guide p { margin: 0 0 .35rem; }
+	.push-optin__guide ol { margin: 0; padding-left: 1.2rem; line-height: 1.7; }
+	@media (max-width: 420px) {
+		.push-optin { grid-template-columns: auto minmax(0, 1fr); }
+		.push-optin__btn { grid-column: 1 / -1; width: 100%; }
+	}
+</style>

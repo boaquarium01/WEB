@@ -1,5 +1,6 @@
 ---
 import AccountLayout from '../../layouts/AccountLayout.astro';
+import EmailField from '../../components/EmailField.astro';
 import { safeLocalRedirect } from '../../lib/auth/policies.js';
 import { getServerEnv } from '../../lib/env';
 
@@ -11,60 +12,80 @@ const error = rawError ? (['access_denied', 'OAuthCallbackError', 'oauth_error']
 const authEnv = getServerEnv();
 const googleEnabled = Boolean(authEnv.GOOGLE_CLIENT_ID && authEnv.GOOGLE_CLIENT_SECRET);
 const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECRET);
+const registerHref = next && next !== '/account' ? `/account/register?next=${encodeURIComponent(next)}` : '/account/register';
 ---
 
-<AccountLayout title="登入｜水博館 V2">
-	<h1 class="visually-hidden">會員登入</h1>
+<AccountLayout title="會員登入｜水博館水族">
+	<nav class="auth-tabs" aria-label="登入或註冊">
+		<a href={Astro.url.pathname + Astro.url.search} aria-current="page">登入</a>
+		<a href={registerHref}>註冊</a>
+	</nav>
+
+	<div class="auth-head">
+		<h1>歡迎回來</h1>
+		<p>登入後可查看訂單進度、加快結帳。</p>
+	</div>
 
 	{error && <p class="error">{error}</p>}
 
-	<form id="login-form" class="form" method="post" action="/api/account/login">
+	{(lineEnabled || googleEnabled) && (
+		<div class="social-login">
+			{lineEnabled && <button type="button" class="social line" data-provider="line"><i class="fa-brands fa-line" aria-hidden="true"></i>使用 LINE 登入</button>}
+			{googleEnabled && <button type="button" class="social" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>使用 Google 登入</button>}
+		</div>
+		<div class="divider"><span>或使用 Email 登入</span></div>
+	)}
+
+	<form id="login-form" class="form" method="post" action="/api/account/login" novalidate>
 		<input type="hidden" name="next" value={next} />
-		<label>
-			電子郵件
-			<input type="email" name="email" required autocomplete="email" placeholder="請輸入 Email" />
-		</label>
-		<label>
-			密碼
+		<EmailField id="login-email" remember />
+		<div class="pw-group">
+			<div class="pw-row">
+				<label for="login-password">密碼</label>
+				<a class="forgot-link" href="/account/forgot-password">忘記密碼？</a>
+			</div>
 			<div class="password-field">
 				<input id="login-password" type="password" name="password" required minlength="8" autocomplete="current-password" placeholder="請輸入密碼" />
 				<button class="password-toggle" type="button" id="toggle-password" aria-label="顯示密碼" aria-controls="login-password" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
 			</div>
-			<a class="forgot-link" href="/account/forgot-password">忘記密碼？</a>
-		</label>
+		</div>
+		<p id="login-status" class="status" role="status" aria-live="polite"></p>
 		<button type="submit" id="login-submit">登入</button>
 	</form>
-	<p id="login-status" class="status" role="status" aria-live="polite"></p>
 
-	<div class="divider"><span>或使用其他方式登入</span></div>
-	<div class="social-login">
-		{googleEnabled ? <button type="button" class="social" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>使用 Google 登入</button> : <p class="social-unavailable">Google 登入尚未設定</p>}
-		{lineEnabled ? <button type="button" class="social line" data-provider="line"><i class="fa-solid fa-comment" aria-hidden="true"></i>使用 LINE 登入</button> : <p class="social-unavailable">LINE 登入尚未設定</p>}
-	</div>
-
-	<p class="meta">
-		還沒有帳號？<a href="/account/register">註冊</a>
-	</p>
+	<p class="meta">還沒有帳號？<a href={registerHref}>免費註冊</a></p>
 </AccountLayout>
 
 <script>
-	const form = document.getElementById('login-form');
-	const status = document.getElementById('login-status');
+	const form = document.getElementById('login-form') as HTMLFormElement | null;
+	const status = document.getElementById('login-status') as HTMLElement;
+	const submit = document.getElementById('login-submit') as HTMLButtonElement;
 	const next = (document.querySelector<HTMLInputElement>('[name="next"]')?.value || '/account');
+
+	const setStatus = (message: string, isError = false) => {
+		status.textContent = message;
+		status.classList.toggle('is-error', isError);
+	};
+	const setLoading = (loading: boolean) => {
+		submit.disabled = loading;
+		submit.innerHTML = loading ? '<span class="btn-spinner" aria-hidden="true"></span>登入中…' : '登入';
+	};
+
 	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
 		button.addEventListener('click', async () => {
 			button.disabled = true;
-			status.textContent = '正在前往授權…';
+			setStatus('正在前往授權…');
 			try {
 				const { authClient } = await import('../../lib/auth/client');
 				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: `/account/complete-profile?next=${encodeURIComponent(next)}` });
-				if (result.error) throw new Error('授權失敗或已取消，請再試一次。');
+				if (result.error) throw new Error();
 			} catch {
-				status.textContent = '授權失敗或已取消，請再試一次。';
+				setStatus('授權失敗或已取消，請再試一次。', true);
 				button.disabled = false;
 			}
 		});
 	}
+
 	const passwordInput = document.getElementById('login-password') as HTMLInputElement;
 	const togglePassword = document.getElementById('toggle-password');
 	togglePassword?.addEventListener('click', () => {
@@ -74,17 +95,37 @@ const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECR
 		togglePassword.innerHTML = showing ? '<i class="fa-regular fa-eye" aria-hidden="true"></i>' : '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
 		togglePassword.setAttribute('aria-pressed', String(!showing));
 	});
+
+	// 有記住的 Email 就直接把游標放在密碼欄
+	const emailInput = document.getElementById('login-email') as HTMLInputElement;
+	if (emailInput.value && window.matchMedia('(min-width: 768px)').matches) passwordInput.focus();
+
+	form?.addEventListener('input', () => {
+		if (status.classList.contains('is-error')) setStatus('');
+	});
+
 	form?.addEventListener('submit', async (event) => {
 		event.preventDefault();
-		const submit = document.getElementById('login-submit') as HTMLButtonElement;
-		submit.disabled = true;
-		status.textContent = '正在登入…';
 		const data = new FormData(form);
+		const email = String(data.get('email') ?? '').trim();
+		const password = String(data.get('password') ?? '');
+		if (!email || !emailInput.checkValidity()) {
+			setStatus('請輸入正確的 Email，例如 name@gmail.com。', true);
+			emailInput.focus();
+			return;
+		}
+		if (password.length < 8) {
+			setStatus('密碼至少 8 碼，請再確認一次。', true);
+			passwordInput.focus();
+			return;
+		}
+		setLoading(true);
+		setStatus('');
 		try {
 			const res = await fetch('/api/account/login', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ email: data.get('email'), password: data.get('password') }),
+				body: JSON.stringify({ email, password }),
 			});
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
@@ -92,34 +133,17 @@ const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECR
 					window.location.href = '/account/verify-email';
 					return;
 				}
-				throw new Error(payload.error || '登入失敗，請確認 Email 與密碼。');
+				throw new Error(payload.error || 'Email 或密碼不正確，請再確認一次。');
 			}
+			window.dispatchEvent(new CustomEvent('aq:login-success', { detail: email }));
 			window.location.href = next;
 		} catch (error) {
-			status.textContent = error instanceof Error ? error.message : '目前無法登入，請稍後再試。';
-			submit.disabled = false;
+			setStatus(error instanceof Error ? error.message : '目前無法登入，請稍後再試。', true);
+			setLoading(false);
 		}
 	});
 </script>
 
 <style>
-	h1 {
-		margin: 0 0 0.5rem;
-		font-size: 1.8rem;
-	}
-
-	.lead,
-	.meta {
-		color: var(--muted);
-	}
-
-	.error {
-		color: #ff8f8f;
-		background: rgba(120, 20, 20, 0.25);
-		border: 1px solid rgba(255, 140, 140, 0.35);
-		padding: 0.75rem 1rem;
-		border-radius: 0.5rem;
-	}
-
-	.status{min-height:1.25rem}.password-field{position:relative}.password-field input{padding-right:3rem!important}.password-toggle{position:absolute;top:50%;right:.55rem;display:grid;place-items:center;width:2rem;height:2rem;min-height:0!important;padding:0!important;transform:translateY(-50%);border:0!important;background:transparent!important;color:#66756e!important;box-shadow:none!important;cursor:pointer}.password-toggle:hover{color:var(--aq-primary-dark)!important;transform:translateY(-50%)!important}.forgot-link{display:inline-block;margin-top:.45rem;font-size:.85rem;text-decoration:none}.forgot-link:hover,.meta a:hover{text-decoration:underline}button:disabled{opacity:.65;cursor:wait}.social-login{display:grid;gap:.55rem}.social{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.8rem 1rem}.google-mark{font-family:Arial,sans-serif;font-size:1.1rem;font-weight:800;background:conic-gradient(from -45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);color:transparent;background-clip:text}.meta{margin:.65rem 0}.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+	.pw-group{display:grid;gap:.42rem}.pw-row{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}.forgot-link{font-size:.85rem;font-weight:600;text-decoration:none}.forgot-link:hover,.meta a:hover{text-decoration:underline}.password-field{position:relative}.password-field input{padding-right:3rem!important}.password-toggle{position:absolute;top:50%;right:.4rem;display:grid;place-items:center;width:2.5rem;height:2.5rem;min-height:0!important;padding:0!important;transform:translateY(-50%);border:0!important;background:transparent!important;color:#66756e!important;box-shadow:none!important;cursor:pointer}.password-toggle:hover{color:var(--aq-primary-dark)!important;transform:translateY(-50%)!important}.social-login{display:grid;gap:.55rem;margin-top:1rem}.social{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.8rem 1rem}.social i{font-size:1.2rem}.google-mark{font-family:Arial,sans-serif;font-size:1.1rem;font-weight:800;background:conic-gradient(from -45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);color:transparent;background-clip:text}.status{margin:0}.meta{margin:.25rem 0 0;text-align:center}
 </style>

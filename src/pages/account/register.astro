@@ -1,56 +1,88 @@
 ---
 import AccountLayout from '../../layouts/AccountLayout.astro';
+import EmailField from '../../components/EmailField.astro';
+import PasswordRules from '../../components/PasswordRules.astro';
+import { safeLocalRedirect } from '../../lib/auth/policies.js';
 import { getServerEnv } from '../../lib/env';
 
 export const prerender = false;
 
 const error = Astro.url.searchParams.get('error');
+const next = safeLocalRedirect(Astro.url.searchParams.get('next'), Astro.url.origin);
 const authEnv = getServerEnv();
 const googleEnabled = Boolean(authEnv.GOOGLE_CLIENT_ID && authEnv.GOOGLE_CLIENT_SECRET);
 const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECRET);
+const loginHref = next && next !== '/account' ? `/account/login?next=${encodeURIComponent(next)}` : '/account/login';
 ---
 
-<AccountLayout title="註冊｜水博館 V2">
-	<h1 class="visually-hidden">建立會員帳號</h1>
+<AccountLayout title="註冊會員｜水博館水族">
+	<nav class="auth-tabs" aria-label="登入或註冊">
+		<a href={loginHref}>登入</a>
+		<a href={Astro.url.pathname + Astro.url.search} aria-current="page">註冊</a>
+	</nav>
+
+	<div class="auth-head">
+		<h1>建立會員帳號</h1>
+		<p>註冊後可追蹤訂單、儲存收件地址，下次結帳更快。</p>
+	</div>
 
 	{error && <p class="error">{error}</p>}
 
-	<form id="register-form" class="form">
+	{(lineEnabled || googleEnabled) && (
+		<div class="social-login">
+			{lineEnabled && <button type="button" class="social line" data-provider="line"><i class="fa-brands fa-line" aria-hidden="true"></i>使用 LINE 快速註冊</button>}
+			{googleEnabled && <button type="button" class="social" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>使用 Google 快速註冊</button>}
+		</div>
+		<div class="divider"><span>或使用 Email 註冊</span></div>
+	)}
+
+	<form id="register-form" class="form" novalidate data-next={next}>
 		<label>
 			姓名
-			<input type="text" name="name" required autocomplete="name" placeholder="請輸入姓名" />
+			<input type="text" name="name" required autocomplete="name" placeholder="收件時使用的全名" />
 		</label>
+		<EmailField id="register-email" />
 		<label>
-			電子郵件
-			<input type="email" name="email" required autocomplete="email" placeholder="請輸入 Email" />
-		</label>
-		<label>
-			密碼（至少 8 碼）
+			密碼
 			<div class="password-field">
-				<input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="請設定至少 8 碼密碼" />
+				<input id="register-password" type="password" name="password" required minlength="8" autocomplete="new-password" placeholder="英文大小寫＋數字＋符號，至少 8 碼" aria-describedby="register-password-hint" />
 				<button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="顯示密碼" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
 			</div>
+			<PasswordRules id="register-password-hint" for="register-password" />
 		</label>
-		<label>確認密碼<div class="password-field"><input id="register-confirm-password" type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" placeholder="請再次輸入密碼" /><button class="password-toggle" type="button" data-password-toggle="register-confirm-password" aria-label="顯示密碼" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button></div></label>
-		<label class="terms"><input type="checkbox" name="acceptedTerms" required />我已閱讀並同意<a href="/terms" target="_blank" rel="noreferrer">服務條款</a>與<a href="/privacy" target="_blank" rel="noreferrer">隱私權政策</a></label>
-		<button type="submit" id="register-submit">註冊</button>
+		<label>
+			確認密碼
+			<div class="password-field">
+				<input id="register-confirm-password" type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" placeholder="請再輸入一次密碼" aria-describedby="register-confirm-hint" />
+				<button class="password-toggle" type="button" data-password-toggle="register-confirm-password" aria-label="顯示密碼" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+			</div>
+			<span id="register-confirm-hint" class="field-hint" data-match-hint></span>
+		</label>
+		<label class="terms"><input type="checkbox" name="acceptedTerms" required /><span>我已閱讀並同意<a href="/terms" target="_blank" rel="noreferrer">服務條款</a>與<a href="/privacy" target="_blank" rel="noreferrer">隱私權政策</a></span></label>
+		<p id="register-status" class="status" role="status" aria-live="polite"></p>
+		<button type="submit" id="register-submit">建立帳號</button>
 	</form>
-	<p id="register-status" class="status" role="status" aria-live="polite"></p>
 
-	<div class="divider"><span>或使用其他方式註冊</span></div>
-	<div class="social-login">
-		{googleEnabled ? <button type="button" class="social" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>使用 Google 註冊</button> : <p class="social-unavailable">Google 登入尚未設定</p>}
-		{lineEnabled ? <button type="button" class="social line" data-provider="line"><i class="fa-solid fa-comment" aria-hidden="true"></i>使用 LINE 註冊</button> : <p class="social-unavailable">LINE 登入尚未設定</p>}
-	</div>
-
-	<p class="meta">
-		已有帳號？<a href="/account/login">登入</a>
-	</p>
+	<p class="meta">已經有帳號？<a href={loginHref}>直接登入</a></p>
 </AccountLayout>
 
 <script>
-	const form = document.getElementById('register-form');
-	const status = document.getElementById('register-status');
+	import { passwordPolicyMessage } from '../../lib/auth/policies.js';
+
+	const form = document.getElementById('register-form') as HTMLFormElement | null;
+	const status = document.getElementById('register-status') as HTMLElement;
+	const submit = document.getElementById('register-submit') as HTMLButtonElement;
+	const next = form?.dataset.next || '/account';
+
+	const setStatus = (message: string, isError = false) => {
+		status.textContent = message;
+		status.classList.toggle('is-error', isError);
+	};
+	const setLoading = (loading: boolean) => {
+		submit.disabled = loading;
+		submit.innerHTML = loading ? '<span class="btn-spinner" aria-hidden="true"></span>建立中…' : '建立帳號';
+	};
+
 	for (const toggle of document.querySelectorAll<HTMLButtonElement>('[data-password-toggle]')) {
 		toggle.addEventListener('click', () => {
 			const input = document.getElementById(toggle.dataset.passwordToggle!) as HTMLInputElement;
@@ -61,56 +93,91 @@ const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECR
 			toggle.innerHTML = showing ? '<i class="fa-regular fa-eye" aria-hidden="true"></i>' : '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
 		});
 	}
+
 	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
 		button.addEventListener('click', async () => {
 			button.disabled = true;
-			if (status) status.textContent = '正在前往授權…';
+			setStatus('正在前往授權…');
 			try {
 				const { authClient } = await import('../../lib/auth/client');
-				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: '/account/complete-profile?next=%2Faccount' });
+				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: `/account/complete-profile?next=${encodeURIComponent(next)}` });
 				if (result.error) throw new Error();
 			} catch {
-				if (status) status.textContent = '授權失敗或已取消，請再試一次。';
+				setStatus('授權失敗或已取消，請再試一次。', true);
 				button.disabled = false;
 			}
 		});
 	}
+
+	// 輸入時即時提示兩次是否一致（規則打勾由 PasswordRules 處理）
+	const password = document.getElementById('register-password') as HTMLInputElement;
+	const confirm = document.getElementById('register-confirm-password') as HTMLInputElement;
+	const matchHint = document.querySelector<HTMLElement>('[data-match-hint]')!;
+	const updateHints = () => {
+		if (!confirm.value) {
+			matchHint.textContent = '';
+			matchHint.dataset.state = '';
+		} else {
+			const same = confirm.value === password.value;
+			matchHint.textContent = same ? '✓ 兩次密碼一致' : '兩次密碼不一致';
+			matchHint.dataset.state = same ? 'ok' : 'warn';
+		}
+	};
+	password.addEventListener('input', updateHints);
+	confirm.addEventListener('input', updateHints);
+
+	form?.addEventListener('input', () => {
+		if (status.classList.contains('is-error')) setStatus('');
+	});
+
 	form?.addEventListener('submit', async (event) => {
 		event.preventDefault();
 		const data = new FormData(form);
-		const submit = document.getElementById('register-submit') as HTMLButtonElement;
-		if (data.get('password') !== data.get('confirmPassword')) {
-			if (status) status.textContent = '兩次輸入的密碼不一致。';
+		const name = String(data.get('name') ?? '').trim();
+		const email = String(data.get('email') ?? '').trim();
+		const emailInput = document.getElementById('register-email') as HTMLInputElement;
+		const problem = !name
+			? ['請填寫姓名。', form.elements.namedItem('name')]
+			: !email || !emailInput.checkValidity()
+				? ['請輸入正確的 Email，例如 name@gmail.com。', emailInput]
+				: passwordPolicyMessage(password.value)
+					? [`${passwordPolicyMessage(password.value)}。`, password]
+					: password.value !== confirm.value
+						? ['兩次輸入的密碼不一致。', confirm]
+						: data.get('acceptedTerms') !== 'on'
+							? ['請勾選同意服務條款與隱私權政策。', form.elements.namedItem('acceptedTerms')]
+							: null;
+		if (problem) {
+			setStatus(problem[0] as string, true);
+			(problem[1] as HTMLElement | null)?.focus();
 			return;
 		}
-		submit.disabled = true;
-		if (status) status.textContent = '正在建立帳號…';
+		setLoading(true);
+		setStatus('');
 		try {
 			const res = await fetch('/api/account/register', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					name: data.get('name'),
-					email: data.get('email'),
-					password: data.get('password'),
-					confirmPassword: data.get('confirmPassword'),
-					acceptedTerms: data.get('acceptedTerms') === 'on',
+					name,
+					email,
+					password: password.value,
+					confirmPassword: confirm.value,
+					acceptedTerms: true,
 				}),
 			});
-
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.error || '註冊失敗，請稍後再試。');
 			}
-
 			window.location.href = '/account/verify-email?sent=1';
 		} catch (error) {
-			if (status) status.textContent = error instanceof Error ? error.message : '註冊失敗，請稍後再試。';
-			submit.disabled = false;
+			setStatus(error instanceof Error ? error.message : '註冊失敗，請稍後再試。', true);
+			setLoading(false);
 		}
 	});
 </script>
 
 <style>
-	.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.terms{display:flex!important;flex-wrap:wrap;grid-template-columns:none!important;align-items:center;gap:.4rem!important;font-weight:450!important;line-height:1.5}.terms input{width:1rem;height:1rem;flex:none}.status{min-height:1.25rem}.password-field{position:relative}.password-field input{padding-right:3rem!important}.password-toggle{position:absolute;top:50%;right:.55rem;display:grid;place-items:center;width:2rem;height:2rem;min-height:0!important;padding:0!important;transform:translateY(-50%);border:0!important;background:transparent!important;color:#66756e!important;box-shadow:none!important;cursor:pointer}.password-toggle:hover{color:var(--aq-primary-dark)!important;transform:translateY(-50%)!important}.social-login{display:grid;gap:.55rem}.social{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.8rem 1rem}.google-mark{font-family:Arial,sans-serif;font-size:1.1rem;font-weight:800;background:conic-gradient(from -45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);color:transparent;background-clip:text}.meta{margin:.65rem 0}
+	.terms{display:flex!important;grid-template-columns:none!important;align-items:flex-start;gap:.55rem!important;font-weight:450!important;line-height:1.55}.terms input{width:1.15rem;height:1.15rem;margin-top:.15rem;flex:none;accent-color:var(--aq-primary)}.field-hint{color:var(--aq-muted);font-size:.8rem;font-weight:500}.field-hint:empty{display:none}.field-hint[data-state=ok]{color:#21633d}.field-hint[data-state=warn]{color:#a65a10}.status{margin:0}.password-field{position:relative}.password-field input{padding-right:3rem!important}.password-toggle{position:absolute;top:50%;right:.4rem;display:grid;place-items:center;width:2.5rem;height:2.5rem;min-height:0!important;padding:0!important;transform:translateY(-50%);border:0!important;background:transparent!important;color:#66756e!important;box-shadow:none!important;cursor:pointer}.password-toggle:hover{color:var(--aq-primary-dark)!important;transform:translateY(-50%)!important}.social-login{display:grid;gap:.55rem;margin-top:1rem}.social{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.8rem 1rem}.social i{font-size:1.2rem}.google-mark{font-family:Arial,sans-serif;font-size:1.1rem;font-weight:800;background:conic-gradient(from -45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);color:transparent;background-clip:text}.meta{margin:.25rem 0 0;text-align:center}
 </style>

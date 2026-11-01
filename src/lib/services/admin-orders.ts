@@ -15,6 +15,7 @@ import {
 	user,
 } from '../db/schema';
 import { listInventory, type InventoryRow } from './inventory';
+import { attachOrderItemImages } from './order-item-images';
 import type { ShippingAddressSnapshot } from './checkout';
 import {
 	listPaymentSubmissionsForPayments,
@@ -487,7 +488,8 @@ export async function getAdminOrder(
 	if (!row) return null;
 	const order = row.order;
 
-	const items = await db
+	// 撿貨用小圖：與前台訂單共用 attachOrderItemImages
+	const items = await attachOrderItemImages(await db
 		.select({
 			id: orderItems.id,
 			productName: orderItems.productName,
@@ -499,7 +501,7 @@ export async function getAdminOrder(
 			productSkuId: orderItems.productSkuId,
 		})
 		.from(orderItems)
-		.where(eq(orderItems.orderId, order.id));
+		.where(eq(orderItems.orderId, order.id)));
 
 	const paymentRows = await db
 		.select()
@@ -714,12 +716,13 @@ export async function adminCompleteOrder(orderNumber: string): Promise<void> {
  */
 export async function adminCancelOrder(
 	orderNumber: string,
-	adminUserId: string,
+	adminUserId: string | null,
+	options?: { reason?: string; onlyStatus?: string[] },
 ): Promise<void> {
 	const db = getDb();
 	await db.transaction(async (tx) => {
 		const order = await lockOrder(tx, orderNumber);
-		const cancellable = [
+		const cancellable = options?.onlyStatus ?? [
 			'PENDING_PAYMENT',
 			'PAYMENT_SUBMITTED',
 			'PAID',
@@ -744,6 +747,7 @@ export async function adminCancelOrder(
 				userId: adminUserId,
 				orderId: order.id,
 				orderNumber: order.orderNumber,
+				reason: options?.reason,
 			});
 		}
 
@@ -831,12 +835,13 @@ async function releaseReservedOnly(
 	args: {
 		productSkuId: string;
 		quantity: number;
-		userId: string;
+		userId: string | null;
 		orderId: string;
 		orderNumber: string;
+		reason?: string;
 	},
 ): Promise<void> {
-	const { productSkuId, quantity, userId, orderId, orderNumber } = args;
+	const { productSkuId, quantity, userId, orderId, orderNumber, reason } = args;
 	const store = await getStore(tx);
 	const rows = await tx
 		.select()
@@ -869,7 +874,7 @@ async function releaseReservedOnly(
 			afterQuantity: after,
 			referenceType: 'order',
 			referenceId: orderId,
-			note: `後台取消訂單釋放預留 → ${orderNumber}`,
+			note: `${reason ?? '後台取消訂單'}釋放預留 → ${orderNumber}`,
 			createdBy: userId,
 		});
 		remaining -= release;
@@ -975,4 +980,36 @@ async function getStore(tx: Tx) {
 		throw new Error('尚未設定 STORE 庫存地點');
 	}
 	return store;
+}
+
+/** 待付款訂單的付款期限（小時），與顧客訂單頁顯示的「建立後 3 天」一致 */
+export const PAYMENT_DEADLINE_HOURS = 72;
+
+/**
+ * 自動取消逾期未付款的訂單（狀態仍為 PENDING_PAYMENT 且超過付款期限），並釋放預留庫存。
+ * 已回報末五碼（PAYMENT_SUBMITTED）的不會被取消，交給夥伴核對。
+ * 回傳被取消的訂單編號。
+ */
+export async function cancelExpiredUnpaidOrders(now = new Date()): Promise<string[]> {
+	const db = getDb();
+	const deadline = new Date(now.getTime() - PAYMENT_DEADLINE_HOURS * 60 * 60 * 1000);
+	const expired = await db
+		.select({ orderNumber: orders.orderNumber })
+		.from(orders)
+		.where(and(eq(orders.status, 'PENDING_PAYMENT'), lt(orders.createdAt, deadline)))
+		.orderBy(asc(orders.createdAt))
+		.limit(50);
+	const cancelled: string[] = [];
+	for (const row of expired) {
+		try {
+			await adminCancelOrder(row.orderNumber, null, {
+				reason: '逾期未付款自動取消',
+				onlyStatus: ['PENDING_PAYMENT'],
+			});
+			cancelled.push(row.orderNumber);
+		} catch (error) {
+			console.error(`[expire-orders] 取消 ${row.orderNumber} 失敗：`, error);
+		}
+	}
+	return cancelled;
 }

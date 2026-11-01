@@ -1,0 +1,231 @@
+---
+/**
+ * Email 輸入欄＋常用信箱快選。
+ * - 打完帳號（還沒輸入 @）時，下方出現 @gmail.com 等快選鈕，點一下補完並跳到下一欄
+ * - 輸入 @g 之類的開頭時，只留下符合的網域
+ * - 離開欄位時偵測常見拼錯（gmial.com、gmail.con…），提示「是不是要輸入 …？」
+ * - remember：登入成功後記住上次的 Email（只存在這台裝置的瀏覽器）
+ */
+interface Props {
+	id: string;
+	label?: string;
+	name?: string;
+	placeholder?: string;
+	remember?: boolean;
+}
+
+const { id, label = '電子郵件', name = 'email', placeholder = '例如 name@gmail.com', remember = false } = Astro.props;
+---
+
+<div class="email-field" data-email-field data-remember={remember ? '1' : undefined}>
+	<label for={id}>{label}</label>
+	<input
+		id={id}
+		type="email"
+		name={name}
+		required
+		autocomplete="email"
+		inputmode="email"
+		autocapitalize="off"
+		autocorrect="off"
+		spellcheck="false"
+		placeholder={placeholder}
+		aria-describedby={`${id}-chips ${id}-typo`}
+	/>
+	<div id={`${id}-chips`} class="email-chips" data-email-chips role="group" aria-label="快速選擇信箱" hidden></div>
+	<p id={`${id}-typo`} class="email-typo" data-email-typo aria-live="polite" hidden></p>
+</div>
+
+<script>
+	const DOMAINS = ['gmail.com', 'yahoo.com.tw', 'hotmail.com', 'outlook.com', 'icloud.com'];
+	/** 拼錯偵測用：這些網域本身是正確的，不提示 */
+	const VALID = new Set([...DOMAINS, 'yahoo.com', 'msn.com', 'live.com', 'me.com', 'hotmail.com.tw', 'outlook.com.tw', 'pchome.com.tw', 'hinet.net', 'ms1.hinet.net', 'kimo.com', 'protonmail.com', 'qq.com', '163.com']);
+	const REMEMBER_KEY = 'aq-last-login-email';
+
+	function distance(a: string, b: string): number {
+		const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+		for (let i = 1; i <= a.length; i++) {
+			let prev = row[0];
+			row[0] = i;
+			for (let j = 1; j <= b.length; j++) {
+				const tmp = row[j];
+				row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+				prev = tmp;
+			}
+		}
+		return row[b.length];
+	}
+
+	function suggestDomain(domain: string): string | null {
+		if (!domain || VALID.has(domain)) return null;
+		let best: string | null = null;
+		let bestScore = Infinity;
+		for (const candidate of DOMAINS) {
+			const score = distance(domain, candidate);
+			if (score < bestScore) {
+				best = candidate;
+				bestScore = score;
+			}
+		}
+		return bestScore > 0 && bestScore <= 2 ? best : null;
+	}
+
+	function focusNextField(input: HTMLInputElement): void {
+		const fields = Array.from(input.form?.querySelectorAll<HTMLElement>('input:not([type=hidden]):not([disabled]), button[type=submit]') ?? []);
+		const next = fields[fields.indexOf(input) + 1];
+		next?.focus();
+	}
+
+	for (const field of document.querySelectorAll<HTMLElement>('[data-email-field]')) {
+		const input = field.querySelector('input') as HTMLInputElement;
+		const chips = field.querySelector('[data-email-chips]') as HTMLElement;
+		const typo = field.querySelector('[data-email-typo]') as HTMLElement;
+
+		if (field.dataset.remember && !input.value) {
+			try {
+				const saved = localStorage.getItem(REMEMBER_KEY);
+				if (saved) input.value = saved;
+			} catch {}
+		}
+
+		const apply = (email: string) => {
+			input.value = email;
+			chips.hidden = true;
+			typo.hidden = true;
+			input.dispatchEvent(new Event('input', { bubbles: true }));
+			focusNextField(input);
+		};
+
+		const renderChips = () => {
+			typo.hidden = true;
+			const value = input.value.trim();
+			const at = value.indexOf('@');
+			const local = at === -1 ? value : value.slice(0, at);
+			const typed = at === -1 ? '' : value.slice(at + 1).toLowerCase();
+			const matches = !local || value.indexOf('@', at + 1) !== -1 ? [] : DOMAINS.filter((d) => d.startsWith(typed) && d !== typed);
+			chips.replaceChildren(
+				...matches.map((domain) => {
+					const chip = document.createElement('button');
+					chip.type = 'button';
+					chip.className = 'email-chip';
+					chip.textContent = `@${domain}`;
+					chip.setAttribute('aria-label', `使用 ${local}@${domain}`);
+					// 不讓按鈕搶走焦點，手機鍵盤不會先收起又彈出
+					chip.addEventListener('mousedown', (event) => event.preventDefault());
+					chip.addEventListener('click', () => apply(`${local}@${domain}`));
+					return chip;
+				}),
+			);
+			chips.hidden = matches.length === 0;
+		};
+
+		let blurTimer: number | undefined;
+		input.addEventListener('input', renderChips);
+		input.addEventListener('focus', () => {
+			window.clearTimeout(blurTimer);
+			renderChips();
+		});
+		// 稍微延後收起，iPhone 點快選鈕時焦點會先離開輸入框，太早收起會點不到
+		input.addEventListener('blur', () => {
+			blurTimer = window.setTimeout(checkTypo, 180);
+		});
+		function checkTypo() {
+			if (document.activeElement === input) return;
+			chips.hidden = true;
+			const value = input.value.trim();
+			const at = value.lastIndexOf('@');
+			const fix = at > 0 ? suggestDomain(value.slice(at + 1).toLowerCase()) : null;
+			if (!fix) {
+				typo.hidden = true;
+				return;
+			}
+			const corrected = `${value.slice(0, at)}@${fix}`;
+			const button = document.createElement('button');
+			button.type = 'button';
+			button.className = 'email-chip email-chip--fix';
+			button.textContent = corrected;
+			button.addEventListener('click', () => {
+				input.value = corrected;
+				typo.hidden = true;
+				input.focus();
+			});
+			typo.replaceChildren('是不是要輸入 ', button, '？');
+			typo.hidden = false;
+		}
+	}
+
+	/** 登入頁登入成功時呼叫（見 login.astro） */
+	window.addEventListener('aq:login-success', (event) => {
+		const email = (event as CustomEvent<string>).detail;
+		try {
+			if (email) localStorage.setItem(REMEMBER_KEY, email);
+		} catch {}
+	});
+</script>
+
+<style>
+	.email-field {
+		display: grid;
+		gap: 0.42rem;
+	}
+
+	.email-chips {
+		display: flex;
+		gap: 0.4rem;
+		overflow-x: auto;
+		margin-top: 0.1rem;
+		padding-bottom: 0.15rem;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.email-chips::-webkit-scrollbar {
+		display: none;
+	}
+
+	.email-chips[hidden],
+	.email-typo[hidden] {
+		display: none;
+	}
+
+	.email-field :global(.email-chip) {
+		flex: none;
+		min-height: 36px;
+		padding: 0.35rem 0.8rem;
+		border: 1px solid #d9e2dd;
+		border-radius: 999px;
+		background: #f5f8f6;
+		color: #25332e;
+		font: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		box-shadow: none;
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	.email-field :global(.email-chip:hover),
+	.email-field :global(.email-chip:focus-visible) {
+		border-color: var(--aq-primary);
+		background: #e9f4f0;
+		color: var(--aq-primary-dark);
+	}
+
+	.email-typo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem;
+		margin: 0;
+		color: #8a5a00;
+		font-size: 0.85rem;
+		font-weight: 500;
+	}
+
+	.email-field :global(.email-chip--fix) {
+		min-height: 32px;
+		border-color: #efd58d;
+		background: #fff8df;
+		color: #805a08;
+	}
+</style>

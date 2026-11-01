@@ -85,6 +85,13 @@
       "when": 1792765420100,
       "tag": "0011_nosy_micromax",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793537176540,
+      "tag": "0012_push_subscriptions",
+      "breakpoints": true
     }
   ]
 }

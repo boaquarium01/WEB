@@ -255,7 +255,7 @@ const collectionJsonLd = {
 
   .promo-scroll-top-btn {
     position: fixed;
-    right: 18px;
+    right: 23px;
     bottom: calc(154px + env(safe-area-inset-bottom, 0px));
     z-index: 10000;
     width: 46px;
@@ -314,9 +314,10 @@ const collectionJsonLd = {
   }
 
   @media (max-width: 639px) {
+    /* 與手機浮動鈕（50px）同一直線，疊在購物車鈕上方 */
     .promo-scroll-top-btn {
-      right: 14px;
-      bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+      right: max(16px, calc(env(safe-area-inset-right, 0px) + 2px));
+      bottom: calc(136px + env(safe-area-inset-bottom, 0px));
     }
   }
 

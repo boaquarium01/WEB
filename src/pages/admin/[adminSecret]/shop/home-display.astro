@@ -1,0 +1,424 @@
+---
+/**
+ * 首頁陳列：管理首頁「主打」（最多 3 筆，最近開啟者優先）與「熱銷推薦」（依排序顯示前 8 筆）。
+ * 讀取 Sanity（不走 CDN，存檔後立即看到最新）；寫入透過 /api/admin/sanity-dashboard（需管理員登入）。
+ */
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { isValidAdminSecretParam } from '../../../../lib/admin/path';
+import { getSanityClient } from '../../../../lib/sanity/client';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+
+type DisplayProduct = {
+	_id: string;
+	name: string;
+	slug: string | null;
+	imageUrl: string | null;
+	categoryLabel: string | null;
+	enabled: boolean | null;
+	featured: boolean | null;
+	featuredSortOrder: number | null;
+	heroSpotlight: boolean | null;
+	heroSpotlightActivatedAt: string | null;
+};
+
+const HOME_FEATURED_LIMIT = 8;
+const HOME_SPOTLIGHT_LIMIT = 3;
+
+let products: DisplayProduct[] = [];
+let loadError = '';
+try {
+	products = await getSanityClient()
+		.withConfig({ useCdn: false })
+		.fetch<DisplayProduct[]>(`*[_type == "product" && defined(slug.current)] | order(name asc) {
+			_id,
+			name,
+			"slug": slug.current,
+			"imageUrl": coalesce(image.asset->url, gallery[0].asset->url),
+			"categoryLabel": category->name,
+			enabled,
+			featured,
+			featuredSortOrder,
+			heroSpotlight,
+			heroSpotlightActivatedAt
+		}`);
+} catch (error) {
+	console.error('[home-display] Sanity load failed', error);
+	loadError = '暫時無法讀取商品資料，請稍後重新整理。';
+}
+
+const featured = products
+	.filter((p) => p.featured)
+	.sort((a, b) => {
+		const aHas = a.featuredSortOrder != null;
+		const bHas = b.featuredSortOrder != null;
+		if (aHas !== bHas) return aHas ? -1 : 1;
+		return (a.featuredSortOrder ?? 0) - (b.featuredSortOrder ?? 0) || a.name.localeCompare(b.name, 'zh-Hant');
+	});
+const spotlight = products
+	.filter((p) => p.heroSpotlight)
+	.sort((a, b) => (b.heroSpotlightActivatedAt ?? '').localeCompare(a.heroSpotlightActivatedAt ?? ''));
+const toCandidate = (p: DisplayProduct) => ({ id: p._id, name: p.name, categoryLabel: p.categoryLabel });
+const candidates = {
+	featured: products.filter((p) => !p.featured && p.enabled !== false).map(toCandidate),
+	spotlight: products.filter((p) => !p.heroSpotlight && p.enabled !== false).map(toCandidate),
+};
+const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=format` : null);
+---
+
+<AdminLayout title="首頁陳列｜水博館水族官方網站後台">
+	<header class="display-head">
+		<div>
+			<h1>首頁陳列</h1>
+		</div>
+		<a class="preview-link" href="/" target="_blank" rel="noopener">查看首頁 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
+	</header>
+
+	{loadError && <p class="display-notice is-error" role="alert">{loadError}</p>}
+	<p class="display-notice" data-status role="status" hidden></p>
+
+	<section class="display-card" aria-labelledby="spotlight-heading">
+		<header class="display-card__head">
+			<div>
+				<h2 id="spotlight-heading">主打商品</h2>
+				<p>顯示 {HOME_SPOTLIGHT_LIMIT} 筆。新加入的會排第一，超過 3 筆時最舊的不顯示。</p>
+			</div>
+			<span class="count-pill">{spotlight.length} 筆</span>
+		</header>
+		{spotlight.length === 0 ? (
+			<p class="empty-line">目前沒有主打商品。</p>
+		) : (
+			<ol class="sort-list">
+				{spotlight.map((p, i) => (
+					<li class="sort-row sort-row--static">
+						<span class="rank">{i + 1}</span>
+						{thumb(p.imageUrl) ? <img class="thumb" src={thumb(p.imageUrl)!} alt="" width="48" height="48" loading="lazy" /> : <span class="thumb thumb--empty"><i class="fa-solid fa-fish" aria-hidden="true"></i></span>}
+						<span class="row-text">
+							<strong>{p.name}</strong>
+							<small>{i < HOME_SPOTLIGHT_LIMIT ? '首頁顯示中' : '超過 3 筆，首頁不顯示'}</small>
+						</span>
+						<span class="row-actions">
+							<button type="button" class="text-btn" data-remove-spotlight={p._id}>取消主打</button>
+						</span>
+					</li>
+				))}
+			</ol>
+		)}
+
+		<div class="add-box">
+			<label for="spotlightSearch">加入主打</label>
+			<input id="spotlightSearch" type="search" placeholder="輸入商品名稱搜尋" autocomplete="off" data-search="spotlight" />
+			<ul class="search-results" data-results="spotlight"></ul>
+		</div>
+	</section>
+
+	<section class="display-card" aria-labelledby="featured-heading">
+		<header class="display-card__head">
+			<div>
+				<h2 id="featured-heading">熱銷推薦</h2>
+				<p>顯示 {HOME_FEATURED_LIMIT} 筆。</p>
+			</div>
+			<span class="count-pill">{featured.length} 筆</span>
+		</header>
+
+		{featured.length === 0 ? (
+			<p class="empty-line">目前沒有熱銷商品，用下方搜尋加入。</p>
+		) : (
+			<ol class="sort-list" data-sort-list>
+				{featured.map((p, i) => (
+					<li class="sort-row" data-id={p._id}>
+						<button type="button" class="drag-handle" data-drag aria-label={`拖曳調整「${p.name}」順序`}><i class="fa-solid fa-grip-vertical" aria-hidden="true"></i></button>
+						<span class="rank" data-rank>{i + 1}</span>
+						{thumb(p.imageUrl) ? <img class="thumb" src={thumb(p.imageUrl)!} alt="" width="48" height="48" loading="lazy" /> : <span class="thumb thumb--empty"><i class="fa-solid fa-fish" aria-hidden="true"></i></span>}
+						<span class="row-text">
+							<strong>{p.name}</strong>
+							<small>{p.categoryLabel ?? '未分類'}{p.enabled === false ? '・已下架（首頁不顯示）' : ''}</small>
+						</span>
+						<span class="home-badge" data-home-badge>首頁</span>
+						<span class="row-actions">
+							<button type="button" class="icon-btn" data-move="-1" aria-label={`「${p.name}」往前`}><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+							<button type="button" class="icon-btn" data-move="1" aria-label={`「${p.name}」往後`}><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button>
+							<button type="button" class="text-btn" data-remove-featured={p._id}>取消熱銷</button>
+						</span>
+					</li>
+				))}
+			</ol>
+		)}
+
+		<div class="card-actions">
+			<button type="button" class="primary-btn" data-save-order disabled>儲存排序</button>
+			<span class="dirty-hint" data-dirty-hint hidden>排序已變更，尚未儲存</span>
+		</div>
+
+		<div class="add-box">
+			<label for="featuredSearch">加入熱銷</label>
+			<input id="featuredSearch" type="search" placeholder="輸入商品名稱搜尋" autocomplete="off" data-search="featured" />
+			<ul class="search-results" data-results="featured"></ul>
+		</div>
+	</section>
+
+
+	<script type="application/json" id="displayCandidates" set:html={JSON.stringify(candidates)} />
+</AdminLayout>
+
+<script>
+	type Candidate = { id: string; name: string; categoryLabel: string | null };
+	const HOME_LIMIT = 8;
+	const list = document.querySelector<HTMLOListElement>('[data-sort-list]');
+	const saveBtn = document.querySelector<HTMLButtonElement>('[data-save-order]');
+	const dirtyHint = document.querySelector<HTMLElement>('[data-dirty-hint]');
+	const statusBox = document.querySelector<HTMLElement>('[data-status]');
+	let dirty = false;
+
+	const showStatus = (text: string, isError = false) => {
+		if (!statusBox) return;
+		statusBox.textContent = text;
+		statusBox.classList.toggle('is-error', isError);
+		statusBox.hidden = false;
+	};
+
+	const updateProduct = async (id: string, data: Record<string, unknown>) => {
+		const response = await fetch('/api/admin/sanity-dashboard', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ path: `/api/products/${encodeURIComponent(id)}`, method: 'PUT', body: { data } }),
+		});
+		if (!response.ok) {
+			const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+			throw new Error(body?.error?.message ?? `儲存失敗（${response.status}）`);
+		}
+	};
+
+	const renumber = () => {
+		if (!list) return;
+		list.querySelectorAll<HTMLElement>('.sort-row').forEach((row, index) => {
+			const rank = row.querySelector('[data-rank]');
+			if (rank) rank.textContent = String(index + 1);
+			row.classList.toggle('is-off-home', index >= HOME_LIMIT);
+			const up = row.querySelector<HTMLButtonElement>('[data-move="-1"]');
+			const down = row.querySelector<HTMLButtonElement>('[data-move="1"]');
+			if (up) up.disabled = index === 0;
+			if (down) down.disabled = index === list.children.length - 1;
+		});
+	};
+
+	const markDirty = () => {
+		dirty = true;
+		if (saveBtn) saveBtn.disabled = false;
+		if (dirtyHint) dirtyHint.hidden = false;
+		renumber();
+	};
+
+	if (list) {
+		renumber();
+		list.addEventListener('click', (event) => {
+			const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-move]');
+			if (!button) return;
+			const row = button.closest<HTMLElement>('.sort-row');
+			if (!row) return;
+			if (button.dataset.move === '-1' && row.previousElementSibling) row.previousElementSibling.before(row);
+			if (button.dataset.move === '1' && row.nextElementSibling) row.nextElementSibling.after(row);
+			markDirty();
+			button.focus();
+		});
+
+		// 拖曳排序（滑鼠與手指皆可）：按住握把上下移動
+		let dragging: HTMLElement | null = null;
+		list.addEventListener('pointerdown', (event) => {
+			const handle = (event.target as HTMLElement).closest<HTMLElement>('[data-drag]');
+			if (!handle) return;
+			dragging = handle.closest<HTMLElement>('.sort-row');
+			if (!dragging) return;
+			event.preventDefault();
+			handle.setPointerCapture(event.pointerId);
+			dragging.classList.add('is-dragging');
+		});
+		list.addEventListener('pointermove', (event) => {
+			if (!dragging) return;
+			const over = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('.sort-row');
+			if (!over || over === dragging || over.parentElement !== list) return;
+			const rect = over.getBoundingClientRect();
+			if (event.clientY < rect.top + rect.height / 2) over.before(dragging);
+			else over.after(dragging);
+			renumber();
+		});
+		const endDrag = () => {
+			if (!dragging) return;
+			dragging.classList.remove('is-dragging');
+			dragging = null;
+			markDirty();
+		};
+		list.addEventListener('pointerup', endDrag);
+		list.addEventListener('pointercancel', endDrag);
+	}
+
+	saveBtn?.addEventListener('click', async () => {
+		if (!list) return;
+		const ids = [...list.querySelectorAll<HTMLElement>('.sort-row')].map((row) => row.dataset.id ?? '').filter(Boolean);
+		saveBtn.disabled = true;
+		saveBtn.textContent = '儲存中…';
+		try {
+			for (const [index, id] of ids.entries()) await updateProduct(id, { featuredSortOrder: index + 1 });
+			dirty = false;
+			if (dirtyHint) dirtyHint.hidden = true;
+			showStatus(`已儲存熱銷排序（${ids.length} 筆），首頁會照新順序顯示。`);
+		} catch (error) {
+			saveBtn.disabled = false;
+			showStatus(error instanceof Error ? error.message : '儲存失敗，請再試一次。', true);
+		} finally {
+			saveBtn.textContent = '儲存排序';
+		}
+	});
+
+	document.addEventListener('click', async (event) => {
+		const target = event.target as HTMLElement;
+		const featuredBtn = target.closest<HTMLButtonElement>('[data-remove-featured]');
+		const spotlightBtn = target.closest<HTMLButtonElement>('[data-remove-spotlight]');
+		const addBtn = target.closest<HTMLButtonElement>('[data-add-featured]');
+		const addSpotBtn = target.closest<HTMLButtonElement>('[data-add-spotlight]');
+		const button = featuredBtn ?? spotlightBtn ?? addBtn ?? addSpotBtn;
+		if (!button) return;
+		const name = button.closest('.sort-row, .search-row')?.querySelector('strong')?.textContent ?? '這個商品';
+		if (featuredBtn && !window.confirm(`確定把「${name}」從熱銷推薦移除？`)) return;
+		if (spotlightBtn && !window.confirm(`確定取消「${name}」的主打？`)) return;
+		if (dirty && !window.confirm('排序還沒儲存，繼續會放棄目前的排序變更。要繼續嗎？')) return;
+		button.disabled = true;
+		try {
+			if (featuredBtn) await updateProduct(featuredBtn.dataset.removeFeatured ?? '', { featured: false });
+			if (spotlightBtn) await updateProduct(spotlightBtn.dataset.removeSpotlight ?? '', { heroSpotlight: false });
+			if (addBtn) {
+				const count = list ? list.children.length : 0;
+				await updateProduct(addBtn.dataset.addFeatured ?? '', { featured: true, featuredSortOrder: count + 1 });
+			}
+			if (addSpotBtn) await updateProduct(addSpotBtn.dataset.addSpotlight ?? '', { heroSpotlight: true });
+			window.location.reload();
+		} catch (error) {
+			button.disabled = false;
+			showStatus(error instanceof Error ? error.message : '更新失敗，請再試一次。', true);
+		}
+	});
+
+	// 搜尋加入（主打／熱銷共用）
+	const candidates: Record<string, Candidate[]> = JSON.parse(document.getElementById('displayCandidates')?.textContent ?? '{}');
+	const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
+	document.querySelectorAll<HTMLInputElement>('[data-search]').forEach((search) => {
+		const kind = search.dataset.search ?? 'featured';
+		const results = document.querySelector<HTMLUListElement>(`[data-results="${kind}"]`);
+		const label = kind === 'spotlight' ? '加入主打' : '加入熱銷';
+		search.addEventListener('input', () => {
+			if (!results) return;
+			const keyword = search.value.trim().toLowerCase();
+			if (!keyword) { results.innerHTML = ''; return; }
+			const matches = (candidates[kind] ?? []).filter((c) => c.name.toLowerCase().includes(keyword)).slice(0, 8);
+			results.innerHTML = matches.length
+				? matches.map((c) => `<li class="search-row"><span class="row-text"><strong>${escapeHtml(c.name)}</strong><small>${escapeHtml(c.categoryLabel ?? '未分類')}</small></span><button type="button" class="text-btn text-btn--add" data-add-${kind}="${escapeHtml(c.id)}">${label}</button></li>`).join('')
+				: '<li class="search-empty">找不到符合的上架商品</li>';
+		});
+	});
+
+	window.addEventListener('beforeunload', (event) => {
+		if (dirty) event.preventDefault();
+	});
+</script>
+
+<style>
+	.display-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 20px; margin-bottom: 16px; }
+	.display-head h1 { margin: 0; font-size: 26px; }
+	.display-head p { margin: 4px 0 0; color: var(--commerce-muted); font-size: 13px; }
+	.preview-link { display: inline-flex; align-items: center; gap: 6px; color: var(--commerce-primary); font-size: 13px; font-weight: 700; text-decoration: none; }
+	.display-notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid #c8e8d3; border-radius: 12px; background: #eef8f2; color: #1d6a43; font-size: 13px; font-weight: 650; }
+	.display-notice.is-error { border-color: #f1cfcb; background: #fff1ef; color: #a23c35; }
+	.display-card { margin-bottom: 16px; border: 1px solid var(--commerce-line); border-radius: 15px; background: #fff; box-shadow: var(--commerce-shadow); overflow: hidden; }
+	.display-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf1ef; }
+	.display-card__head h2 { margin: 0; font-size: 18px; }
+	.display-card__head p { margin: 4px 0 0; color: var(--commerce-muted); font-size: 12.5px; line-height: 1.5; }
+	.count-pill { flex: none; padding: 3px 10px; border-radius: 999px; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); font-size: 12px; font-weight: 750; }
+	.empty-line { margin: 0; padding: 18px; color: var(--commerce-muted); font-size: 13px; }
+	.sort-list { margin: 0; padding: 0; list-style: none; }
+	.sort-row { display: grid; grid-template-columns: 36px 26px 48px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #f1f4f3; background: #fff; }
+	.sort-row--static { grid-template-columns: 26px 48px minmax(0, 1fr) auto; }
+	.sort-row.is-dragging { position: relative; z-index: 2; background: var(--commerce-primary-soft); box-shadow: 0 8px 22px rgba(28, 67, 70, 0.14); }
+	.sort-row.is-off-home { background: #fafbfb; }
+	.sort-row.is-off-home .row-text strong { color: var(--commerce-muted); }
+	.drag-handle { display: grid; place-items: center; width: 36px; height: 40px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #8b9a9f; cursor: grab; touch-action: none; }
+	.drag-handle:active { cursor: grabbing; background: #eef3f2; }
+	.rank { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #eef3f2; color: var(--commerce-ink); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+	.thumb { width: 48px; height: 48px; border-radius: 10px; object-fit: cover; background: #eef3f2; }
+	.thumb--empty { display: grid; place-items: center; color: #9eb3b0; }
+	.row-text { display: grid; gap: 2px; min-width: 0; }
+	.row-text strong { overflow: hidden; color: var(--commerce-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+	.row-text small { color: var(--commerce-muted); font-size: 12px; }
+	.home-badge { padding: 2px 8px; border-radius: 999px; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); font-size: 11px; font-weight: 750; }
+	.sort-row.is-off-home .home-badge { visibility: hidden; }
+	.row-actions { display: flex; align-items: center; gap: 6px; }
+	.icon-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-ink); cursor: pointer; }
+	.icon-btn:disabled { opacity: 0.35; cursor: default; }
+	.text-btn { min-height: 36px; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #a23c35; font: inherit; font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+	.text-btn--add { color: var(--commerce-primary-dark); }
+	.card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid #edf1ef; }
+	.primary-btn { min-height: 40px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--commerce-primary); color: #fff; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+	.primary-btn:disabled { opacity: 0.45; cursor: default; }
+	.dirty-hint { color: #b26a12; font-size: 12.5px; font-weight: 650; }
+	.add-box { display: grid; gap: 8px; padding: 14px 18px 18px; }
+	.add-box label { color: var(--commerce-ink); font-size: 13px; font-weight: 750; }
+	.add-box input { min-height: 42px; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 10px; font: inherit; font-size: 16px; }
+	.search-results { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+	.search-results :global(.search-row) { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid #edf1ef; border-radius: 10px; }
+	.search-results :global(.search-row .row-text) { display: grid; gap: 2px; min-width: 0; }
+	.search-results :global(.search-row strong) { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+	.search-results :global(.search-row small) { color: var(--commerce-muted); font-size: 12px; }
+	.search-results :global(.text-btn) { min-height: 36px; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+	.search-results :global(.search-empty) { padding: 8px 2px; color: var(--commerce-muted); font-size: 13px; }
+	@media (max-width: 700px) {
+		.display-card__head { padding: 13px 14px; }
+		.sort-row { grid-template-columns: 32px 24px 44px minmax(0, 1fr); grid-template-areas: 'drag rank thumb text' 'actions actions actions actions'; row-gap: 8px; padding: 10px 12px; }
+		.sort-row .drag-handle { grid-area: drag; width: 32px; height: 44px; }
+		.sort-row .rank { grid-area: rank; }
+		.sort-row .thumb { grid-area: thumb; width: 44px; height: 44px; }
+		.sort-row .row-text { grid-area: text; }
+		.sort-row .home-badge { display: none; }
+		.sort-row .row-actions { grid-area: actions; justify-content: flex-end; }
+		.sort-row--static { grid-template-columns: 24px 44px minmax(0, 1fr); grid-template-areas: 'rank thumb text' 'actions actions actions'; }
+		.icon-btn { width: 40px; height: 40px; }
+		.text-btn { min-height: 40px; }
+		.card-actions, .add-box { padding-left: 14px; padding-right: 14px; }
+	}
+
+	/* 手機優化：標題列精簡、主打一行完成、熱銷操作鈕對齊文字欄、未存排序時儲存列固定在底部 */
+	@media (max-width: 700px) {
+		.display-head { flex-wrap: nowrap; align-items: center; margin-bottom: 12px; }
+		.display-head h1 { font-size: 22px; }
+		.display-head p { font-size: 12px; }
+		.preview-link { flex: none; min-height: 36px; padding: 0 12px; border: 1px solid var(--commerce-line); border-radius: 999px; background: #fff; }
+		.display-card { margin-bottom: 12px; border-radius: 13px; }
+		.display-card__head h2 { font-size: 16px; }
+		.display-card__head p { font-size: 12px; }
+
+		.sort-row.sort-row--static { grid-template-columns: 24px 44px minmax(0, 1fr) auto; grid-template-areas: 'rank thumb text actions'; row-gap: 0; }
+		.sort-row--static .row-actions { justify-content: flex-end; }
+		.sort-row--static .text-btn { min-height: 36px; padding: 0 10px; }
+
+		.sort-row:not(.sort-row--static) { grid-template-areas: 'drag rank thumb text' 'drag actions actions actions'; row-gap: 6px; }
+		.sort-row .drag-handle { align-self: stretch; height: auto; min-height: 44px; }
+		.sort-row .row-actions { justify-content: flex-start; gap: 6px; }
+		.sort-row .row-actions .text-btn { margin-left: auto; }
+
+		.card-actions { position: sticky; bottom: 0; z-index: 3; background: #fff; box-shadow: 0 -6px 16px rgba(28, 67, 70, 0.06); }
+		.card-actions .primary-btn { flex: 1; }
+		.card-actions .dirty-hint { width: 100%; order: -1; text-align: center; }
+		.add-box { padding-top: 12px; padding-bottom: 14px; }
+		.search-results :global(.search-row) { padding: 8px 10px; }
+	}
+
+	/* 對齊：取消按鈕同寬 */
+	.sort-row .text-btn { min-width: 84px; }
+	@media (max-width: 700px) {
+		.sort-row .text-btn { min-width: 76px; }
+	}
+</style>

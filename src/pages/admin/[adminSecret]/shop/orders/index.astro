@@ -1,5 +1,6 @@
 ---
 import AdminLayout from '../../../../../layouts/AdminLayout.astro';
+import { cancelExpiredUnpaidOrders } from '../../../../../lib/services/admin-orders';
 import {
 	getAdminBasePath,
 	isValidAdminSecretParam,
@@ -20,6 +21,9 @@ export const prerender = false;
 if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
 	return new Response(null, { status: 404, statusText: 'Not Found' });
 }
+
+// 逾期（建立超過 3 天）仍未付款的訂單自動取消並釋放預留庫存；夥伴打開後台時順便檢查
+await cancelExpiredUnpaidOrders().catch((error) => console.error('[expire-orders]', error));
 
 const base = getAdminBasePath();
 const params = Astro.url.searchParams;
@@ -151,7 +155,7 @@ const filters = [
 									{row.orderNumber}
 								</a>
 								<small class="order-item-count">{row.itemCount} 件商品</small>
-								<div class="order-time-customer"><time class="mobile-order-time" datetime={row.createdAt.toISOString()}>{formatOrderTime(row.createdAt)}</time><span class="mobile-customer-name">{row.customerName ?? '—'}</span></div>
+								<div class="order-time-customer"><span class="mobile-order-number">{row.orderNumber}</span><time class="mobile-order-time" datetime={row.createdAt.toISOString()}>{formatOrderTime(row.createdAt)}</time><span class="mobile-customer-name">{row.customerName ?? '—'}</span></div>
 								<a class="mobile-order-card-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} aria-label={`查看訂單 ${row.orderNumber}`}></a>
 							</td>
 							<td>
@@ -205,6 +209,7 @@ const filters = [
 		.commerce-content .order-list-pwa .desktop-order-total { display: none; }
 		.commerce-content .order-list-pwa .order-number,.commerce-content .order-list-pwa .order-item-count { display: none; }
 		.commerce-content .order-list-pwa .order-time-customer { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 7px; min-width: 0; }
+		.commerce-content .order-list-pwa .mobile-order-number { display: block; flex: 0 0 100%; margin: 0 0 1px; color: var(--commerce-primary-dark, #156a66); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.02em; }
 		.commerce-content .order-list-pwa .mobile-order-time { display: block; margin: 0; color: #183d45; font-size: 16px; line-height: 1.2; font-weight: 800; font-variant-numeric: tabular-nums; }
 		.commerce-content .order-list-pwa .mobile-customer-name { display: inline; color: #52676b; font-size: 14px; font-weight: 700; }
 		.commerce-content .order-list-pwa .status-chip { padding: 6px 10px; font-size: 11px; font-weight: 750; }
@@ -337,6 +342,7 @@ const filters = [
 		font-size: 0.8rem;
 	}
 	.order-number { color: var(--commerce-primary-dark); text-decoration: none; font-weight: 750; }
+	.mobile-order-number { display: none; }
 	.order-item-count { margin-top: 4px; }
 	.mobile-order-time,.mobile-amount-label,.mobile-customer-name,.mobile-order-card-link,.mobile-order-total-group,.order-actions,.order-product,.mobile-order-actions { display: none; }
 	.customer-name { font-size: inherit; }
@@ -368,6 +374,10 @@ const filters = [
 		.load-more-orders { display: flex; width: 100%; min-height: 42px; align-items: center; justify-content: center; margin-top: 10px; border: 1px solid var(--commerce-line); border-radius: 11px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
 		.load-more-orders[hidden] { display: none; }
 	}
+
+	/* B7：付款／出貨狀態欄不換行 */
+	td.payment-status,
+	td.shipping-status { white-space: nowrap; }
 </style>
 
 <script>

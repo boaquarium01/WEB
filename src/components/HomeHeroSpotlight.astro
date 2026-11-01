@@ -18,7 +18,7 @@ const n = items.length;
 
 <!-- 外層為 index 內與 #services、#about 相同的 section；標題與服務區同一模式 -->
 <div class="spotlight">
-  <h2 id="hero-spotlight-heading" class="home-section-title reveal-on-scroll">主打商品</h2>
+  <h2 id="hero-spotlight-heading" class="sr-only">主打商品</h2>
 
   <div class="spotlight__content reveal-stagger">
   {
@@ -581,5 +581,39 @@ const n = items.length;
       grid-template-columns: 3.5rem minmax(0, 1fr);
       gap: 0.5rem;
     }
+  }
+
+  /* 手機精簡：主打改為「左圖右文」橫列，簡介限 2 行，避免單件主打佔滿一屏 */
+  @media (max-width: 767.98px) {
+    .spotlight__hit--solo,
+    .spotlight__hit--half,
+    .spotlight__hit--lead {
+      display: grid;
+      grid-template-columns: 7.25rem minmax(0, 1fr);
+      gap: 0.85rem;
+      align-items: center;
+    }
+    .spotlight__figure--solo,
+    .spotlight__figure--half,
+    .spotlight__figure--lead {
+      height: 7.25rem;
+      margin-bottom: 0;
+    }
+    .spotlight__duo { gap: 0.85rem; }
+    .spotlight__hit--solo .spotlight__name,
+    .spotlight__hit--half .spotlight__name,
+    .spotlight__hit--lead .spotlight__name { font-size: 1rem; margin-bottom: 0.2rem; }
+    .spotlight__hit--solo .spotlight__excerpt,
+    .spotlight__hit--half .spotlight__excerpt,
+    .spotlight__hit--lead .spotlight__excerpt {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      margin-bottom: 0.35rem;
+    }
+    .spotlight__copy--solo { padding-block: 0; }
   }
 </style>

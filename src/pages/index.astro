@@ -5,6 +5,7 @@ import HomeHeroSpotlight from '../components/HomeHeroSpotlight.astro';
 import { getAllCategories, getFeaturedProducts, getHeroSpotlightProducts } from '../data/products';
 import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 import { getCartItemCount } from '../lib/services/cart';
+import { formatTwd, listCatalogProducts } from '../lib/services/catalog';
 
 export const prerender = false;
 
@@ -42,13 +43,32 @@ const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
 
 /** 僅顯示 Sanity「首頁熱銷」已勾選之商品；未勾選任何筆時本區塊不顯示。 */
 /** 勿因「主打」重複排除：同商品可同時在主打與熱銷，否則同時勾熱銷與主打的商品會從熱銷區被排除而看起來像沒顯示。 */
-const featuredProducts = (await getFeaturedProducts(10)).slice(0, 10);
+/** 首頁最多顯示 8 筆熱銷；順序由後台「首頁陳列」頁調整（featuredSortOrder） */
+const HOME_FEATURED_LIMIT = 8;
+const featuredProducts = (await getFeaturedProducts(HOME_FEATURED_LIMIT)).slice(0, HOME_FEATURED_LIMIT);
+
+/** 價格來自資料庫（與商品列表一致）；查不到時顯示「價格洽詢」 */
+const catalogPrices = new Map<string, string>();
+if (featuredProducts.length > 0) {
+  try {
+    for (const item of await listCatalogProducts()) {
+      const min = item.priceMin ?? (item.sellingPrice > 0 ? item.sellingPrice : null);
+      const max = item.priceMax ?? min;
+      const label = min === null ? '價格洽詢' : max !== null && max !== min ? `${formatTwd(min)}–${new Intl.NumberFormat('zh-TW').format(max)}` : formatTwd(min);
+      catalogPrices.set(item.slug, label);
+    }
+  } catch (err) {
+    console.warn('[Home] featured prices unavailable', err);
+  }
+}
 
 const featuredStaggerItems = featuredProducts.map((p) => ({
   slug: p.slug,
   name: p.name,
   excerpt: p.excerpt,
-  imageUrl: p.image
+  categoryLabel: p.categoryLabel,
+  imageUrl: p.image,
+  priceLabel: catalogPrices.get(p.slug) ?? '價格洽詢'
 }));
 /** 縮短 CDN 快取，避免首頁熱銷／主打與 Sanity 後台改動長時間不一致 */
 Astro.response.headers.set(
@@ -367,19 +387,14 @@ const MAP_EMBED_URL =
         <section id="products" class="section home-section wrap" aria-labelledby="products-heading">
           <div class="products-section-head reveal-on-scroll">
             <h2 id="products-heading" class="home-section-title">熱銷推薦</h2>
-            <a
-              id="homeProductsAllLink"
-              class="products-all-link"
-              href="/products/1"
-              aria-label="前往全部商品列表"
-            >
-              全部商品
-              <i class="fa-solid fa-chevron-right products-all-icon" aria-hidden="true"></i>
-            </a>
           </div>
-          <ProductGridStagger items={featuredStaggerItems} compact />
+          <ProductGridStagger items={featuredStaggerItems} />
+          <div class="products-more">
+            <a class="products-more-btn" href="/products/1">看全部商品 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
+          </div>
         </section>
       )}
+
       </div>
     </main>
 
@@ -2501,7 +2516,7 @@ const MAP_EMBED_URL =
   /* 與促銷分頁同款：浮動回到頂部（略抬高避免與 LINE 浮標重疊） */
   .promo-scroll-top-btn {
     position: fixed;
-    right: 18px;
+    right: 23px;
     bottom: calc(154px + env(safe-area-inset-bottom, 0px));
     z-index: 10000;
     width: 46px;
@@ -2539,10 +2554,114 @@ const MAP_EMBED_URL =
   }
 
   @media (max-width: 639px) {
+    /* 與手機浮動鈕（50px）同一直線，疊在購物車鈕上方 */
     .promo-scroll-top-btn {
-      right: 14px;
-      bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+      right: max(16px, calc(env(safe-area-inset-right, 0px) + 2px));
+      bottom: calc(136px + env(safe-area-inset-bottom, 0px));
     }
   }
 
+
+  /* 熱銷推薦：底部「看全部商品」按鈕 */
+  .products-more {
+    display: flex;
+    justify-content: center;
+    margin-top: 1.25rem;
+  }
+
+  .products-more-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0 1.4rem;
+    border: 1px solid var(--aq-primary);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--aq-primary-dark);
+    font-size: 0.95rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .products-more-btn:hover {
+    background: var(--aq-primary);
+    color: #fff;
+  }
+
+  /* 關於我們：移除白色外框卡片，內容直接置於頁面底色上 */
+  .about-panel,
+  .about-panel:hover {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* 服務項目：壓縮上下留白（區塊內距、標題下距、卡片間距與卡片內距） */
+  .home-below-hero #services.home-section {
+    padding-top: clamp(1.5rem, 3vw, 2.25rem);
+    padding-bottom: clamp(1.5rem, 3vw, 2.25rem);
+  }
+  #services :global(.home-section-title) {
+    margin-bottom: clamp(1rem, 2.5vw, 1.35rem);
+  }
+  #services .services-grid {
+    gap: clamp(0.65rem, 1.8vw, 1rem);
+  }
+  #services .service-card {
+    padding: 16px 18px;
+  }
+  #services .service-icon { font-size: 1.35rem; }
+  #services .service-head { margin-bottom: 4px; }
+  #services .service-card h3 { font-size: 1.05rem; }
+  #services .service-card p { font-size: 0.875rem; line-height: 1.5; }
+
+  /* 服務項目（桌面）：圖示獨立一欄、標題與說明左緣對齊，卡片內距與間距一致 */
+  @media (min-width: 640px) {
+    #services .services-grid {
+      gap: 16px 20px;
+    }
+    #services .service-card {
+      display: grid;
+      grid-template-columns: 2.25rem minmax(0, 1fr);
+      grid-template-rows: auto 1fr;
+      column-gap: 12px;
+      row-gap: 6px;
+      align-content: start;
+      padding: 20px 24px;
+    }
+    #services .service-head {
+      display: contents;
+    }
+    #services .service-icon {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      align-self: start;
+      display: grid;
+      place-items: center;
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 10px;
+      background: color-mix(in srgb, var(--aq-primary) 10%, transparent);
+      font-size: 1.1rem;
+    }
+    #services .service-card h3 {
+      grid-column: 2;
+      align-self: center;
+      line-height: 2.25rem;
+      height: 2.25rem;
+      margin-top: -0.35rem;
+      margin-bottom: -0.35rem;
+    }
+    #services .service-card p {
+      grid-column: 2;
+      line-height: 1.6;
+      text-wrap: pretty;
+    }
+  }
 </style>

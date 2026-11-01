@@ -13,6 +13,25 @@ const {
 
 const pageUrl = Astro.url.href;
 const isAdminRoute = Astro.url.pathname.startsWith('/admin/');
+const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
+/** 已在購物流程或登入流程中，不再顯示浮動購物車鈕 */
+const hideCartFloat = [
+	'/cart',
+	'/checkout',
+	'/account/login',
+	'/account/register',
+	'/account/forgot-password',
+	'/account/reset-password',
+	'/account/verify-email',
+	'/account/complete-profile',
+].some((p) => currentPath === p || currentPath.startsWith(`${p}/`));
+/**
+ * 只有表單／訂單明細這類「右側常有按鈕或輸入框」的頁面，手機往下捲動時才收起浮動鈕；
+ * 首頁、促銷頁、商品列表、商品頁、購物車維持常駐（商品頁與購物車已自動避開底部操作列）。
+ */
+const tuckFloats =
+	currentPath === '/checkout' ||
+	(currentPath.startsWith('/account/') && !hideCartFloat);
 const user = Astro.locals.user;
 let cartCount = 0;
 if (user) {
@@ -27,7 +46,7 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 ---
 
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-float-tuck={tuckFloats ? '1' : undefined}>
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -70,7 +89,7 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	</head>
 	<body>
 		<slot />
-		{!isAdminRoute ? (
+		{!isAdminRoute && !hideCartFloat ? (
 			<a class="cart-float" href="/cart" aria-label={`購物車，目前 ${cartCount} 件商品`}>
 				<i class="fa-solid fa-bag-shopping" aria-hidden="true"></i>
 				<span class="cart-float-count" aria-hidden="true">{cartCount}</span>
@@ -90,6 +109,9 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 
 		<script>
 			import { initScrollReveal } from '../scripts/initScrollReveal';
+			import { initFloatingButtons } from '../scripts/floatingButtons';
+
+			initFloatingButtons();
 
 			const runReveal = () => initScrollReveal();
 			runReveal();
@@ -136,7 +158,8 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 	.line-float {
 		position: fixed;
 		right: 18px;
-		bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+		/* --float-offset：頁面底部固定操作列（加入購物車、結帳列）的高度，由 floatingButtons.ts 設定 */
+		bottom: max(calc(18px + env(safe-area-inset-bottom, 0px)), calc(var(--float-offset, 0px) + 12px));
 		z-index: 9999;
 		width: 56px;
 		height: 56px;
@@ -148,10 +171,10 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		overflow: hidden;
 		border: 1px solid rgba(255, 255, 255, 0.22);
 		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
-		transition: transform 0.2s ease, box-shadow 0.2s ease;
+		transition: transform 0.25s ease, box-shadow 0.2s ease, opacity 0.2s ease, bottom 0.2s ease;
 	}
 
-	.cart-float{position:fixed;right:18px;bottom:calc(86px + env(safe-area-inset-bottom, 0px));z-index:9998;display:grid;place-items:center;width:56px;height:56px;border:1px solid rgba(255,255,255,.65);border-radius:50%;background:var(--aq-primary,#156a66);color:#fff!important;text-decoration:none;box-shadow:0 10px 26px rgba(21,106,102,.3);transition:transform .18s ease,box-shadow .18s ease}.cart-float:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(21,106,102,.36)}.cart-float>i{font-size:1.25rem}.cart-float-count{position:absolute;top:-4px;right:-5px;display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:999px;background:#e33e46;color:#fff;font-size:.69rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(107,22,28,.2)}
+	.cart-float{position:fixed;right:18px;bottom:max(calc(86px + env(safe-area-inset-bottom, 0px)), calc(var(--float-offset, 0px) + 80px));z-index:9998;display:grid;place-items:center;width:56px;height:56px;border:1px solid rgba(255,255,255,.65);border-radius:50%;background:var(--aq-primary,#156a66);color:#fff!important;text-decoration:none;box-shadow:0 10px 26px rgba(21,106,102,.3);transition:transform .18s ease,box-shadow .18s ease}.cart-float{transition:transform .25s ease,box-shadow .18s ease,opacity .2s ease,bottom .2s ease}.cart-float:hover{transform:translateY(-2px);box-shadow:0 14px 30px rgba(21,106,102,.36)}.cart-float>i{font-size:1.25rem}.cart-float-count{position:absolute;top:-4px;right:-5px;display:grid;place-items:center;min-width:22px;height:22px;padding:0 5px;border:2px solid #fff;border-radius:999px;background:#e33e46;color:#fff;font-size:.69rem;font-weight:800;line-height:1;font-variant-numeric:tabular-nums;box-shadow:0 2px 6px rgba(107,22,28,.2)}
 	html{min-height:100%;scroll-padding-top:5rem}body{min-height:100vh;min-height:100dvh;overflow-x:clip}button,a,input,select,textarea{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}
 
 	.line-float:hover {
@@ -180,11 +203,14 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		input,select,textarea{font-size:16px}
 		.line-float {
 			right: max(14px, env(safe-area-inset-right, 0px));
-			bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-			/* 與桌機同尺寸，避免與 scale 疊加後視覺比例不一致 */
-			width: 56px;
-			height: 56px;
+			bottom: max(calc(14px + env(safe-area-inset-bottom, 0px)), calc(var(--float-offset, 0px) + 10px));
+			/* 手機略縮小，減少遮擋內容 */
+			width: 50px;
+			height: 50px;
 		}
-		.cart-float{right:max(14px, env(safe-area-inset-right, 0px));bottom:calc(82px + env(safe-area-inset-bottom, 0px));width:56px;height:56px}
+		.cart-float{right:max(14px, env(safe-area-inset-right, 0px));bottom:max(calc(74px + env(safe-area-inset-bottom, 0px)), calc(var(--float-offset, 0px) + 70px));width:50px;height:50px}
+		/* 往下捲動閱讀時收起浮動鈕，往上捲動立即出現 */
+		html.floats-tucked .line-float,
+		html.floats-tucked .cart-float{transform:translateX(calc(100% + 24px));opacity:0;pointer-events:none}
 	}
 </style>

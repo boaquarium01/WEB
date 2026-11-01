@@ -15,6 +15,7 @@ export type OrderItemView = {
 	unitPrice: number;
 	quantity: number;
 	subtotal: number;
+	productSkuId: string;
 };
 
 export type PaymentView = {
@@ -71,6 +72,7 @@ export async function getOrderForUser(
 			unitPrice: orderItems.unitPrice,
 			quantity: orderItems.quantity,
 			subtotal: orderItems.subtotal,
+			productSkuId: orderItems.productSkuId,
 		})
 		.from(orderItems)
 		.leftJoin(productSkus, eq(orderItems.productSkuId, productSkus.id))

@@ -12,6 +12,11 @@ import {
 	getAdminOrder,
 } from '../../../../../lib/services/admin-orders';
 import { formatTwd } from '../../../../../lib/services/catalog';
+import { orderThumbUrl } from '../../../../../lib/services/order-item-images';
+import { sendOrderPush } from '../../../../../lib/services/push';
+
+/** 商品明細的單價／小計／運費不顯示「NT」，只有總計用 formatTwd 顯示 NT$（與前台訂單一致） */
+const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(amount)}`;
 import {
 	orderStatusLabel,
 	paymentStatusLabel,
@@ -51,10 +56,29 @@ if (Astro.request.method === 'POST') {
 				String(form.get('submissionId') ?? '') || undefined,
 			);
 			message = '已確認付款，訂單進入處理中。';
+			const paidOrder = await getAdminOrder(orderNumber);
+			if (paidOrder?.userId) {
+				const pushed = await sendOrderPush(paidOrder.userId, {
+					title: '已確認收到您的款項',
+					body: `訂單 ${paidOrder.orderNumber} 正在備貨中，出貨時會再通知您。`,
+					url: `/account/orders/${encodeURIComponent(paidOrder.orderNumber)}`,
+					tag: `order-${paidOrder.orderNumber}`,
+				});
+				if (pushed) message += `已推播通知顧客（${pushed} 台裝置）。`;
+			}
 		} else if (action === 'mark_shipped') {
 			await adminMarkShipped(orderNumber, user.id);
 			const shippedOrder = await getAdminOrder(orderNumber);
 			if (!shippedOrder) throw new Error('找不到出貨訂單');
+			const shippedPushCount = shippedOrder.userId
+				? await sendOrderPush(shippedOrder.userId, {
+					title: '您的訂單已出貨 🚚',
+					body: `訂單 ${shippedOrder.orderNumber} 已出貨，請留意收件。`,
+					url: `/account/orders/${encodeURIComponent(shippedOrder.orderNumber)}`,
+					tag: `order-${shippedOrder.orderNumber}`,
+				})
+				: 0;
+			const pushNote = shippedPushCount ? `已推播通知顧客（${shippedPushCount} 台裝置）。` : '';
 			if (!shippedOrder.customerEmail || !shippedOrder.customerEmailVerified || isSyntheticProviderEmail(shippedOrder.customerEmail)) {
 				message = '已標記出貨並扣減庫存；顧客沒有可寄送的已驗證電子郵件，因此未寄出通知。';
 			} else {
@@ -111,9 +135,10 @@ if (Astro.request.method === 'POST') {
 					message = '已標記出貨並扣減庫存，但出貨通知寄送失敗。';
 				}
 			}
+			if (pushNote) message = `${message ?? ''}${pushNote}`;
 		} else if (action === 'complete') {
 			await adminCompleteOrder(orderNumber);
-			message = '訂單已完成。';
+			// 不另顯示提示列：下方「訂單進度」會以高亮的完成狀態呈現
 		} else if (action === 'cancel') {
 			await adminCancelOrder(orderNumber, user.id);
 			message = '訂單已取消，預留庫存已釋放。';
@@ -210,23 +235,27 @@ const canCancel = [
 			<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
 			<p class="current-summary"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>下單時間　{formatDateTime(order.createdAt)}</span></p>
 		</div>
-		<div class="actions-bar">
-			{canConfirm && <form method="post"><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-payment">確認付款</button></form>}
-			{canShip && <form method="post"><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-shipping">標記出貨</button></form>}
-			{canComplete && <form method="post"><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-complete">完成訂單</button></form>}
-			{canCancel && <form method="post" onsubmit="return confirm('確定取消此訂單？');"><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
+		<div class:list={['actions-bar', { 'has-actions': canConfirm || canShip || canComplete || canCancel }]}>
+			{canConfirm && submissions[0] && <p class="actions-bar__info">末五碼 <strong class="mono">{submissions[0].bankLastFive}</strong>・應付 <strong>{formatTwd(order.total)}</strong></p>}
+			{canConfirm && <form method="post" data-confirm={`確認已收到 ${formatTwd(order.total)} 的款項？${submissions[0] ? `\n末五碼：${submissions[0].bankLastFive}` : ''}\n確認後訂單會進入備貨中。`}><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-payment">確認付款</button></form>}
+			{canShip && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已出貨？\n確認後會扣除庫存，並寄出貨通知信給顧客。`}><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-shipping">標記出貨</button></form>}
+			{canComplete && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已送達並完成？`}><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-complete">完成訂單</button></form>}
+			{canCancel && <form method="post" data-confirm={`確定取消訂單 ${order.orderNumber}？
+取消後會釋放預留庫存。`} data-confirm-danger><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
 		</div>
 	</header>
 
 	{message && <p class="banner ok">{message}</p>}
 	{error && <p class="banner error">{error}</p>}
 
-	<section class="panel status-panel">
-		<div class="section-heading"><h2>訂單進度</h2><strong>目前：{currentStateSummary[order.status] ?? orderStatusLabel(order.status)}</strong></div>
+	<section class:list={['panel status-panel', { 'is-completed': order.status === 'COMPLETED' }]}>
+		<div class="section-heading section-heading--stack"><h2>訂單進度</h2>{order.status === 'COMPLETED'
+			? <strong class="completed-summary"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>訂單已完成</strong>
+			: <strong>目前：{currentStateSummary[order.status] ?? orderStatusLabel(order.status)}</strong>}</div>
 		{order.status === 'CANCELLED' ? (
 			<div class="cancelled-progress"><span class="timeline-dot"></span><strong>訂單已取消</strong>{cancellationEvent && <time>{formatDateTime(cancellationEvent.createdAt)}</time>}</div>
 		) : (
-			<ol class="order-progress">{progressSteps.map((step, index) => <li class:list={{ reached: step.reached, current: index === currentProgressIndex, passed: index < currentProgressIndex }}><span class="progress-marker">{step.reached ? <i class="fa-solid fa-check" aria-hidden="true"></i> : index + 1}</span><strong>{step.label}</strong><time>{step.event ? formatDateTime(step.event.createdAt) : '—'}</time></li>)}</ol>
+			<ol class="order-progress">{progressSteps.map((step, index) => <li class:list={{ reached: step.reached, current: index === currentProgressIndex, passed: index < currentProgressIndex, pending: !step.reached && index !== currentProgressIndex }} aria-current={index === currentProgressIndex && !step.reached ? 'step' : undefined}><span class="progress-marker" aria-hidden="true">{step.reached ? <i class="fa-solid fa-check"></i> : index === currentProgressIndex ? <span class="progress-dot"></span> : null}</span><strong>{step.label}</strong><time>{step.event ? formatDateTime(step.event.createdAt) : index === currentProgressIndex ? '進行中' : '等待中'}</time></li>)}</ol>
 		)}
 	</section>
 
@@ -271,23 +300,27 @@ const canCancel = [
 		<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
 		<ul class="lines order-lines">
 			{order.items.map((item) => <li>
-				<span class="order-product">{item.productName}
-					{item.skuName?.trim() && item.skuName.trim() !== item.productName.trim() && <small>規格：{item.skuName}</small>}
-					{!item.skuName?.trim() && <small>規格：未記錄</small>}
+				<span class="order-product">
+					<span class="order-thumb" aria-hidden="true">{item.imageUrl ? <img src={orderThumbUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" /> : <i class="fa-solid fa-fish"></i>}</span>
+					<span class="order-product__text"><span class="order-product__name">{item.productName}</span>
+						{item.skuName?.trim() && item.skuName.trim() !== item.productName.trim() && <small>規格：{item.skuName}</small>}
+						{!item.skuName?.trim() && <small>規格：未記錄</small>}
+					</span>
 				</span>
-				<span class="order-unit-price" aria-label="單價">{formatTwd(item.unitPrice)}</span>
+				<span class="order-unit-price" aria-label="單價">{dollars(item.unitPrice)}</span>
 				<span class="order-quantity" aria-label="數量">{item.quantity}</span>
-				<strong class="order-line-total" aria-label="總計">{formatTwd(item.subtotal)}</strong>
+				<span class="order-calc">{dollars(item.unitPrice)} × <b>{item.quantity}</b></span>
+				<strong class="order-line-total" aria-label="總計">{dollars(item.subtotal)}</strong>
 			</li>)}
 		</ul>
 		<dl class="totals">
 			<div>
 				<dt>小計</dt>
-				<dd>{formatTwd(order.subtotal)}</dd>
+				<dd>{dollars(order.subtotal)}</dd>
 			</div>
 			<div>
 				<dt>運費</dt>
-				<dd>{formatTwd(order.shippingFee)}</dd>
+				<dd>{dollars(order.shippingFee)}</dd>
 			</div>
 			<div class="grand">
 				<dt>總計</dt>
@@ -295,7 +328,48 @@ const canCancel = [
 			</div>
 		</dl>
 	</section>
+
+	<dialog id="confirm-sheet" class="confirm-sheet" aria-labelledby="confirm-sheet-message" tabindex="-1" autofocus>
+		<p id="confirm-sheet-message" class="confirm-sheet__message"></p>
+		<div class="confirm-sheet__actions">
+			<button type="button" class="confirm-sheet__cancel" data-confirm-cancel>返回</button>
+			<button type="button" class="confirm-sheet__ok" data-confirm-ok>確認</button>
+		</div>
+	</dialog>
 </AdminLayout>
+
+<script>
+	/*
+	 * 操作確認改用頁面內建的彈窗：系統 confirm() 在部分 PWA／App 內建瀏覽器不會跳出，
+	 * 會直接當成「取消」，按鈕看起來就像沒反應。
+	 */
+	const sheet = document.getElementById('confirm-sheet') as HTMLDialogElement | null;
+	const sheetMessage = document.getElementById('confirm-sheet-message');
+	const sheetOk = sheet?.querySelector<HTMLButtonElement>('[data-confirm-ok]');
+	let pendingForm: HTMLFormElement | null = null;
+	for (const form of document.querySelectorAll<HTMLFormElement>('form[data-confirm]')) {
+		form.addEventListener('submit', (event) => {
+			if (form.dataset.confirmed === '1' || !sheet || typeof sheet.showModal !== 'function') return;
+			event.preventDefault();
+			pendingForm = form;
+			if (sheetMessage) sheetMessage.textContent = form.dataset.confirm ?? '確定執行？';
+			if (sheetOk) {
+				sheetOk.textContent = form.querySelector('button[type=submit]')?.textContent?.trim() || '確認';
+				sheetOk.classList.toggle('is-danger', form.hasAttribute('data-confirm-danger'));
+			}
+			sheet.showModal();
+		});
+	}
+	sheet?.querySelector('[data-confirm-cancel]')?.addEventListener('click', () => sheet.close());
+	sheet?.addEventListener('click', (event) => { if (event.target === sheet) sheet.close(); });
+	sheetOk?.addEventListener('click', () => {
+		if (!pendingForm) return;
+		sheetOk.disabled = true;
+		sheetOk.textContent = '處理中…';
+		pendingForm.dataset.confirmed = '1';
+		pendingForm.requestSubmit();
+	});
+</script>
 
 <script>
 	const copyButton = document.querySelector<HTMLButtonElement>('.copy-address');
@@ -377,6 +451,15 @@ const canCancel = [
 	.order-progress li.reached .progress-marker,.order-progress li.current .progress-marker { border-color: var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
 	.order-progress li.reached strong,.order-progress li.current strong { color: var(--commerce-primary-dark); }
 	.order-progress li.passed:not(:last-child)::after { background: #9fd0c5; }
+	/* 統一三種狀態：已完成＝實心打勾、進行中＝空心圈＋圓點、未開始＝淺灰空心圈 */
+	.order-progress .progress-marker { width: 28px; height: 28px; border-width: 2px; font-size: 12px; }
+	@media (max-width: 720px) { .order-progress { padding: 14px 14px 14px 16px; } }
+	.order-progress li.current:not(.reached) .progress-marker { border-color: var(--commerce-primary); background: #fff; box-shadow: 0 0 0 4px var(--commerce-primary-soft); }
+	.progress-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--commerce-primary); }
+	.order-progress li.current:not(.reached) time { color: var(--commerce-primary); font-weight: 650; }
+	.order-progress li.pending .progress-marker { border-color: #dfe6e4; background: #fff; }
+	.order-progress li.pending strong { color: #9ba8a8; font-weight: 600; }
+	.order-progress li.pending time { color: #b3bfbd; }
 	.cancelled-progress { display: flex; align-items: center; gap: 10px; padding: 12px 0 2px; color: #a94742; }
 	.cancelled-progress .timeline-dot { background: #c94c42; box-shadow: 0 0 0 3px #ffefed; }
 	.cancelled-progress time { margin-left: auto; color: #829294; font-size: 13px; }
@@ -513,6 +596,13 @@ const canCancel = [
 	.actions-bar { margin: 12px 0 18px; }
 	.btn-payment,.btn-shipping,.btn-danger,.btn-complete { min-height: 42px; padding: 9px 15px; font-size: 14px; }
 	.status-panel { margin-bottom: 16px; }
+	/* 訂單完成：整個進度區塊以綠色高亮 */
+	.status-panel.is-completed { border-color: #bfe0cc; background: linear-gradient(180deg, #effaf3, #fff 70%); box-shadow: 0 0 0 3px rgba(33, 131, 75, 0.08); }
+	.status-panel.is-completed .completed-summary { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; background: #21834b; color: #fff; font-size: 14px; }
+	.status-panel.is-completed .order-progress li.reached .progress-marker { border-color: #21834b; background: #21834b; }
+	.status-panel.is-completed .order-progress li.reached strong { color: #17683a; }
+	.status-panel.is-completed .order-progress li:not(:last-child)::after { background: #9fd3b4; }
+	.status-panel.is-completed .order-progress li.current .progress-marker { box-shadow: 0 0 0 4px rgba(33, 131, 75, 0.18); }
 	.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 	.section-heading h2 { margin: 0; font-size: 21px; }
 	.section-heading > strong { color: var(--commerce-primary-dark); font-size: 14px; }
@@ -552,9 +642,56 @@ const canCancel = [
 	.order-product { min-width:0; overflow-wrap:anywhere; line-height:1.55; }
 	.order-product small { display:block; font-size:.75rem; color:#718482; }
 	.order-unit-price,.order-quantity,.order-line-total { min-width:0; font-variant-numeric:tabular-nums; white-space:nowrap; }
+	/* 商品小圖：撿貨時一眼認出是哪條魚 */
+	.order-product { display:flex; align-items:center; gap:.7rem; }
+	.order-product__text { min-width:0; }
+	.order-thumb { flex:none; display:grid; place-items:center; width:48px; height:48px; overflow:hidden; border:1px solid var(--commerce-line); border-radius:10px; background:#f2f6f4; color:#9ab3ad; font-size:1rem; }
+	.order-thumb img { width:100%; height:100%; object-fit:cover; }
+	.order-calc { display:none; }
+	/* 手機：每件商品改成小卡 —— 左邊圖片上下撐滿，右邊三列：名稱／規格／單價 × 數量＋小計 */
 	@media(max-width:520px) {
-		.order-items-header,.lines.order-lines li { grid-template-columns:minmax(0,1fr) 66px 38px 72px; column-gap:.35rem; }
-		.order-items-header { font-size:.7rem; }
-		.order-unit-price,.order-quantity,.order-line-total { font-size:.75rem; }
+		.order-items-header,.order-unit-price,.order-quantity { display:none; }
+		.lines.order-lines li { grid-template-columns:72px minmax(0,1fr) auto; grid-template-rows:auto auto auto; grid-template-areas:"thumb name name" "thumb spec spec" "thumb calc total"; align-items:center; row-gap:.2rem; column-gap:.75rem; padding:12px 0; }
+		.order-product,.order-product__text { display:contents; }
+		.order-thumb { grid-area:thumb; align-self:stretch; width:72px; height:auto; min-height:72px; }
+		.order-product__name { grid-area:name; font-weight:650; line-height:1.4; overflow-wrap:anywhere; }
+		.order-product small { grid-area:spec; margin:0; font-weight:500; }
+		.order-calc { grid-area:calc; display:block; color:var(--commerce-muted); font-size:.85rem; font-variant-numeric:tabular-nums; }
+		.order-calc b { color:var(--commerce-ink); }
+		.order-line-total { grid-area:total; text-align:right; font-size:.95rem; }
+	}
+	/* 訂單進度：說明改到標題下方 */
+	.section-heading.section-heading--stack { flex-direction: column; align-items: flex-start; gap: 4px; }
+	.actions-bar__info { display: none; }
+	/* 手機：確認／取消操作列固定在畫面底部 */
+	@media (max-width: 720px) {
+		.actions-bar.has-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; margin: 0; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--commerce-line); background: rgba(255, 255, 255, 0.97); box-shadow: 0 -8px 22px rgba(28, 67, 70, 0.1); }
+		.actions-bar.has-actions .actions-bar__info { display: block; grid-column: 1 / -1; margin: 0 0 2px; color: var(--commerce-muted); font-size: 12.5px; text-align: center; }
+		.actions-bar__info strong { color: var(--commerce-ink); }
+		:global(body:has(.actions-bar.has-actions)) { padding-bottom: 130px; }
+		/* 一顆按鈕佔滿整排；兩顆以上平分，取消固定在最左、樣式較淡 */
+		.actions-bar.has-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+		.actions-bar.has-actions .actions-bar__info { flex: 1 0 100%; order: -2; }
+		.actions-bar.has-actions form { flex: 1 1 0; min-width: 0; }
+		/* 取消固定在左邊、縮小；主要操作（確認付款／出貨／完成）放大佔剩下的寬度 */
+		.actions-bar.has-actions form:has(.btn-danger) { order: -1; flex: 0 0 32%; }
+		.actions-bar.has-actions button { width: 100%; min-height: 46px; font-size: 15px; }
+		.actions-bar.has-actions .btn-danger { border-color: var(--commerce-line); background: #fff; color: var(--commerce-muted); font-weight: 600; }
+		.actions-bar.has-actions .btn-danger:active { border-color: rgba(180, 35, 24, 0.45); color: var(--aq-danger); }
+	}
+	/* 操作確認彈窗：電腦置中、手機從底部升起 */
+	.confirm-sheet { width: min(420px, calc(100vw - 32px)); padding: 22px 20px 18px; border: 0; border-radius: 16px; background: #fff; color: var(--commerce-ink); box-shadow: 0 20px 50px rgba(20, 40, 40, 0.25); }
+	.confirm-sheet::backdrop { background: rgba(16, 30, 30, 0.45); }
+	.confirm-sheet:focus { outline: none; }
+	.confirm-sheet__actions button:focus-visible { outline: 3px solid rgba(21, 106, 102, 0.35); outline-offset: 2px; }
+	.confirm-sheet__message { margin: 0 0 18px; font-size: 16px; font-weight: 650; line-height: 1.6; white-space: pre-line; }
+	.confirm-sheet__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+	.confirm-sheet__actions button { min-height: 46px; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+	.confirm-sheet__cancel { border: 1px solid var(--commerce-line); background: #fff; color: var(--commerce-muted); }
+	.confirm-sheet__ok { border: 1px solid var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
+	.confirm-sheet__ok.is-danger { border-color: var(--aq-danger); background: var(--aq-danger); }
+	.confirm-sheet__ok:disabled { opacity: 0.7; cursor: wait; }
+	@media (max-width: 720px) {
+		.confirm-sheet { width: 100%; max-width: none; margin: auto 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 18px 18px 0 0; }
 	}
 </style>

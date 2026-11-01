@@ -564,6 +564,29 @@ export const cartsRelations = relations(carts, ({ one, many }) => ({
 	items: many(cartItems),
 }));
 
+/** 網頁推播訂閱：一位會員可在多台裝置訂閱；wantsOrder／wantsPromo 分別控制訂單與優惠通知 */
+export const pushSubscriptions = pgTable(
+	'push_subscriptions',
+	{
+		id: uuid('id').defaultRandom().primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		endpoint: text('endpoint').notNull(),
+		p256dh: text('p256dh').notNull(),
+		auth: text('auth').notNull(),
+		userAgent: text('user_agent'),
+		wantsOrder: boolean('wants_order').notNull().default(true),
+		wantsPromo: boolean('wants_promo').notNull().default(false),
+		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+		lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+	},
+	(table) => [
+		uniqueIndex('push_subscriptions_endpoint_unique').on(table.endpoint),
+		index('push_subscriptions_user_idx').on(table.userId),
+	],
+);
+
 export const ordersRelations = relations(orders, ({ one, many }) => ({
 	user: one(user, {
 		fields: [orders.userId],

@@ -37,10 +37,10 @@ const { items, compact = false } = Astro.props as Props;
       >
         <a
           href={`/product/${product.slug}`}
-          class="product-stagger-card__link block overflow-hidden rounded-[var(--aq-radius-lg)] border border-[color-mix(in_srgb,var(--aq-ink)_10%,transparent)] bg-[color-mix(in_srgb,white_94%,var(--aq-sand))] text-inherit no-underline shadow-[0_1px_2px_rgba(26,34,33,0.04),0_10px_28px_rgba(26,34,33,0.07)] outline-none ring-[color-mix(in_srgb,var(--aq-ink)_4%,transparent)] ring-1 transition-[transform,box-shadow,border-color] duration-200 ease-out [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:border-[color-mix(in_srgb,var(--aq-primary)_22%,transparent)] hover:shadow-[0_4px_14px_rgba(26,34,33,0.06),0_18px_40px_rgba(21,106,102,0.1)] active:scale-[0.98] active:shadow-[0_2px_8px_rgba(26,34,33,0.05)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--aq-primary)_65%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--aq-sand)]"
+          class="product-stagger-card__link flex h-full flex-col overflow-hidden rounded-[var(--aq-radius-lg)] border border-[color-mix(in_srgb,var(--aq-ink)_10%,transparent)] bg-[color-mix(in_srgb,white_94%,var(--aq-sand))] text-inherit no-underline shadow-[0_1px_2px_rgba(26,34,33,0.04),0_10px_28px_rgba(26,34,33,0.07)] outline-none ring-[color-mix(in_srgb,var(--aq-ink)_4%,transparent)] ring-1 transition-[transform,box-shadow,border-color] duration-200 ease-out [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:border-[color-mix(in_srgb,var(--aq-primary)_22%,transparent)] hover:shadow-[0_4px_14px_rgba(26,34,33,0.06),0_18px_40px_rgba(21,106,102,0.1)] active:scale-[0.98] active:shadow-[0_2px_8px_rgba(26,34,33,0.05)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--aq-primary)_65%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--aq-sand)]"
         >
-          {hasImage ? (
-            <div class="product-stagger-card__media relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-[var(--aq-mist)] to-[color-mix(in_srgb,var(--aq-sand-2)_85%,var(--aq-muted))]">
+          <div class:list={['product-stagger-card__media relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-[var(--aq-mist)] to-[color-mix(in_srgb,var(--aq-sand-2)_85%,var(--aq-muted))]', { 'is-empty': !hasImage }]}>
+            {hasImage ? (
               <img
                 src={imageSrc}
                 alt=""
@@ -49,21 +49,25 @@ const { items, compact = false } = Astro.props as Props;
                 loading="lazy"
                 decoding="async"
                 class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-cover object-center transition-[opacity,filter,transform] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
-                onerror="const m=this.closest('.product-stagger-card__media'); if(m) m.remove();"
+                onerror="const m=this.closest('.product-stagger-card__media'); if(m) m.classList.add('is-empty'); this.remove();"
               />
-              <div
-                class="product-stagger-card__media-overlay pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-[color-mix(in_srgb,var(--aq-primary-dark)_35%,transparent)] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none"
-                aria-hidden="true"
-              />
+            ) : null}
+            <div class="product-stagger-card__placeholder" aria-hidden="true">
+              <i class="fa-solid fa-fish"></i>
+              <span>圖片準備中</span>
             </div>
-          ) : null}
-          <div class="px-3 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
+            <div
+              class="product-stagger-card__media-overlay pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-[color-mix(in_srgb,var(--aq-primary-dark)_35%,transparent)] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+          </div>
+          <div class="flex flex-1 flex-col px-3 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
             {!compact && product.categoryLabel ? (
               <p class="mb-1 text-[0.6875rem] font-medium uppercase tracking-wider text-[color-mix(in_srgb,var(--aq-primary)_78%,var(--aq-muted))] sm:text-[0.75rem]">
                 {product.categoryLabel}
               </p>
             ) : null}
-            <h2 class="mb-1 line-clamp-2 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
+            <h2 class="mb-3 line-clamp-2 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
               {product.name}
             </h2>
             {compact && product.excerpt.trim() && product.excerpt.trim() !== product.name.trim() ? (
@@ -72,7 +76,7 @@ const { items, compact = false } = Astro.props as Props;
               </p>
             ) : null}
             {(product.priceLabel || product.stockLabel) ? (
-              <div class="mt-3 flex items-baseline justify-between gap-2 border-t border-[color-mix(in_srgb,var(--aq-ink)_8%,transparent)] pt-2.5">
+              <div class="mt-auto flex items-baseline justify-between gap-2 border-t border-[color-mix(in_srgb,var(--aq-ink)_8%,transparent)] pt-2.5">
                 {product.priceLabel ? <span class="text-sm font-bold text-[var(--aq-primary-dark)]">{product.priceLabel}</span> : null}
                 {product.stockLabel ? <span class:list={['text-xs', product.inStock === false ? 'text-[var(--aq-danger)]' : 'text-[var(--aq-muted)]']}>{product.stockLabel}</span> : null}
               </div>
@@ -141,6 +145,41 @@ const { items, compact = false } = Astro.props as Props;
 </script>
 
 <style is:global>
+  .product-stagger-card {
+    height: 100%;
+  }
+
+  .product-stagger-card__placeholder {
+    display: none;
+  }
+
+  .product-stagger-card__media.is-empty .product-stagger-card__placeholder {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    color: color-mix(in srgb, var(--aq-primary) 55%, var(--aq-muted));
+    background:
+      radial-gradient(circle at 30% 25%, color-mix(in srgb, white 70%, transparent), transparent 55%),
+      linear-gradient(160deg, color-mix(in srgb, var(--aq-mist) 90%, white), color-mix(in srgb, var(--aq-primary) 14%, var(--aq-sand)));
+  }
+
+  .product-stagger-card__placeholder i {
+    font-size: clamp(1.6rem, 6vw, 2.2rem);
+    opacity: 0.55;
+  }
+
+  .product-stagger-card__placeholder span {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    opacity: 0.8;
+  }
+
   /**
    * Layout 全域 `img { max-width:100%; height:auto }` 會讓卡片主圖無法撐滿 4:3 區塊，
    * 底部會露出 `.product-stagger-card__media` 的漸層（看起來像留白）。

@@ -1,6 +1,8 @@
 ---
 import AccountLayout from '../../../layouts/AccountLayout.astro';
 import { formatTwd } from '../../../lib/services/catalog';
+import { attachOrderItemImages, orderThumbUrl } from '../../../lib/services/order-item-images';
+import PushOptIn from '../../../components/PushOptIn.astro';
 import type { ShippingAddressSnapshot } from '../../../lib/services/checkout';
 import {
 	canSubmitBankLastFive,
@@ -12,6 +14,7 @@ import {
 	submitBankTransferLastFive,
 } from '../../../lib/services/payment';
 import { getCustomerByUserId } from '../../../lib/services/customer';
+import { notifyShopEvent } from '../../../lib/services/shop-notify';
 
 export const prerender = false;
 
@@ -31,7 +34,8 @@ if (Astro.request.method === 'POST') {
 				bankLastFive: String(form.get('bankLastFive') ?? ''),
 				note: String(form.get('note') ?? ''),
 			});
-			return Astro.redirect(`/account/orders/${encodeURIComponent(orderNumber)}`);
+			await notifyShopEvent('SHOP_PAYMENT_REPORTED', user.id, orderNumber, Astro.url.origin);
+			return Astro.redirect(`/account/orders/${encodeURIComponent(orderNumber)}?reported=1#order-top`);
 		}
 	} catch (e) {
 		error = e instanceof Error ? e.message : '操作失敗';
@@ -59,6 +63,12 @@ const pageTitle =
 		: order.status === 'PENDING_PAYMENT'
 			? '訂單已建立'
 			: '訂單詳情';
+/** 付款期限：建立後 3 天 */
+const PAYMENT_DAYS = 3;
+const paymentDeadline = new Date(order.createdAt.getTime() + PAYMENT_DAYS * 24 * 60 * 60 * 1000);
+const paymentDeadlineLabel = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(paymentDeadline);
+const isAwaitingPayment = order.status === 'PENDING_PAYMENT';
+const justReported = Astro.url.searchParams.get('reported') === '1' && order.status === 'PAYMENT_SUBMITTED';
 const orderStages = ['建立', '付款', '備貨', '出貨', '完成'];
 const activeStageByStatus: Record<string, number> = {
 	PENDING_PAYMENT: 0,
@@ -71,7 +81,7 @@ const activeStageByStatus: Record<string, number> = {
 const activeStage = activeStageByStatus[order.status] ?? -1;
 const statusDescriptions: Record<string, string> = {
 	PENDING_PAYMENT: '訂單已建立，請完成轉帳付款，並回報轉出帳號末五碼，方便我們核對。',
-	PAYMENT_SUBMITTED: '已收到您回報的付款資料，我們正在核對入帳；核對完成後會安排備貨。',
+	PAYMENT_SUBMITTED: '已收到您的付款資料，盡快核對中，將於出貨時通知您！',
 	PAID: '款項已確認，接下來會為您安排備貨。',
 	PROCESSING: '商品正在備貨中，備妥後會安排出貨。',
 	SHIPPED: '訂單已出貨，請留意物流配送進度。',
@@ -79,11 +89,26 @@ const statusDescriptions: Record<string, string> = {
 	CANCELLED: '訂單已取消；若您已完成轉帳，請聯繫我們協助確認款項。',
 };
 const statusDescription = statusDescriptions[order.status] ?? '您可以在此查看訂單處理進度。';
+/** 商品明細加上小圖（與後台訂單相同） */
+const itemsWithImages = await attachOrderItemImages(order.items);
+/** 商品明細的單價／小計／運費不顯示「NT」，只有總計用 formatTwd 顯示 NT$（與後台一致） */
+const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(amount)}`;
 ---
 
-<AccountLayout title={`訂單 ${order.orderNumber}｜水博館水族`}>
+<AccountLayout title={`訂單 ${order.orderNumber}｜水博館水族`} focus={isAwaitingPayment}>
+	<span id="order-top" aria-hidden="true"></span>
+	{isAwaitingPayment && (
+		<section class="created-hero" aria-labelledby="created-hero-title">
+			<span class="created-hero__icon" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+			<h1 id="created-hero-title">訂單已建立</h1>
+			<p class="created-hero__no">訂單編號 <strong class="mono">{order.orderNumber}</strong></p>
+			<p class="created-hero__amount"><span>應付金額</span><strong>{formatTwd(order.total)}</strong></p>
+			<p class="created-hero__deadline"><i class="fa-regular fa-clock" aria-hidden="true" style="margin-right:.35rem"></i>請於 <strong>{paymentDeadlineLabel}</strong> 前完成轉帳，逾期訂單將會取消</p>
+			{showSubmitForm && submissions.length === 0 && <a class="created-hero__report" href="#report-last-five" onclick="event.preventDefault();document.getElementById('report-last-five')?.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.querySelector('#report-last-five input[name=bankLastFive]')?.focus({preventScroll:true}),450)">已完成轉帳？回報末五碼 <i class="fa-solid fa-arrow-down" aria-hidden="true"></i></a>}
+		</section>
+	)}
 	<header class="head">
-		<h1>{pageTitle}</h1>
+		{!isAwaitingPayment && <h1>{pageTitle}</h1>}
 		<div class:list={['order-status-note', order.status === 'CANCELLED' && 'is-cancelled']} role="status">
 			<i class:list={['fa-solid', order.status === 'CANCELLED' ? 'fa-circle-exclamation' : 'fa-circle-info']} aria-hidden="true"></i>
 			<div><strong>{orderStatusLabel(order.status)}</strong><p>{statusDescription}</p></div>
@@ -94,16 +119,20 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 		{order.status === 'CANCELLED' && <p class="cancelled-status">此訂單已取消</p>}
 	</header>
 
+	{['PENDING_PAYMENT', 'PAYMENT_SUBMITTED', 'PAID', 'PROCESSING'].includes(order.status) && <PushOptIn variant="compact" />}
+
 	{error && <p class="banner error">{error}</p>}
 
 	{
 		order.status !== 'CANCELLED' && (
 			<details class="panel collapsible-panel" open={activeStage < 2}>
 				<summary class="panel-title-row collapsible-panel__summary"><h2>銀行轉帳資訊</h2><i class="fa-solid fa-chevron-down collapsible-panel__chevron" aria-hidden="true"></i></summary>
-				<p>
-					應付金額：<strong>{formatTwd(order.total)}</strong>
-				</p>
-				<dl class="bank">
+				<div class="pay-amount">
+					<span>應付金額</span>
+					<strong class="mono">{formatTwd(order.total)}</strong>
+					<button type="button" class="copy-pill btn-plain" data-copy-text={String(order.total)} aria-label="複製應付金額"><i class="fa-regular fa-copy" aria-hidden="true"></i><span data-copy-label>複製</span></button>
+				</div>
+				<dl class="bank-card">
 					<div>
 						<dt>銀行</dt>
 						<dd>{bank.bankName}</dd>
@@ -114,12 +143,20 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 					</div>
 					<div>
 						<dt>帳號</dt>
-						<dd class="mono">{bank.accountNumber}</dd>
+						<dd>
+							<span class="mono bank-card__account">{bank.accountNumber}</span>
+							{/\d{5,}/.test(bank.accountNumber.replace(/\D/g, '')) && (
+								<button type="button" class="copy-pill btn-plain" data-copy-text={bank.accountNumber.replace(/\D/g, '')} aria-label="複製銀行帳號"><i class="fa-regular fa-copy" aria-hidden="true"></i><span data-copy-label>複製</span></button>
+							)}
+						</dd>
 					</div>
 				</dl>
 				<div class="transfer-reference">
-					<p class="transfer-reference__message"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>請備註訂單編號，方便對帳，感謝合作！</p>
-					<div class="copy-order-number"><span class="copy-order-label">訂單編號</span><strong class="mono">{order.orderNumber}</strong><button type="button" class="copy-order-button" data-copy-order-number={order.orderNumber}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製編號</button><span class="copy-feedback" data-copy-feedback aria-live="polite"></span></div>
+					<p class="transfer-reference__message"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>轉帳備註請填寫訂單編號，方便對帳</p>
+					<div class="transfer-reference__row">
+						<strong class="mono">{order.orderNumber}</strong>
+						<button type="button" class="copy-pill btn-plain" data-copy-text={order.orderNumber} aria-label="複製訂單編號"><i class="fa-regular fa-copy" aria-hidden="true"></i><span data-copy-label>複製編號</span></button>
+					</div>
 				</div>
 			</details>
 		)
@@ -127,17 +164,16 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 
 	{
 		showSubmitForm && (
-			<section class="panel transfer-report-panel" data-transfer-report hidden={submissions.length > 0}>
+			<section id="report-last-five" class="panel transfer-report-panel" data-transfer-report hidden={submissions.length > 0}>
 				<h2>回報轉帳末五碼</h2>
-				<p class="hint">
-					完成轉帳後，請填寫您轉出帳號的末五碼，方便我們核對入帳。確認付款由門市／後台處理。
-				</p>
-				<form method="post" class="submit-form">
+				<p class="hint">轉帳後，輸入<strong>您轉出帳號</strong>的末 5 碼</p>
+				<form method="post" class="submit-form" action={`/account/orders/${encodeURIComponent(order.orderNumber)}`}>
 					<input type="hidden" name="_action" value="submit_last_five" />
 					<input type="hidden" name="submissionId" value={latestSubmission?.id ?? ''} />
-					<label>
-						轉帳帳號末五碼
+					<!-- 一個真正的輸入框疊在五個數字格上：貼上、自動填入、刪除都維持原生行為 -->
+					<div class="digit-field" data-digit-field>
 						<input
+							class="digit-field__input"
 							type="text"
 							name="bankLastFive"
 							inputmode="numeric"
@@ -146,14 +182,17 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 							minlength="5"
 							required
 							value={latestSubmission?.bankLastFive ?? customer?.bankAccountLastFive ?? ''}
-							placeholder="12345"
 							autocomplete="off"
+							aria-label="您轉出帳號的末五碼"
 						/>
-					</label>
-					<label>
-						備註（選填）
-						<input type="text" name="note" value={latestSubmission?.note ?? ''} placeholder="例如：已於今晚轉帳" />
-					</label>
+						<div class="digit-field__boxes" aria-hidden="true">
+							{[0, 1, 2, 3, 4].map(() => <span class="digit-field__box"></span>)}
+						</div>
+					</div>
+					<details class="note-toggle" open={Boolean(latestSubmission?.note)}>
+						<summary><i class="fa-solid fa-plus" aria-hidden="true"></i>加備註（選填）</summary>
+						<input type="text" name="note" value={latestSubmission?.note ?? ''} placeholder="例如：已於今晚轉帳" aria-label="備註（選填）" />
+					</details>
 					<div class="form-actions">
 						<button type="submit" class="btn-primary">{latestSubmission ? '儲存修改' : '送出末五碼'}</button>
 						{latestSubmission && <button type="button" class="cancel-transfer-button" data-cancel-transfer>取消</button>}
@@ -207,15 +246,18 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 		<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
 		<ul class="lines order-lines">
 			{
-				order.items.map((item) => (
+				itemsWithImages.map((item) => (
 					<li>
 						<span class="order-product">
-							{item.productName}
-							{item.skuName && item.skuName !== item.productName && <small>規格：{item.skuName}</small>}
+							<span class="order-thumb" aria-hidden="true">{item.imageUrl ? <img src={orderThumbUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" /> : <i class="fa-solid fa-fish"></i>}</span>
+							<span class="order-product__text"><span class="order-product__name">{item.productName}</span>
+								{item.skuName && item.skuName !== item.productName && <small>規格：{item.skuName}</small>}
+							</span>
 						</span>
-						<span class="order-unit-price">{formatTwd(item.unitPrice)}</span>
+						<span class="order-unit-price">{dollars(item.unitPrice)}</span>
 						<span class="order-quantity">{item.quantity}</span>
-						<strong class="order-line-total">{formatTwd(item.subtotal)}</strong>
+						<span class="order-calc">{dollars(item.unitPrice)} × <b>{item.quantity}</b></span>
+						<strong class="order-line-total">{dollars(item.subtotal)}</strong>
 					</li>
 				))
 			}
@@ -223,17 +265,17 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 		<dl class="totals">
 			<div>
 				<dt>小計</dt>
-				<dd>{formatTwd(order.subtotal)}</dd>
+				<dd>{dollars(order.subtotal)}</dd>
 			</div>
 			<div>
 				<dt>運費</dt>
-				<dd>{formatTwd(order.shippingFee)}</dd>
+				<dd>{dollars(order.shippingFee)}</dd>
 			</div>
 			{
 				order.discount > 0 && (
 					<div>
 						<dt>折扣</dt>
-						<dd>-{formatTwd(order.discount)}</dd>
+						<dd>-{dollars(order.discount)}</dd>
 					</div>
 				)
 			}
@@ -267,6 +309,47 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 			if (copyFeedback) copyFeedback.textContent = '無法複製，請手動選取編號';
 		}
 	});
+	// B6：銀行帳號等「一鍵複製」按鈕
+	document.querySelectorAll<HTMLButtonElement>('[data-copy-text]').forEach((button) => {
+		const label = button.querySelector<HTMLElement>('[data-copy-label]');
+		const originalLabel = label?.textContent ?? '複製';
+		let resetTimer = 0;
+		button.addEventListener('click', async () => {
+			window.clearTimeout(resetTimer);
+			try {
+				await navigator.clipboard.writeText(button.dataset.copyText ?? '');
+				if (label) label.textContent = '已複製';
+				button.classList.add('is-copied');
+			} catch {
+				if (label) label.textContent = '請手動複製';
+			}
+			resetTimer = window.setTimeout(() => {
+				if (label) label.textContent = originalLabel;
+				button.classList.remove('is-copied');
+			}, 2000);
+		});
+	});
+	// 末五碼：把真正輸入框的內容顯示到五個數字格，並標出目前要輸入的格子
+	document.querySelectorAll<HTMLElement>('[data-digit-field]').forEach((field) => {
+		const input = field.querySelector<HTMLInputElement>('input')!;
+		const boxes = Array.from(field.querySelectorAll<HTMLElement>('.digit-field__box'));
+		const render = () => {
+			const digits = input.value.replace(/\D/g, '').slice(0, 5);
+			if (digits !== input.value) input.value = digits;
+			const focused = document.activeElement === input;
+			boxes.forEach((box, index) => {
+				box.textContent = digits[index] ?? '';
+				box.classList.toggle('is-filled', index < digits.length);
+				box.classList.toggle('is-active', focused && index === Math.min(digits.length, 4));
+			});
+			field.classList.toggle('is-complete', digits.length === 5);
+		};
+		input.addEventListener('input', render);
+		input.addEventListener('focus', render);
+		input.addEventListener('blur', render);
+		input.form?.addEventListener('reset', () => window.setTimeout(render));
+		render();
+	});
 	const editTransferButton = document.querySelector<HTMLButtonElement>('[data-edit-transfer]');
 	const transferReport = document.querySelector<HTMLElement>('[data-transfer-report]');
 	const cancelTransferButton = document.querySelector<HTMLButtonElement>('[data-cancel-transfer]');
@@ -282,10 +365,19 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 		transferReport.querySelector<HTMLFormElement>('.submit-form')?.reset();
 		transferReport.hidden = true;
 	});
+	// 回報成功後：移除網址參數，避免重新整理又出現提示
+	const reportedUrl = new URL(window.location.href);
+	if (reportedUrl.searchParams.has('reported')) { reportedUrl.searchParams.delete('reported'); reportedUrl.hash = ''; history.replaceState(history.state, '', reportedUrl); window.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior }); }
+	// 從上一頁返回時（瀏覽器快取），把卡住的「送出中…」按鈕還原
+	window.addEventListener('pageshow', (event) => {
+		if (!event.persisted) return;
+		const button = transferForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
+		if (button) { button.disabled = false; button.textContent = button.dataset.label ?? button.textContent; }
+	});
 	transferForm?.addEventListener('submit', () => {
 		const submitButton = transferForm.querySelector<HTMLButtonElement>('button[type="submit"]');
 		if (!submitButton) return;
-		submitButton.disabled = true;
+		submitButton.dataset.label = submitButton.textContent ?? ''; submitButton.disabled = true;
 		submitButton.textContent = '送出中…';
 	});
 </script>
@@ -395,6 +487,26 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 		margin-top: 0.75rem;
 		max-width: 22rem;
 	}
+	/* 回報末五碼：五個大數字格（真正的輸入框透明地疊在上面） */
+	.transfer-report-panel .hint{margin:.25rem 0 0;font-size:.9rem}
+	.transfer-report-panel .hint strong{color:var(--aq-primary-dark)}
+	.transfer-report-panel .submit-form{max-width:none;gap:.85rem}
+	.digit-field{position:relative;width:100%;max-width:330px;margin-top:.2rem}
+	.digit-field__boxes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+	.digit-field__box{display:grid;place-items:center;height:62px;border:2px solid #dbe3df;border-radius:12px;background:#f8faf9;color:var(--aq-ink);font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;transition:border-color .15s,background .15s,box-shadow .15s}
+	.digit-field__box.is-filled{border-color:color-mix(in srgb,var(--aq-primary) 45%,#dbe3df);background:#fff}
+	.digit-field__box.is-active{border-color:var(--aq-primary);background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--aq-primary) 14%,transparent)}
+	.digit-field__box.is-active:empty::after{content:'';width:2px;height:28px;background:var(--aq-primary);animation:digit-caret 1s steps(1) infinite}
+	@keyframes digit-caret{50%{opacity:0}}
+	@media (prefers-reduced-motion:reduce){.digit-field__box.is-active:empty::after{animation:none}}
+	.digit-field.is-complete .digit-field__box{border-color:var(--aq-primary)}
+	.digit-field .digit-field__input{position:absolute!important;inset:0!important;z-index:1;width:100%!important;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:transparent!important;caret-color:transparent;font-size:16px!important;letter-spacing:0;opacity:.01;cursor:text}
+	.note-toggle summary{display:inline-flex;align-items:center;gap:.35rem;color:var(--aq-muted);font-size:.85rem;font-weight:650;cursor:pointer;list-style:none}
+	.note-toggle summary::-webkit-details-marker{display:none}
+	.note-toggle summary i{font-size:.7rem}
+	.note-toggle[open] summary{margin-bottom:.45rem}
+	.note-toggle[open] summary i{transform:rotate(45deg)}
+	.transfer-report-panel .form-actions>button[type=submit]{min-height:52px;font-size:1.05rem}
 	.form-actions{display:flex;gap:.6rem}
 	.form-actions>button{flex:1}
 	.cancel-transfer-button{border:1px solid var(--aq-line)!important;background:#fff!important;color:var(--aq-primary-dark)!important;box-shadow:none!important}
@@ -549,10 +661,73 @@ const statusDescription = statusDescriptions[order.status] ?? '您可以在此�
 	.copy-order-button{display:inline-flex;min-height:38px;align-items:center;justify-content:center;gap:.4rem;margin-left:auto;padding:.45rem .8rem;border:1px solid var(--aq-primary);border-radius:8px;background:var(--aq-primary);color:#fff;font:inherit;font-size:.82rem;font-weight:700;cursor:pointer;transition:background-color .15s ease,border-color .15s ease}
 	.copy-order-button:hover{border-color:var(--aq-primary-dark);background:var(--aq-primary-dark)}
 	.copy-feedback{color:var(--aq-primary-dark);font-size:.8rem}
+	/* 銀行轉帳資訊：金額突出、資料整理成一張卡片、複製鈕統一為小膠囊 */
+	.pay-amount{display:flex;align-items:center;gap:.6rem;margin:.15rem 0 .85rem}
+	.pay-amount>span{color:var(--aq-muted);font-size:.85rem;font-weight:650}
+	.pay-amount strong{color:var(--aq-primary-dark);font-size:1.45rem;font-weight:800;letter-spacing:0}
+	.pay-amount .copy-pill{margin-left:auto}
+	.bank-card{margin:0;border:1px solid #e8ebe6;border-radius:12px;background:#fff;overflow:hidden}
+	.bank-card>div{display:flex;align-items:center;gap:.75rem;min-height:46px;padding:.5rem .8rem}
+	.bank-card>div+div{border-top:1px solid #f0f2ef}
+	.bank-card dt{flex:none;width:2.6rem;margin:0;color:var(--aq-muted);font-size:.85rem}
+	.bank-card dd{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex:1;min-width:0;margin:0;color:var(--aq-ink);font-weight:650}
+	/* 帳號不截斷、不從「-」斷行；太窄時複製鈕自動換到下一行 */
+	.bank-card dd:has(.bank-card__account){flex-wrap:wrap}
+	.bank-card__account{white-space:nowrap;font-size:.95rem;letter-spacing:0}
+	.copy-pill{display:inline-flex;align-items:center;gap:.3rem;flex:none;min-height:30px;padding:0 .7rem;border:1px solid color-mix(in srgb,var(--aq-primary) 35%,transparent);border-radius:999px;background:#fff;color:var(--aq-primary-dark);font:inherit;font-size:.8rem;font-weight:700;white-space:nowrap;cursor:pointer;transition:background .15s,color .15s}
+	.copy-pill:hover{background:color-mix(in srgb,var(--aq-primary) 8%,white)}
+	.copy-pill.is-copied{border-color:var(--aq-primary);background:var(--aq-primary);color:#fff}
+	.transfer-reference{margin-top:.75rem;padding:.7rem .8rem}
+	.transfer-reference__message{font-size:.84rem}
+	.transfer-reference__row{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin-top:.5rem;padding:.45rem .5rem .45rem .7rem;border:1px solid #e2ebe8;border-radius:9px;background:#fff}
+	.transfer-reference__row strong{font-size:1rem;letter-spacing:.04em}
 	.created-at{margin:1rem 0 0;text-align:right;color:var(--aq-muted);font-size:.82rem}
 	@media(max-width:520px){.order-progress{margin:1rem 0 .25rem}.progress-step{font-size:.7rem}.progress-dot{width:26px;height:26px}.progress-connector{top:12px;left:calc(50% + 15px);width:calc(100% - 30px)}.created-at{text-align:left}}
 	@media(max-width:520px){.cancellation-contact{grid-template-columns:1fr;row-gap:.6rem}.line-contact-button{justify-self:start}}
 	@media(max-width:520px){.order-items-header,.order-lines li{grid-template-columns:minmax(0,1fr) 66px 38px 72px;column-gap:.35rem}.order-items-header{font-size:.7rem}.order-unit-price,.order-quantity,.order-line-total{font-size:.75rem}}
 	@media(max-width:520px){.transfer-reference{margin-top:.8rem;padding:.72rem}.transfer-reference__message{font-size:.84rem}.copy-order-number{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .6rem;margin-top:.55rem;padding:.55rem}.copy-order-label{grid-column:1/-1}.copy-order-number strong{grid-column:1;grid-row:2;min-width:0;font-size:.92rem;overflow-wrap:anywhere}.copy-order-button{grid-column:2;grid-row:2;min-height:36px;margin:0;padding:.4rem .6rem;font-size:.76rem}.copy-feedback{grid-column:1/-1}}
 	@media(max-width:520px){.subs li{grid-template-columns:minmax(0,1fr) auto;gap:.45rem .6rem}.subs li>.muted{grid-column:1;grid-row:2;overflow-wrap:anywhere}.subs li>.edit-transfer-button{grid-column:2;grid-row:2;min-height:36px!important;padding:.4rem .65rem!important;font-size:.78rem}}
+
+	/* B6：銀行帳號複製 */
+	.account-number { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.6rem; }
+	.account-number .copy-inline { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 32px; padding: 0 0.7rem; border: 1px solid color-mix(in srgb, var(--aq-primary) 35%, transparent); border-radius: 999px; background: #fff; color: var(--aq-primary-dark); font: inherit; font-family: system-ui, -apple-system, 'Noto Sans TC', sans-serif; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
+	.account-number .copy-inline:hover { background: color-mix(in srgb, var(--aq-primary) 8%, white); }
+	.account-number .copy-inline.is-copied { border-color: var(--aq-primary); background: var(--aq-primary); color: #fff; }
+	/* 剛建立訂單：成功區塊（大勾勾＋應付金額＋付款期限） */
+	.created-hero { display: grid; justify-items: center; gap: .35rem; margin: 0 0 1rem; padding: 1.5rem 1rem 1.25rem; border: 1px solid #c8e8d3; border-radius: var(--aq-radius, 14px); background: linear-gradient(180deg, #eef8f2, #fff); text-align: center; }
+	.created-hero__icon { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: .25rem; border-radius: 50%; background: #21834b; color: #fff; font-size: 1.4rem; }
+	.created-hero h1 { margin: 0; font-size: 1.5rem; }
+	.created-hero__no { margin: 0; color: var(--aq-muted); font-size: .85rem; }
+	.created-hero__amount { display: grid; gap: .1rem; margin: .5rem 0 0; }
+	.created-hero__amount span { color: var(--aq-muted); font-size: .82rem; }
+	.created-hero__amount strong { color: var(--aq-ink); font-size: 2rem; line-height: 1.15; font-variant-numeric: tabular-nums; }
+	.created-hero__deadline { display: block; max-width: 100%; margin: .5rem 0 0; padding: .5rem .85rem; border-radius: 12px; text-wrap: balance; background: #fff4e5; color: #8a5209; font-size: .84rem; line-height: 1.4; }
+	.created-hero__deadline strong { color: #6d3f05; }
+	.pay-deadline { display: flex; align-items: center; gap: .4rem; margin: -.25rem 0 .75rem; color: #8a5209; font-size: .85rem; font-weight: 650; }
+	.created-hero .created-hero__report, .created-hero .created-hero__report:hover { color: #fff; }
+	.created-hero__report { display: inline-flex; align-items: center; justify-content: center; gap: .4rem; min-height: 44px; margin-top: .6rem; padding: 0 1.1rem; border-radius: 999px; background: var(--aq-primary); color: #fff; font-size: .9rem; font-weight: 750; text-decoration: none; }
+	.created-hero__report:hover { background: var(--aq-primary-dark); }
+	#report-last-five { scroll-margin-top: 80px; }
+	:global(html) { scroll-behavior: smooth; }
+	.reported-banner { display: flex; align-items: center; gap: .55rem; margin: 0 0 1rem; padding: .85rem 1rem; border: 1px solid #c8e8d3; border-radius: 14px; background: #eef8f2; color: #1d6a43; font-size: .95rem; font-weight: 750; }
+	.reported-banner i { font-size: 1.15rem; }
+	#order-top { display: block; scroll-margin-top: 90px; }
+	/* 商品明細：與後台訂單相同 —— 電腦四欄表格加小圖；手機改成小卡（左圖撐滿，右邊名稱／規格／單價 × 數量＋小計） */
+	.order-product { display: flex; align-items: center; gap: .7rem; }
+	.order-product__text { min-width: 0; }
+	.order-product small { display: block; margin-top: .15rem; color: var(--aq-muted); font-size: .78rem; }
+	.order-thumb { flex: none; display: grid; place-items: center; width: 48px; height: 48px; overflow: hidden; border: 1px solid var(--aq-line); border-radius: 10px; background: #f2f6f4; color: #9ab3ad; font-size: 1rem; }
+	.order-thumb img { width: 100%; height: 100%; object-fit: cover; }
+	.order-calc { display: none; }
+	@media (max-width: 520px) {
+		.order-items-header, .order-unit-price, .order-quantity { display: none; }
+		.order-lines li { grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto; grid-template-areas: "thumb name name" "thumb spec spec" "thumb calc total"; align-items: center; row-gap: .2rem; column-gap: .75rem; padding: 12px 0; }
+		.order-product, .order-product__text { display: contents; }
+		.order-thumb { grid-area: thumb; align-self: stretch; width: 72px; height: auto; min-height: 72px; }
+		.order-product__name { grid-area: name; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+		.order-product small { grid-area: spec; margin: 0; }
+		.order-calc { grid-area: calc; display: block; color: var(--aq-muted); font-size: .85rem; font-variant-numeric: tabular-nums; }
+		.order-calc b { color: var(--aq-ink); }
+		.order-line-total { grid-area: total; text-align: right; font-size: .95rem; }
+	}
 </style>

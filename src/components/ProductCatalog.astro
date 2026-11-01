@@ -161,6 +161,11 @@ Astro.response.headers.set(
 	.catalog-sort-menu button:hover,.catalog-sort-menu button[aria-pressed='true'] { background:var(--aq-primary-soft); color:var(--aq-primary-dark); }
 	.catalog-sort-menu i { font-size:12px; }
 	@media(max-width:360px) { .catalog-input--search { padding-right:68px; }.catalog-search-submit { min-width:58px; padding-inline:10px; } }
+
+	/* B9：桌面版搜尋列與下方分類標籤靠左對齊 */
+	@media (min-width: 641px) {
+		.catalog-toolbar { margin-left: 0; margin-right: 0; }
+	}
 </style>
 <script>
 	document.addEventListener('click', (event) => { document.querySelectorAll<HTMLDetailsElement>('.catalog-sort[open]').forEach((sort) => { if (event.target instanceof Node && !sort.contains(event.target)) sort.open = false; }); });

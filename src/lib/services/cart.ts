@@ -298,6 +298,64 @@ export async function updateCartItemQuantity(
 	return getCartView(userId);
 }
 
+/**
+ * 購物車內變更規格：只能換成同一商品的其他規格。
+ * 若購物車已有該規格，數量合併到那一列並移除原本這列。
+ */
+export async function changeCartItemSku(
+	userId: string,
+	cartItemId: string,
+	productSkuId: string,
+): Promise<CartView> {
+	const cart = await ensureActiveCart(userId);
+	const db = getDb();
+
+	const [item] = await db
+		.select({ id: cartItems.id, quantity: cartItems.quantity, productSkuId: cartItems.productSkuId, productId: productSkus.productId })
+		.from(cartItems)
+		.innerJoin(productSkus, eq(cartItems.productSkuId, productSkus.id))
+		.where(and(eq(cartItems.id, cartItemId), eq(cartItems.cartId, cart.id)))
+		.limit(1);
+	if (!item) throw new Error('找不到購物車項目');
+	if (item.productSkuId === productSkuId) return getCartView(userId);
+
+	const [sku] = await db
+		.select({
+			productId: productSkus.productId,
+			isActive: sql<boolean>`${productSkus.isActive} AND ${productSkus.saleEnabled}`,
+			unitPrice: productSkus.sellingPrice,
+			productActive: products.isActive,
+			productOnline: products.isOnline,
+		})
+		.from(productSkus)
+		.innerJoin(products, eq(productSkus.productId, products.id))
+		.where(eq(productSkus.id, productSkuId))
+		.limit(1);
+	if (!sku || sku.productId !== item.productId) throw new Error('只能變更為同一商品的其他規格');
+	if (!sku.isActive || !sku.productActive || !sku.productOnline || sku.unitPrice <= 0) throw new Error('此規格目前無法購買');
+
+	const [existing] = await db
+		.select()
+		.from(cartItems)
+		.where(and(eq(cartItems.cartId, cart.id), eq(cartItems.productSkuId, productSkuId)))
+		.limit(1);
+	const nextQty = (existing?.quantity ?? 0) + item.quantity;
+	const available = await stockForSku(productSkuId);
+	if (available >= 0 && nextQty > available) {
+		throw new Error(available <= 0 ? '此規格目前無庫存' : `此規格庫存不足（可售 ${available}）`);
+	}
+
+	if (existing) {
+		await db.update(cartItems).set({ quantity: nextQty }).where(eq(cartItems.id, existing.id));
+		await db.delete(cartItems).where(eq(cartItems.id, item.id));
+	} else {
+		await db.update(cartItems).set({ productSkuId }).where(eq(cartItems.id, item.id));
+	}
+	await db.update(carts).set({ updatedAt: new Date() }).where(eq(carts.id, cart.id));
+
+	return getCartView(userId);
+}
+
 export async function removeCartItem(
 	userId: string,
 	cartItemId: string,
