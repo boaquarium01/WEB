@@ -177,3 +177,38 @@ button.btn-primary,
 button.btn-secondary {
   appearance: none;
 }
+
+/* LINE／Google 登入：按下後按鈕本身顯示前往中的動畫（光澤掃過＋右側轉圈），不另外跳出文字列 */
+[data-provider].is-redirecting {
+  position: relative;
+  overflow: hidden;
+  opacity: 1 !important;
+  color: inherit;
+  box-shadow: 0 0 0 3px rgba(21, 106, 102, 0.12);
+  cursor: progress !important;
+}
+[data-provider].is-redirecting::before {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 25%, color-mix(in srgb, currentColor 22%, transparent) 50%, transparent 75%);
+  transform: translateX(-100%);
+  animation: social-sheen 1.1s ease-in-out infinite;
+  content: '';
+  pointer-events: none;
+}
+[data-provider].is-redirecting::after {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: social-spin 0.7s linear infinite;
+  content: '';
+}
+@keyframes social-sheen { to { transform: translateX(100%); } }
+@keyframes social-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  [data-provider].is-redirecting::before { animation: none; display: none; }
+  [data-provider].is-redirecting::after { animation-duration: 2s; }
+}

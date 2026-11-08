@@ -111,6 +111,8 @@ const primarySubmission = (payment?.status === 'PAID' ? submissions.find((submis
 const previousSubmissions = submissions.filter((submission) => submission.id !== primarySubmission?.id);
 const paymentHeadingStatus = payment ? (payment.status === 'PAID' ? '已核對' : paymentStatusLabel(payment.status)) : null;
 const compactPaymentTime = (date: Date) => date.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+/** 會員管理頁（累積消費、備註） */
+const memberHref = order.userId ? `${base}/shop/members?userId=${encodeURIComponent(order.userId)}` : null;
 const memberOrdersHref = order.customerEmail
 	? `${base}/shop/orders?userId=${encodeURIComponent(order.userId)}`
 	: null;
@@ -195,8 +197,11 @@ const canCancel = [
 		<a class="commerce-back-link" href={`${base}/shop/orders`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>返回訂單管理</a>
 		<div class="order-identity">
 			<div class="order-title-row"><h1>{order.orderNumber}</h1><span class={`order-status status--${order.status.toLowerCase()}`}>{orderStatusLabel(order.status)}</span></div>
-			<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
-			<p class="current-summary"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>下單時間　{formatDateTime(order.createdAt)}</span></p>
+			{/* 會員名稱（點進會員資料：累積消費、備註）＋下單時間 */}
+			<div class="customer-row">
+				{memberHref ? <a class="member-link" href={memberHref}><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><i class="fa-solid fa-chevron-right member-link__go" aria-hidden="true"></i></a> : <span class="member-link"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong></span>}
+				<time class="order-created" datetime={order.createdAt.toISOString()}><i class="fa-regular fa-calendar" aria-hidden="true"></i>{formatDateTime(order.createdAt)}</time>
+			</div>
 		</div>
 	</header>
 
@@ -530,7 +535,12 @@ const canCancel = [
 	.meta { margin: 0; flex-wrap: wrap; font-size: 14px; }
 	.meta strong { color: #40575c; }
 	.member-orders-link { display: inline-flex; align-items: center; gap: 7px; color: var(--commerce-primary-dark); font-size: 14px; font-weight: 700; text-decoration: none; }
-	.current-summary { display: flex; align-items: center; gap: 8px; margin: 10px 0 0; color: #76888a; font-size: 13px; }
+	.member-link { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 12px 0 10px; border: 1px solid #dce9e6; border-radius: 999px; background: #f4f9f8; color: var(--commerce-ink); font-size: 15px; text-decoration: none; }
+	a.member-link:hover { border-color: var(--commerce-primary); color: var(--commerce-primary-dark); }
+	.member-link i:first-child { color: var(--commerce-primary); }
+	.member-link__go { color: #9fb2b0; font-size: 11px; }
+	.order-created { display: inline-flex; align-items: center; gap: 6px; color: #76888a; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.order-identity > .member-orders-link { display: inline-flex; margin-top: 10px; }
 	.actions-bar { margin: 12px 0 18px; }
 	.btn-payment,.btn-shipping,.btn-danger,.btn-complete { min-height: 42px; padding: 9px 15px; font-size: 14px; }
 	.status-panel { margin-bottom: 16px; }
@@ -556,7 +566,7 @@ const canCancel = [
 	.lines li { font-size: 15px; }
 	.lines small { margin-top: 4px; font-size: 13px; }
 	.totals { font-size: 15px; }
-	@media (max-width: 720px) { .heading-row { align-items: flex-start; }.order-identity { padding: 12px; }.customer-row { align-items: flex-start; flex-direction: column; gap: 8px; }.current-summary { align-items: flex-start; }.order-progress { grid-template-columns: 1fr; gap: 12px; padding-top: 0; }.order-progress li { grid-template-columns: 28px minmax(0,1fr); grid-template-rows: 26px auto; justify-items: stretch; align-items: center; column-gap: 10px; row-gap: 3px; text-align: left; }.order-progress li:not(:last-child)::after { top: 27px; bottom: -25px; left: 13px; right: auto; width: 2px; height: auto; }.order-progress li .progress-marker { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }.order-progress li strong { grid-column: 2; grid-row: 1; align-self: end; }.order-progress li time { grid-column: 2; grid-row: 2; min-height: 0; white-space: normal; }.order-panels { grid-template-columns: 1fr; gap: 0; }.actions-bar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }.actions-bar form,.actions-bar button { width: 100%; }.actions-bar form button { min-height: 44px; } }
+	@media (max-width: 720px) { .heading-row { align-items: flex-start; }.order-identity { padding: 12px; }.customer-row { flex-wrap: wrap; gap: 8px 12px; }.order-progress { grid-template-columns: 1fr; gap: 12px; padding-top: 0; }.order-progress li { grid-template-columns: 28px minmax(0,1fr); grid-template-rows: 26px auto; justify-items: stretch; align-items: center; column-gap: 10px; row-gap: 3px; text-align: left; }.order-progress li:not(:last-child)::after { top: 27px; bottom: -25px; left: 13px; right: auto; width: 2px; height: auto; }.order-progress li .progress-marker { grid-column: 1; grid-row: 1 / span 2; justify-self: center; }.order-progress li strong { grid-column: 2; grid-row: 1; align-self: end; }.order-progress li time { grid-column: 2; grid-row: 2; min-height: 0; white-space: normal; }.order-panels { grid-template-columns: 1fr; gap: 0; }.actions-bar { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }.actions-bar form,.actions-bar button { width: 100%; }.actions-bar form button { min-height: 44px; } }
 
 	.address-details .order-note { display:flex; align-items:baseline; gap:8px; margin-top:3px; padding:8px 10px; border-left:3px solid #d4a14a; border-radius:6px; background:#fff6e5; color:#805a25; overflow-wrap:anywhere; }
 	.order-note > b { flex:none; font-size:13px; }

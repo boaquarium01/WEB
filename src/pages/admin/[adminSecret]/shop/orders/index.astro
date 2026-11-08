@@ -100,10 +100,8 @@ const filters = [
 
 <AdminLayout title="訂單管理">
 	<header class="ol-head">
-		<div class="ol-title">
-			<h1>{memberUserId ? `${rows[0]?.customerName ?? '會員'}的訂單紀錄` : '訂單管理'}</h1>
-			<p class="ol-summary">{rows.length} 筆{rows.length > 0 && <> · 合計 <strong>{formatTwd(visibleTotal)}</strong></>}</p>
-		</div>
+		{/* 標題列已移除；保留給螢幕閱讀器的頁面標題 */}
+		<h1 class="visually-hidden">{memberUserId ? `${rows[0]?.customerName ?? '會員'}的訂單紀錄` : '訂單管理'}</h1>
 		<nav class="ol-tabs" aria-label="依訂單狀態篩選">
 			{filters.map((f) => (
 				<a href={orderListUrl(f.value || null)} class:list={['ol-tab', { active: (status ?? '') === f.value, urgent: f.urgent && f.count > 0 }]} aria-current={(status ?? '') === f.value ? 'page' : undefined}>

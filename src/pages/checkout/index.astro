@@ -307,10 +307,33 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	shippingLabels.forEach((label) => label.querySelector('input')?.addEventListener('change', updateShippingTotal));
 	const checkoutForm = document.querySelector<HTMLFormElement>('form.checkout');
 	const confirmButton = checkoutForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
-	let confirmReadyToSubmit = false;
 	// 建立訂單需要幾秒：按鈕改成「建立訂單中…」並蓋上半透明提示，避免顧客以為沒反應而重複按
 	const confirmLabel = confirmButton?.innerHTML ?? '';
 	let submittingOverlay: HTMLElement | null = null;
+	// 步驟進度：每步至少顯示一段時間，訂單建立完成後把剩下的步驟跑完才跳頁
+	const STEP_MS = 650;
+	let steps: Element[] = [];
+	let stepIndex = 0;
+	let stepTimer = 0;
+	const advanceStep = () => {
+		if (stepIndex >= steps.length - 1) return false;
+		steps[stepIndex]?.classList.replace('is-active', 'is-done');
+		stepIndex += 1;
+		steps[stepIndex]?.classList.add('is-active');
+		return true;
+	};
+	const finishSteps = () => new Promise<void>((resolve) => {
+		window.clearInterval(stepTimer);
+		const tick = () => {
+			if (advanceStep()) { window.setTimeout(tick, 280); return; }
+			steps[stepIndex]?.classList.replace('is-active', 'is-done');
+			const title = submittingOverlay?.querySelector('[data-step-title]');
+			if (title) title.textContent = '訂單建立完成';
+			submittingOverlay?.querySelector('.checkout-progress')?.classList.add('is-complete');
+			window.setTimeout(resolve, 450);
+		};
+		tick();
+	});
 	const showSubmitting = () => {
 		if (!confirmButton) return;
 		confirmButton.disabled = true;
@@ -320,19 +343,37 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		// 等待時顯示步驟進度與小魚動畫，而不是只有轉圈圈
 		submittingOverlay.innerHTML = '<div class="checkout-submitting__card"><div class="checkout-fishbowl" aria-hidden="true"><i class="fa-solid fa-fish"></i><span></span><span></span><span></span></div><strong data-step-title>正在建立訂單</strong><ol class="checkout-steps"><li class="is-active">確認商品與庫存</li><li>保留您的商品</li><li>建立訂單編號</li><li>準備付款資訊</li></ol><div class="checkout-progress"><span></span></div><small>請不要關閉或重新整理頁面</small></div>';
 		document.body.append(submittingOverlay);
-		const steps = Array.from(submittingOverlay.querySelectorAll('.checkout-steps li'));
-		let stepIndex = 0;
-		const stepTimer = window.setInterval(() => {
-			if (stepIndex >= steps.length - 1) { window.clearInterval(stepTimer); return; }
-			steps[stepIndex]?.classList.replace('is-active', 'is-done');
-			stepIndex += 1;
-			steps[stepIndex]?.classList.add('is-active');
-		}, 900);
+		steps = Array.from(submittingOverlay.querySelectorAll('.checkout-steps li'));
+		stepIndex = 0;
+		// 最後一步留著轉圈，等伺服器回應
+		stepTimer = window.setInterval(() => { if (stepIndex >= steps.length - 2 || !advanceStep()) window.clearInterval(stepTimer); }, STEP_MS);
+	};
+	// 在背景送出訂單；成功後跑完步驟再前往訂單頁，失敗時顯示伺服器回傳的錯誤頁
+	const placeOrder = async () => {
+		if (!checkoutForm || !confirmButton) return;
+		showSubmitting();
+		const minimumWait = new Promise((resolve) => window.setTimeout(resolve, STEP_MS * 2));
+		try {
+			const response = await fetch(checkoutForm.action || window.location.href, { method: 'POST', body: new FormData(checkoutForm), credentials: 'same-origin' });
+			const finalUrl = new URL(response.url, window.location.href);
+			if (response.redirected && finalUrl.pathname.startsWith('/account/orders/')) {
+				await minimumWait;
+				await finishSteps();
+				window.location.assign(finalUrl.pathname + finalUrl.search);
+				return;
+			}
+			const html = await response.text();
+			document.open();
+			document.write(html);
+			document.close();
+		} catch {
+			// 連線中斷時不重送，避免重複下單；帶顧客到「我的訂單」確認是否已成立
+			window.location.assign('/account/orders');
+		}
 	};
 	// 從下一頁按「上一頁」回來時（瀏覽器快取），還原按鈕
 	window.addEventListener('pageshow', (event) => {
 		if (!event.persisted || !confirmButton) return;
-		confirmReadyToSubmit = false;
 		confirmButton.disabled = false;
 		confirmButton.removeAttribute('aria-busy');
 		confirmButton.classList.remove('is-confirming');
@@ -340,18 +381,14 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		submittingOverlay?.remove();
 	});
 	checkoutForm?.addEventListener('submit', (event) => {
-		if (confirmReadyToSubmit || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !confirmButton) {
-			if (!event.defaultPrevented) showSubmitting();
-			return;
-		}
+		if (event.defaultPrevented) return;
 		event.preventDefault();
-		if (confirmButton.classList.contains('is-confirming')) return;
+		if (!confirmButton || confirmButton.classList.contains('is-confirming') || confirmButton.disabled) return;
+		if (!checkoutForm.reportValidity()) return;
 		confirmButton.classList.add('is-confirming');
 		confirmButton.setAttribute('aria-busy', 'true');
-		window.setTimeout(() => {
-			confirmReadyToSubmit = true;
-			checkoutForm.requestSubmit(confirmButton);
-		}, 240);
+		const delay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 240;
+		window.setTimeout(() => { void placeOrder(); }, delay);
 	});
 </script>
 
@@ -630,4 +667,5 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	@keyframes checkout-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 	:global(.checkout-submitting__card small) { color: var(--aq-muted); font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { :global(.checkout-spinner) { animation-duration: 2s; } :global(.checkout-fishbowl i), :global(.checkout-fishbowl span), :global(.checkout-progress span) { animation: none; } }
+	:global(.checkout-progress.is-complete span) { width: 100%; animation: none; transform: none; transition: width .3s ease; }
 </style>

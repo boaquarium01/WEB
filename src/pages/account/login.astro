@@ -71,12 +71,16 @@ const registerHref = next && next !== '/account' ? `/account/register?next=${enc
 	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
 		button.addEventListener('click', async () => {
 			button.disabled = true;
-			setStatus('正在前往授權…');
+			// 不另外跳出文字列，改由按鈕本身顯示前往中的動畫
+			button.classList.add('is-redirecting');
+			button.setAttribute('aria-busy', 'true');
 			try {
 				const { authClient } = await import('../../lib/auth/client');
 				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: `/account/complete-profile?next=${encodeURIComponent(next)}` });
 				if (result.error) throw new Error();
 			} catch {
+				button.classList.remove('is-redirecting');
+				button.removeAttribute('aria-busy');
 				setStatus('授權失敗或已取消，請再試一次。', true);
 				button.disabled = false;
 			}
