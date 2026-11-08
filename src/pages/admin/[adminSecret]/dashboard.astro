@@ -211,6 +211,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
   <script>
     import { applyBodyScrollLock, releaseBodyScrollLock } from '../../../scripts/scrollLock';
     import { askConfirm, askText } from '../../../scripts/confirmSheet';
+    import { compressImage, compressImages } from '../../../scripts/compressImage';
     import { plainTextToStrapiBlocks, strapiBlocksToPlainText } from '../../../lib/strapi/blocks';
     import { normalizeSpecifications, generateSpecificationCombinations } from '../../../lib/sanity/specifications';
     import { validateQuantityPriceTiers } from '../../../lib/services/quantity-pricing';
@@ -1502,8 +1503,12 @@ const shopProductsHref = `${shopAdminHref}/products`;
     }
 
     async function uploadBatch(files) {
+      // 上傳前先在瀏覽器壓縮（長邊 2000px、WebP），上傳更快也省 Sanity 空間
+      setStatus('壓縮圖片中…');
+      const { files: ready, before, after } = await compressImages(files);
+      if (after < before) setStatus(`圖片已壓縮 ${(before / 1048576).toFixed(1)}MB → ${(after / 1048576).toFixed(1)}MB，上傳中…`);
       const fd = new FormData();
-      files.forEach((f) => fd.append('files', f, safeUploadName(f)));
+      ready.forEach((f) => fd.append('files', f, safeUploadName(f)));
       const url = adminBackend === 'sanity' ? '/api/admin/sanity-upload' : '/api/admin/strapi-proxy?path=%2Fapi%2Fupload';
       const res = await fetch(url, { method: 'POST', body: fd, headers: authHeaders() });
       const payload = await res.json().catch(() => null);
@@ -1512,8 +1517,9 @@ const shopProductsHref = `${shopAdminHref}/products`;
     }
 
     async function uploadOne(file) {
+      const ready = await compressImage(file);
       const fd = new FormData();
-      fd.append('files', file, safeUploadName(file));
+      fd.append('files', ready, safeUploadName(ready));
       const url = adminBackend === 'sanity' ? '/api/admin/sanity-upload' : '/api/admin/strapi-proxy?path=%2Fapi%2Fupload';
       const res = await fetch(url, { method: 'POST', body: fd, headers: authHeaders() });
       const payload = await res.json().catch(() => null);
