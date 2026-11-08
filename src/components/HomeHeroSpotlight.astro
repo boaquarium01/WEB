@@ -6,6 +6,8 @@ export type HeroSpotlightItem = {
   /** 後台仍可有分類資料，畫面不顯示 */
   categoryLabel?: string;
   imageUrl?: string | null;
+  /** 售價（資料庫）；查不到時不顯示 */
+  priceLabel?: string | null;
 };
 
 type Props = {
@@ -47,7 +49,7 @@ const n = items.length;
               <h3 class="spotlight__name">{p.name}</h3>
               <p class="spotlight__excerpt">{p.excerpt}</p>
               <span class="spotlight__linkline">
-                進一步了解
+                查看商品促銷價
                 <span class="spotlight__linkline-mark" aria-hidden="true" />
               </span>
             </div>
@@ -79,7 +81,7 @@ const n = items.length;
               <h3 class="spotlight__name">{p.name}</h3>
               <p class="spotlight__excerpt">{p.excerpt}</p>
               <span class="spotlight__linkline">
-                進一步了解
+                查看商品促銷價
                 <span class="spotlight__linkline-mark" aria-hidden="true" />
               </span>
             </div>
@@ -110,7 +112,7 @@ const n = items.length;
             <h3 class="spotlight__name spotlight__name--lead">{items[0].name}</h3>
             <p class="spotlight__excerpt">{items[0].excerpt}</p>
             <span class="spotlight__linkline">
-              進一步了解
+              查看商品促銷價
               <span class="spotlight__linkline-mark" aria-hidden="true" />
             </span>
           </div>
@@ -139,7 +141,7 @@ const n = items.length;
                 <h3 class="spotlight__name">{p.name}</h3>
                 <p class="spotlight__excerpt spotlight__excerpt--rail">{p.excerpt}</p>
                 <span class="spotlight__linkline spotlight__linkline--rail">
-                  進一步了解
+                  查看商品促銷價
                   <span class="spotlight__linkline-mark" aria-hidden="true" />
                 </span>
               </div>

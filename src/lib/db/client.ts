@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import postgres from 'postgres';
 import { getServerEnv } from '../env';
+import { getRequestScope } from '../request-scope';
 import * as schema from './schema';
 
 type Db = ReturnType<typeof createDb>;
@@ -9,13 +10,12 @@ type Db = ReturnType<typeof createDb>;
 let client: ReturnType<typeof postgres> | null = null;
 let db: Db | null = null;
 
-function createDb() {
-	const { DATABASE_URL } = getServerEnv();
-	client = postgres(DATABASE_URL, {
-		max: 10,
-		prepare: false,
-	});
-	return drizzle(client, { schema });
+function createClient(url: string, max: number) {
+	return postgres(url, { max, prepare: false, fetch_types: false });
+}
+
+function createDb(sqlClient: ReturnType<typeof postgres>) {
+	return drizzle(sqlClient, { schema });
 }
 
 /**
@@ -23,8 +23,15 @@ function createDb() {
  * Never import this module from client-side code.
  */
 export function getDb(): Db {
+	const scope = getRequestScope();
+	if (scope) {
+		// Workers：每次請求各自連線（一個 Worker 同時最多 6 條對外連線）
+		scope.db ??= createDb(createClient(scope.databaseUrl ?? getServerEnv().DATABASE_URL, 5));
+		return scope.db as Db;
+	}
 	if (!db) {
-		db = createDb();
+		client = createClient(getServerEnv().DATABASE_URL, 10);
+		db = createDb(client);
 	}
 	return db;
 }

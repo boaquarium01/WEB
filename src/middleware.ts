@@ -1,6 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
 import { getAdminPathSlug } from './lib/admin/path';
-import { isAdminEmail } from './lib/auth/admin';
+import { getAdminRole } from './lib/services/admin-users';
 import { getAuth } from './lib/auth';
 import { getCustomerByUserId } from './lib/services/customer';
 
@@ -24,6 +24,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 	context.locals.user = null;
 	context.locals.session = null;
 	context.locals.isAdmin = false;
+	context.locals.adminRole = null;
 
 	try {
 		const session = await getAuth().api.getSession({
@@ -33,7 +34,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 		if (session) {
 			context.locals.user = session.user;
 			context.locals.session = session.session;
-			context.locals.isAdmin = isAdminEmail(session.user.email);
+			context.locals.adminRole = await getAdminRole(session.user.email);
+			context.locals.isAdmin = context.locals.adminRole !== null;
 		}
 	} catch {
 		// Soft-fail when env/DB unavailable.
@@ -63,17 +65,12 @@ export const onRequest = defineMiddleware(async (context, next) => {
 			if (parts[1] !== slug) return notFound();
 		}
 
-		if (!context.locals.user) {
-			const nextUrl = encodeURIComponent(
-				context.url.pathname + context.url.search,
-			);
-			return context.redirect(`/account/login?next=${nextUrl}`);
-		}
-		if (!context.locals.isAdmin) {
-			return new Response('Forbidden：此帳號沒有後台權限', {
-				status: 403,
-				headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-			});
+		// 後台專用登入頁：未登入或沒有權限的帳號都導到這裡
+		const loginPath = `/admin/${slug}/login`;
+		if (path === loginPath) return next();
+		if (!context.locals.user || !context.locals.isAdmin) {
+			const nextUrl = encodeURIComponent(context.url.pathname + context.url.search);
+			return context.redirect(`${loginPath}?next=${nextUrl}`);
 		}
 	}
 

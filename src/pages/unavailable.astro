@@ -1,0 +1,33 @@
+---
+/** 資料暫時讀不到（例如資料庫連線中斷）時顯示的友善頁面，由其他頁面用 Astro.rewrite 帶過來 */
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+export const prerender = false;
+
+Astro.response.status = 503;
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('Retry-After', '30');
+---
+
+<SiteLayout title="暫時無法載入｜水博館水族">
+	<section class="unavailable">
+		<span class="unavailable__icon" aria-hidden="true"><i class="fa-solid fa-fish-fins"></i></span>
+		<h1>頁面暫時無法載入</h1>
+		<p>系統忙碌中，請稍後再試一次。</p>
+		<div class="unavailable__actions">
+			<button type="button" class="primary" onclick="location.reload()">重新整理</button>
+			<a href="/" class="ghost">回到首頁</a>
+		</div>
+	</section>
+</SiteLayout>
+
+<style>
+	.unavailable { display: grid; justify-items: center; gap: 10px; max-width: 420px; margin: 0 auto; padding: 64px 16px 80px; text-align: center; }
+	.unavailable__icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--aq-primary-soft); color: var(--aq-primary); font-size: 26px; }
+	h1 { margin: 8px 0 0; font-size: 1.4rem; }
+	p { margin: 0; color: var(--aq-muted); }
+	.unavailable__actions { display: flex; gap: 10px; margin-top: 14px; }
+	.unavailable__actions > * { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; border-radius: 999px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+	.primary { border: 0; background: var(--aq-primary); color: #fff; }
+	.ghost { border: 1px solid var(--aq-line, #dfe5e1); background: #fff; color: var(--aq-ink); }
+</style>

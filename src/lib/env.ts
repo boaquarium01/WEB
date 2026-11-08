@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 // Ensure .env is available on process.env during `astro dev` / Node SSR.
 // (Vite also exposes values via import.meta.env; we read both below.)
-loadDotenv({ path: '.env' });
+if (typeof navigator === 'undefined' || navigator.userAgent !== 'Cloudflare-Workers') loadDotenv({ path: '.env' });
 
 /**
  * Server-only environment variables.

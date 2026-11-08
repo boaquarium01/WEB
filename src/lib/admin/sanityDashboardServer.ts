@@ -183,7 +183,7 @@ const PROMOTION_FETCH = `*[_type == "promotion" && defined(slug.current)] | orde
 }`;
 
 const CATEGORY_FETCH = `*[_type == "category"] | order(orderRank asc, name asc) {
-  _id, name, slug, orderRank, sortOrder
+  _id, name, slug, orderRank, sortOrder, isLive
 }`;
 
 function mapPromotionRow(doc: Record<string, unknown>, b: ImageUrlBuilder) {
@@ -214,7 +214,8 @@ function mapCategoryRow(doc: Record<string, unknown>) {
 		documentId: doc._id,
 		name: doc.name,
 		slug,
-		orderRank: doc.orderRank != null ? String(doc.orderRank) : ''
+		orderRank: doc.orderRank != null ? String(doc.orderRank) : '',
+		isLive: doc.isLive === true
 	};
 }
 
@@ -396,6 +397,7 @@ export async function runSanityDashboardRequest(opts: {
 		if (model === 'promotions') {
 			const patch: Record<string, unknown> = {};
 			if (data.title != null) patch.title = data.title;
+			if (typeof data.enabled === 'boolean') patch.enabled = data.enabled;
 			if (data.content != null) patch.content = promotionContentToText(data);
 			if (Array.isArray(data.promoImages)) {
 				patch.promoImages = mixedImageRefs(data.promoImages);
@@ -411,8 +413,9 @@ export async function runSanityDashboardRequest(opts: {
 
 			if (data.slug != null) patch.slug = { _type: 'slug', current: String(data.slug) };
 			if (data.orderRank != null) patch.orderRank = data.orderRank;
+			if (typeof data.isLive === 'boolean') patch.isLive = data.isLive;
 			await client.patch(id).set(patch).commit();
-			const doc = await client.fetch(`*[_id == $id][0]{ _id, name, slug, orderRank, sortOrder}`, { id });
+			const doc = await client.fetch(`*[_id == $id][0]{ _id, name, slug, orderRank, sortOrder, isLive}`, { id });
 			return { status: 200, body: { data: mapCategoryRow(doc as Record<string, unknown>) } };
 		}
 
@@ -567,9 +570,10 @@ export async function runSanityDashboardRequest(opts: {
 			_type: 'category',
 			name,
 			slug: { _type: 'slug', current: slug || name.toLowerCase().replace(/\s+/g, '-') },
-			orderRank
+			orderRank,
+			isLive: data.isLive === true
 		});
-		const row = await client.fetch(`*[_id == $id][0]{ _id, name, slug, orderRank, sortOrder}`, { id: doc._id });
+		const row = await client.fetch(`*[_id == $id][0]{ _id, name, slug, orderRank, sortOrder, isLive}`, { id: doc._id });
 		return { status: 201, body: { data: mapCategoryRow(row as Record<string, unknown>) } };
 	}
 

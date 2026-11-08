@@ -16,47 +16,44 @@ const registerHref = next && next !== '/account' ? `/account/register?next=${enc
 ---
 
 <AccountLayout title="會員登入｜水博館水族">
-	<nav class="auth-tabs" aria-label="登入或註冊">
-		<a href={Astro.url.pathname + Astro.url.search} aria-current="page">登入</a>
-		<a href={registerHref}>註冊</a>
-	</nav>
-
-	<div class="auth-head">
-		<h1>歡迎回來</h1>
-		<p>登入後可查看訂單進度、加快結帳。</p>
-	</div>
+	<h1 class="visually-hidden">會員登入</h1>
 
 	{error && <p class="error">{error}</p>}
 
-	{(lineEnabled || googleEnabled) && (
-		<div class="social-login">
-			{lineEnabled && <button type="button" class="social line" data-provider="line"><i class="fa-brands fa-line" aria-hidden="true"></i>使用 LINE 登入</button>}
-			{googleEnabled && <button type="button" class="social" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>使用 Google 登入</button>}
-		</div>
-		<div class="divider"><span>或使用 Email 登入</span></div>
-	)}
-
 	<form id="login-form" class="form" method="post" action="/api/account/login" novalidate>
 		<input type="hidden" name="next" value={next} />
-		<EmailField id="login-email" remember />
-		<div class="pw-group">
-			<div class="pw-row">
-				<label for="login-password">密碼</label>
-				<a class="forgot-link" href="/account/forgot-password">忘記密碼？</a>
-			</div>
+		<div class="login-field">
+			<i class="fa-regular fa-user login-field__icon" aria-hidden="true"></i>
+			<EmailField id="login-email" label="手機或電子郵件" placeholder="手機號碼 / Email" remember acceptsPhone />
+		</div>
+		<div class="login-field login-field--password">
+			<i class="fa-solid fa-lock login-field__icon" aria-hidden="true"></i>
+			<label class="visually-hidden" for="login-password">密碼</label>
 			<div class="password-field">
-				<input id="login-password" type="password" name="password" required minlength="8" autocomplete="current-password" placeholder="請輸入密碼" />
+				<input id="login-password" type="password" name="password" required minlength="8" autocomplete="current-password" enterkeyhint="go" placeholder="密碼" />
 				<button class="password-toggle" type="button" id="toggle-password" aria-label="顯示密碼" aria-controls="login-password" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+				<a class="forgot-link" href="/account/forgot-password">忘記密碼</a>
 			</div>
 		</div>
 		<p id="login-status" class="status" role="status" aria-live="polite"></p>
 		<button type="submit" id="login-submit">登入</button>
 	</form>
 
-	<p class="meta">還沒有帳號？<a href={registerHref}>免費註冊</a></p>
+	{(lineEnabled || googleEnabled) && (
+		<div class="divider"><span>或</span></div>
+		<div class="social-login">
+			{lineEnabled && <button type="button" class="social line" data-provider="line" aria-label="使用 LINE 登入"><i class="fa-brands fa-line" aria-hidden="true"></i>LINE</button>}
+			{googleEnabled && <button type="button" class="social" data-provider="google" aria-label="使用 Google 登入"><span class="google-mark" aria-hidden="true">G</span>Google</button>}
+		</div>
+	)}
+
+	<p class="login-terms">登入即表示您同意水博館水族的<a href="/terms" target="_blank" rel="noreferrer">服務條款</a>及<a href="/privacy" target="_blank" rel="noreferrer">隱私權政策</a></p>
+	<p class="meta">還沒有帳號？<a href={registerHref}>註冊</a></p>
 </AccountLayout>
 
 <script>
+	import { normalizeTaiwanMobile } from '../../lib/auth/policies.js';
+
 	const form = document.getElementById('login-form') as HTMLFormElement | null;
 	const status = document.getElementById('login-status') as HTMLElement;
 	const submit = document.getElementById('login-submit') as HTMLButtonElement;
@@ -109,8 +106,8 @@ const registerHref = next && next !== '/account' ? `/account/register?next=${enc
 		const data = new FormData(form);
 		const email = String(data.get('email') ?? '').trim();
 		const password = String(data.get('password') ?? '');
-		if (!email || !emailInput.checkValidity()) {
-			setStatus('請輸入正確的 Email，例如 name@gmail.com。', true);
+		if (!(email.includes('@') ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) : normalizeTaiwanMobile(email))) {
+			setStatus('請輸入正確的手機號碼或電子郵件。', true);
 			emailInput.focus();
 			return;
 		}
@@ -130,10 +127,14 @@ const registerHref = next && next !== '/account' ? `/account/register?next=${enc
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				if (payload.code === 'EMAIL_NOT_VERIFIED') {
-					window.location.href = '/account/verify-email';
+					try {
+						sessionStorage.setItem('aq-verify-email', payload.email ?? email);
+						sessionStorage.setItem('aq-verify-next', next);
+					} catch {}
+					window.location.href = '/account/verify-email?sent=1';
 					return;
 				}
-				throw new Error(payload.error || 'Email 或密碼不正確，請再確認一次。');
+				throw new Error(payload.error || '帳號或密碼不正確，請再確認一次。');
 			}
 			window.dispatchEvent(new CustomEvent('aq:login-success', { detail: email }));
 			window.location.href = next;
@@ -145,5 +146,25 @@ const registerHref = next && next !== '/account' ? `/account/register?next=${enc
 </script>
 
 <style>
-	.pw-group{display:grid;gap:.42rem}.pw-row{display:flex;align-items:baseline;justify-content:space-between;gap:1rem}.forgot-link{font-size:.85rem;font-weight:600;text-decoration:none}.forgot-link:hover,.meta a:hover{text-decoration:underline}.password-field{position:relative}.password-field input{padding-right:3rem!important}.password-toggle{position:absolute;top:50%;right:.4rem;display:grid;place-items:center;width:2.5rem;height:2.5rem;min-height:0!important;padding:0!important;transform:translateY(-50%);border:0!important;background:transparent!important;color:#66756e!important;box-shadow:none!important;cursor:pointer}.password-toggle:hover{color:var(--aq-primary-dark)!important;transform:translateY(-50%)!important}.social-login{display:grid;gap:.55rem;margin-top:1rem}.social{width:100%;display:flex;align-items:center;justify-content:center;gap:.6rem;padding:.8rem 1rem}.social i{font-size:1.2rem}.google-mark{font-family:Arial,sans-serif;font-size:1.1rem;font-weight:800;background:conic-gradient(from -45deg,#4285f4 0 25%,#34a853 0 50%,#fbbc05 0 75%,#ea4335 0);color:transparent;background-clip:text}.status{margin:0}.meta{margin:.25rem 0 0;text-align:center}
+	.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+	.login-field { position: relative; }
+	.login-field__icon { position: absolute; top: 17px; left: 14px; z-index: 1; color: #7c8a84; font-size: 15px; pointer-events: none; }
+	.login-field :global(input) { padding-left: 2.6rem !important; }
+	.login-field :global(.email-field > label) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+	.password-field { position: relative; }
+	.login-field--password input { padding-right: 7.4rem !important; }
+	.password-toggle { position: absolute; top: 50%; right: 4.7rem; display: grid; place-items: center; width: 2.25rem; height: 2.25rem; min-height: 0 !important; padding: 0 !important; transform: translateY(-50%); border: 0 !important; background: transparent !important; color: #66756e !important; box-shadow: none !important; cursor: pointer; }
+	.password-toggle:hover { color: var(--aq-primary-dark) !important; transform: translateY(-50%) !important; }
+	.forgot-link { position: absolute; top: 50%; right: .8rem; padding-left: .6rem; border-left: 1px solid #dfe5e1; font-size: .84rem; font-weight: 600; line-height: 1.2; text-decoration: none; transform: translateY(-50%); white-space: nowrap; }
+	.forgot-link:hover, .meta a:hover, .login-terms a:hover { text-decoration: underline; }
+	button:disabled { opacity: .65; cursor: wait; }
+	.social-login { display: flex; gap: .6rem; }
+	.social { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: .6rem; padding: .8rem 1rem; }
+	.social i { font-size: 1.2rem; }
+	.google-mark { font-family: Arial, sans-serif; font-size: 1.1rem; font-weight: 800; background: conic-gradient(from -45deg, #4285f4 0 25%, #34a853 0 50%, #fbbc05 0 75%, #ea4335 0); color: transparent; background-clip: text; }
+	.status { margin: 0; }
+	.login-terms { margin: 1rem 0 0; color: var(--aq-muted); font-size: .8rem; line-height: 1.7; text-align: center; }
+	.login-terms a { display: inline-block; margin: 0 .2rem; font-weight: 600; text-decoration: none; white-space: nowrap; }
+	.meta { margin: .75rem 0 0; padding-top: .75rem; border-top: 1px solid #edf0ec; text-align: center; }
+	.meta a { margin-left: .25rem; font-weight: 700; text-decoration: none; }
 </style>

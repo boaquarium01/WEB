@@ -108,6 +108,7 @@ export function adaptSanityProduct(doc: SanityProductDocument): ProductContent {
 		categoryId: doc.category?._id ?? null,
 		categorySlug,
 		categoryLabel,
+		categoryIsLive: typeof doc.category?.isLive === 'boolean' ? doc.category.isLive : null,
 		productType: categorySlug ?? 'uncategorized',
 		excerpt: doc.excerpt?.trim() || null,
 		body: doc.body,

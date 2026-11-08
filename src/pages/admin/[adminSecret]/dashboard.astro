@@ -74,7 +74,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
           </div>
         </div>
         <div id="listCount" class="count">載入中...</div>
-        <div id="entryList" class="entry-list"></div>
+        <div id="entryList" class="entry-list"><div class="entry-skeleton" role="status" aria-label="載入中"><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div></div></div>
       </aside>
 
       <header class="topbar">
@@ -143,6 +143,14 @@ const shopProductsHref = `${shopAdminHref}/products`;
             <input id="catModalSlug" type="text" autocomplete="off" placeholder="例如 fish / equipment" />
           </label>
           <p class="cat-modal__hint">slug 建議小寫英數與連字號（-），需唯一。</p>
+          <label class="cat-modal__switch">
+            <span class="cat-modal__switch-text">
+              <strong>活體分類</strong>
+              <small>商品頁會標示「活體商品：需要人工確認」</small>
+            </span>
+            <input id="catModalLive" type="checkbox" role="switch" />
+            <span class="cat-modal__switch-track" aria-hidden="true"></span>
+          </label>
         </div>
         <footer class="cat-modal__foot">
           <button id="catModalDelete" type="button" class="cat-modal__btn cat-modal__btn--danger" hidden>刪除</button>
@@ -202,6 +210,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
 
   <script>
     import { applyBodyScrollLock, releaseBodyScrollLock } from '../../../scripts/scrollLock';
+    import { askConfirm, askText } from '../../../scripts/confirmSheet';
     import { plainTextToStrapiBlocks, strapiBlocksToPlainText } from '../../../lib/strapi/blocks';
     import { normalizeSpecifications, generateSpecificationCombinations } from '../../../lib/sanity/specifications';
     import { validateQuantityPriceTiers } from '../../../lib/services/quantity-pricing';
@@ -269,6 +278,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
     const catModalCancel = document.getElementById('catModalCancel');
     const catModalSave = document.getElementById('catModalSave');
     const catModalDelete = document.getElementById('catModalDelete');
+    const catModalLive = document.getElementById('catModalLive');
     const productRemoveModal = document.getElementById('productRemoveModal');
     const productRemoveBackdrop = document.getElementById('productRemoveBackdrop');
     const productRemoveClose = document.getElementById('productRemoveClose');
@@ -746,10 +756,10 @@ const shopProductsHref = `${shopAdminHref}/products`;
       if (bar instanceof HTMLElement) bar.setAttribute('aria-hidden', isMobileNarrow() ? 'false' : 'true');
       updateSectionLabels();
     }
-    function confirmDiscardIfDirty() {
+    async function confirmDiscardIfDirty() {
       if (state.saving) return false;
       if (!state.dirty) return true;
-      return window.confirm('有更動尚未儲存，確定要離開嗎？');
+      return askConfirm('有更動尚未儲存，確定要離開嗎？', { okLabel: '離開', danger: true });
     }
     function setStatus(text) {
       const t = String(text ?? '');
@@ -850,7 +860,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         const current = grouped.get(id) ?? { prices: [], stock: 0, unlimited: false, hasSellableSku: false };
         const price = Number(row?.sellingPrice);
         const onHand = Number(row?.onHand);
-        if (Number.isFinite(price)) current.prices.push(price);
+        if (Number.isFinite(price) && price > 0) current.prices.push(price);
         if (onHand < 0) current.unlimited = true;
         else if (Number.isFinite(onHand)) current.stock += Math.max(0, onHand);
         if (row.saleEnabled !== false && (onHand < 0 || onHand > 0)) current.hasSellableSku = true;
@@ -862,7 +872,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         const minPrice = prices.length ? prices[0] : null;
         const maxPrice = prices.length ? prices[prices.length - 1] : null;
         const priceText = minPrice == null
-          ? '尚未定價'
+          ? '價格洽詢'
           : minPrice === maxPrice
             ? `NT$ ${minPrice.toLocaleString('zh-TW')}`
             : `NT$ ${minPrice.toLocaleString('zh-TW')}–${maxPrice.toLocaleString('zh-TW')}`;
@@ -877,14 +887,15 @@ const shopProductsHref = `${shopAdminHref}/products`;
       return summary;
     }
 
-    async function loadCommerceSummary() {
+    /** @param {Promise<any>} [preloaded] 已提早發出的價格庫存請求 */
+    async function loadCommerceSummary(preloaded) {
       const sequence = ++state.commerceSummarySequence;
       if (state.model !== 'product') {
         state.commerceSummary = new Map();
         return;
       }
       try {
-        const payload = await commerceApi('/api/admin/product-commerce');
+        const payload = await (preloaded ?? commerceApi('/api/admin/product-commerce'));
         if (sequence !== state.commerceSummarySequence || state.model !== 'product') return;
         state.commerceSummary = buildCommerceSummary(payload?.rows);
       } catch {
@@ -1020,7 +1031,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
           const nameWrap = document.createElement('label'); nameWrap.className = 'product-specification-group__name';
           const name = document.createElement('input'); name.type = 'text'; name.maxLength = 30; name.placeholder = specIndex === 1 ? '名稱，如尺寸' : '名稱，如顏色'; name.value = spec.name; name.setAttribute('aria-label', `規格 ${specIndex + 1} 名稱`);
           const nameCount = document.createElement('small'); nameCount.textContent = `${name.value.length}/30`; name.addEventListener('input', () => { spec.name = name.value; nameCount.textContent = `${name.value.length}/30`; refreshSpecificationTable(); }); nameWrap.append(name, nameCount);
-          const removeGroup = document.createElement('button'); removeGroup.type = 'button'; removeGroup.textContent = '刪除規格'; removeGroup.onclick = () => { if (!window.confirm(`刪除「${spec.name || `商品規格 ${specIndex + 1}`}」？相關規格組合會停止販售，歷史訂單資料會保留。`)) return; specifications.splice(specIndex, 1); renderGroups(); };
+          const removeGroup = document.createElement('button'); removeGroup.type = 'button'; removeGroup.textContent = '刪除規格'; removeGroup.onclick = async () => { if (!(await askConfirm(`刪除「${spec.name || `商品規格 ${specIndex + 1}`}」？相關規格組合會停止販售，歷史訂單資料會保留。`, { okLabel: '刪除', danger: true }))) return; specifications.splice(specIndex, 1); renderGroups(); };
           const groupDrag = createSpecificationDragHandle(specifications, spec, card, list, `規格 ${specIndex + 1}`);
           removeGroup.classList.add('product-specification-delete'); removeGroup.innerHTML = removeIcon; removeGroup.setAttribute('aria-label', `刪除規格 ${specIndex + 1}`);
           head.append(groupLabel, nameWrap, groupDrag, removeGroup); card.appendChild(head);
@@ -1037,7 +1048,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
             imageControl.onclick = () => upload.click();
             const clearImage = document.createElement('button'); clearImage.type = 'button'; clearImage.className = 'product-specification-option__clear'; clearImage.textContent = '移除圖片'; clearImage.disabled = !option.image; clearImage.onclick = () => { option.image = ''; option.imageUrl = ''; renderGroups(); };
             const optionDrag = createSpecificationDragHandle(spec.options, option, row, options, `選項 ${optionIndex + 1}`);
-            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '刪除'; remove.onclick = () => { if (spec.options.length === 1 && enabled.checked && !window.confirm('刪除此選項將停用相關規格組合，歷史訂單資料仍會保留。確定刪除？')) return; spec.options.splice(optionIndex, 1); renderGroups(); };
+            const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '刪除'; remove.onclick = async () => { if (spec.options.length === 1 && enabled.checked && !(await askConfirm('刪除此選項將停用相關規格組合，歷史訂單資料仍會保留。確定刪除？', { okLabel: '刪除', danger: true }))) return; spec.options.splice(optionIndex, 1); renderGroups(); };
             remove.classList.add('product-specification-delete'); remove.innerHTML = removeIcon; remove.setAttribute('aria-label', `刪除選項 ${optionIndex + 1}`);
             clearImage.innerHTML = removeIcon; clearImage.hidden = !option.image; clearImage.title = '移除圖片'; clearImage.setAttribute('aria-label', `移除「${option.name || '此選項'}」的圖片`);
             const imageWrap = document.createElement('span'); imageWrap.className = 'product-specification-option__media'; imageWrap.append(imageControl, clearImage); upload.hidden = true;
@@ -1067,9 +1078,9 @@ const shopProductsHref = `${shopAdminHref}/products`;
       enabled.addEventListener('change', updateSpecificationVisibility);
       groupActions.appendChild(addGroup);
 
-      enabled.addEventListener('change', () => {
+      enabled.addEventListener('change', async () => {
         if (!enabled.checked && (specifications.length || Boolean(state.selected?.specificationsEnabled))) {
-          if (!window.confirm('停用後會清除規格與選項，改用單一售價和庫存；點「儲存」後生效。歷史訂單會保留。確定停用？')) { enabled.checked = true; updateSpecificationVisibility(); return; }
+          if (!(await askConfirm('停用後會清除規格與選項，改用單一售價和庫存；點「儲存」後生效。歷史訂單會保留。確定停用？', { okLabel: '停用', danger: true }))) { enabled.checked = true; updateSpecificationVisibility(); return; }
           specifications.splice(0); renderGroups();
         }
         if (enabled.checked && !specifications.length) addGroup.click();
@@ -1298,9 +1309,11 @@ const shopProductsHref = `${shopAdminHref}/products`;
         priceInput.type = 'number';
         priceInput.min = '0';
         priceInput.step = '1';
-        priceInput.required = true;
+        priceInput.required = false;
         priceInput.dataset.skuPrice = 'true';
-        priceInput.value = String(row.sellingPrice ?? 0);
+        // 售價 0＝前台顯示「價格洽詢」，欄位留空表示
+        priceInput.value = Number(row.sellingPrice) > 0 ? String(row.sellingPrice) : '';
+        priceInput.placeholder = '價格洽詢';
         priceLabel.appendChild(priceInput);
 
         const stockLabel = document.createElement('label');
@@ -1356,7 +1369,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         const readCommerce = () => ({ sellingPrice: Number(priceInput.value), onHand: stockInput.value === '' ? -1 : Number(stockInput.value), saleEnabled: openRadio.checked, sku: sellerSkuInput.value.trim(), barcode: barcodeInput.value.trim(), preparationDays: preparationInput.value === '' ? null : Number(preparationInput.value) });
         productSkuDrafts.set(String(row.productSkuId), { row, read: readCommerce, baseline: readCommerce(), raw: () => [priceInput.value, stockInput.value, sellerSkuInput.value, barcodeInput.value, preparationInput.value], restore: (raw) => { [priceInput, stockInput, sellerSkuInput, barcodeInput, preparationInput].forEach((input, index) => { input.value = raw[index]; }); }, validate: () => {
           const value = readCommerce();
-          if (priceInput.value === '' || !Number.isInteger(value.sellingPrice) || value.sellingPrice < 0 || !Number.isInteger(value.onHand) || value.onHand < -1 || !value.sku || value.sku.length > 64 || value.barcode.length > 64 || (value.preparationDays !== null && (!Number.isInteger(value.preparationDays) || value.preparationDays < 0 || value.preparationDays > 365))) throw new Error('請確認「' + String(row.skuName ?? row.productName) + '」的價格、庫存、貨號及備貨天數');
+          if (!Number.isInteger(value.sellingPrice) || value.sellingPrice < 0 || !Number.isInteger(value.onHand) || value.onHand < -1 || !value.sku || value.sku.length > 64 || value.barcode.length > 64 || (value.preparationDays !== null && (!Number.isInteger(value.preparationDays) || value.preparationDays < 0 || value.preparationDays > 365))) throw new Error('請確認「' + String(row.skuName ?? row.productName) + '」的價格、庫存、貨號及備貨天數');
         } });
         const cachedDraft = live && productSkuPreviewCache.get(row.variantKey || 'default');
         if (cachedDraft) { const draft = productSkuDrafts.get(String(row.productSkuId)); draft.baseline = cachedDraft.baseline; draft.restore(cachedDraft.raw); }
@@ -1549,8 +1562,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
       product: 'fa-box-open'
     };
 
-    function leaveCurrentProductEditor() {
-      if (!confirmDiscardIfDirty()) return false;
+    async function leaveCurrentProductEditor() {
+      if (!(await confirmDiscardIfDirty())) return false;
       ++productSelectionSequence;
       state.dirty = false;
       state.pendingUploads = {};
@@ -1576,9 +1589,9 @@ const shopProductsHref = `${shopAdminHref}/products`;
         lab.textContent = defs[k].label;
         b.append(ic, lab);
         // 「分類管理」固定走排序模式，避免從不同入口看到不同內容
-        b.onclick = () => {
+        b.onclick = async () => {
           const returnToProducts = k === 'product' && state.model === 'product' && !isProductSortMode();
-          if (!leaveCurrentProductEditor()) return;
+          if (!(await leaveCurrentProductEditor())) return;
           if (returnToProducts) {
             setMobilePanel('list'); drawList(); setStatus('商品清單'); return;
           }
@@ -1590,9 +1603,10 @@ const shopProductsHref = `${shopAdminHref}/products`;
       stockTab.className = 'tab';
       stockTab.href = shopProductsHref || '#';
       stockTab.innerHTML = '<i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i><span>庫存</span>';
-      stockTab.addEventListener('click', (event) => {
+      stockTab.addEventListener('click', async (event) => {
         if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-        if (!leaveCurrentProductEditor()) event.preventDefault();
+        event.preventDefault();
+        if (await leaveCurrentProductEditor()) window.location.href = stockTab.href;
       });
       modelTabs.appendChild(stockTab);
 
@@ -1600,8 +1614,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
       sortTab.type = 'button';
       sortTab.className = `tab ${isProductSortMode() || isCategorySortMode() ? 'is-active' : ''}`;
       sortTab.innerHTML = '<i class="fa-solid fa-arrow-down-wide-short" aria-hidden="true"></i><span>排序</span>';
-      sortTab.onclick = () => {
-        if (!leaveCurrentProductEditor()) return;
+      sortTab.onclick = async () => {
+        if (!(await leaveCurrentProductEditor())) return;
         return switchModel('product', { productSortMode: true, mobilePanel: 'list' })
           .then(() => {
             if (categoryFilter.options.length > 1 && !categoryFilter.value) categoryFilter.value = String(categoryFilter.options[1].value ?? '');
@@ -1756,7 +1770,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
           });
 
           ops.querySelectorAll('.cat-manage-row__btn').forEach((btn) => {
-            btn.addEventListener('click', (ev) => {
+            btn.addEventListener('click', async (ev) => {
               ev.stopPropagation();
               const t = ev.currentTarget;
               if (!(t instanceof HTMLButtonElement)) return;
@@ -1998,7 +2012,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
           });
 
           btnRow.querySelectorAll('button').forEach((btn) => {
-            btn.addEventListener('click', (ev) => {
+            btn.addEventListener('click', async (ev) => {
               ev.stopPropagation();
               const t = ev.currentTarget;
               if (!(t instanceof HTMLButtonElement)) return;
@@ -2015,7 +2029,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
               }
               if (act === 'del') {
                 const name = String(row.name ?? '').trim() || '此商品';
-                const yes = window.confirm(`確定刪除「${name}」？\n\n刪除後無法復原。`);
+                const yes = await askConfirm(`確定刪除「${name}」？\n\n刪除後無法復原。`, { okLabel: '刪除', danger: true });
                 if (!yes) return;
                 const id = kOf(row);
                 if (!id) return;
@@ -2235,7 +2249,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       if (state.saving) return;
       if (state.model === 'product' && state.dirty) {
         if (kOf(row) === state.selectedId) return;
-        if (!confirmDiscardIfDirty()) return;
+        if (!(await confirmDiscardIfDirty())) return;
       }
       if (isCategorySortMode() || isProductSortMode()) return;
       const sequence = ++productSelectionSequence;
@@ -2427,7 +2441,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       if (Number.isFinite(max) && grid.children.length + files.length > max) {
         const overflow = grid.children.length + files.length - max;
         if (interactive) {
-          const yes = window.confirm(`促銷圖片上限 25 張。\n將以新圖片取代最後 ${overflow} 張舊圖，是否繼續？`);
+          const yes = await askConfirm(`促銷圖片上限 25 張。\n將以新圖片取代最後 ${overflow} 張舊圖，是否繼續？`, { okLabel: '取代舊圖' });
           if (!yes) return;
         }
         for (let i = 0; i < overflow; i += 1) {
@@ -2535,8 +2549,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
           }
           mediaBind(card);
         };
-        if (d) d.onclick = () => {
-          if (window.confirm('確定移除此圖片？')) {
+        if (d) d.onclick = async () => {
+          if (await askConfirm('確定移除此圖片？', { okLabel: '移除', danger: true })) {
             el.remove();
             markDirty();
             mediaBind(card);
@@ -2705,15 +2719,20 @@ const shopProductsHref = `${shopAdminHref}/products`;
       setStatus('載入中...');
       root.dataset.listLoading = '1';
       listCount.textContent = '載入中...';
-      entryList.innerHTML = '';
+      // 載入中顯示骨架列，避免手機上一片空白像壞掉
+      entryList.innerHTML = '<div class="entry-skeleton" role="status" aria-label="載入中"><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div><div class="entry-skeleton__row"><span></span><span></span></div></div>';
       try {
         productListKey = ''; productListShown = PRODUCT_LIST_BATCH_SIZE;
         const listOnly = state.model === 'product' && adminBackend === 'sanity' && !isProductSortMode();
+        // 商品內容（Sanity）與價格庫存（資料庫）同時讀取，不必一個等一個
+        const commerceRequest = state.model === 'product' ? commerceApi('/api/admin/product-commerce') : null;
+        commerceRequest?.catch(() => {});
         const j = await api(`${defs[state.model].api}?${listOnly ? 'view=list-index' : 'populate=*'}`);
         state.entries = norm(j);
         if (state.model === 'product' && state.entries.length) {
           state.entries = applySortOrderWithinEachCategory(state.entries);
-          await loadCommerceSummary();
+          // 摘要要對照商品規格，所以等商品清單回來後再整理
+          await loadCommerceSummary(commerceRequest ?? undefined);
         } else {
           state.commerceSummary = new Map();
         }
@@ -2803,7 +2822,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
     }
 
     async function refreshCurrentView() {
-      if (!confirmDiscardIfDirty()) return;
+      if (!(await confirmDiscardIfDirty())) return;
       const selectedIdBefore = String(state.selectedId ?? '').trim();
       const keepCategory = String(categoryFilter.value ?? '').trim();
       state.dirty = false;
@@ -2914,6 +2933,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       catModalTitle.textContent = mode === 'edit' ? '編輯分類' : '新增分類';
       catModalName.value = currentName;
       catModalSlug.value = currentSlug;
+      if (catModalLive instanceof HTMLInputElement) catModalLive.checked = row?.isLive === true;
       catModalDelete.hidden = mode !== 'edit';
       if (catModalHint instanceof HTMLElement) catModalHint.textContent = 'slug 建議小寫英數與連字號（-），需唯一。';
       catManageModal.hidden = false;
@@ -2986,7 +3006,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       const id = kOf(row);
       if (!id) return;
       const name = String(row.name ?? '').trim() || '此分類';
-      const yes = window.confirm(`確定要刪除「${name}」？\n\n刪除後無法復原。`);
+      const yes = await askConfirm(`確定要刪除「${name}」？\n\n刪除後無法復原。`, { okLabel: '刪除', danger: true });
       if (!yes) return;
       setStatus('刪除分類中…');
       await api(`${defs.category.api}/${id}`, { method: 'DELETE' });
@@ -2999,7 +3019,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       let slug = String(catModalSlug.value ?? '').trim();
       if (!name) throw new Error('請輸入分類名稱');
       if (!slug) slug = slugify(name) || `cat-${slug5()}`;
-      const payload = { name, slug };
+      const payload = { name, slug, isLive: catModalLive instanceof HTMLInputElement ? catModalLive.checked : false };
       if (catModalState.mode === 'create') {
         const nextRank = String(state.entries.length + 1);
         setStatus('新增分類中…');
@@ -3207,8 +3227,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
       drawList();
     });
     categoryFilter.addEventListener('change', drawList);
-    editCategoriesBtn.addEventListener('click', () => {
-      if (!confirmDiscardIfDirty()) return;
+    editCategoriesBtn.addEventListener('click', async () => {
+      if (!(await confirmDiscardIfDirty())) return;
       void switchModel('category', { categorySortMode: true, mobilePanel: 'list' });
     });
     productListSort.addEventListener('change', drawList);
@@ -3227,8 +3247,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
         .catch((e) => setStatus(`表單更新失敗：${e.message}`));
     };
     refreshBtn.onclick = () => void refreshCurrentView().catch((e) => setStatus(`載入失敗：${e.message}`));
-    newBtn.onclick = () => {
-      if (!confirmDiscardIfDirty()) return;
+    newBtn.onclick = async () => {
+      if (!(await confirmDiscardIfDirty())) return;
       if (isCategorySortMode()) {
         openCategoryModal('create');
         return;
@@ -3311,11 +3331,11 @@ const shopProductsHref = `${shopAdminHref}/products`;
     if (qrModalShare) qrModalShare.addEventListener('click', () => void shareQrContent());
 
     // 若後端沒有設 STRAPI_API_TOKEN，通常會得到 401/403；提供一次性輸入 token 的 fallback。
-    window.addEventListener('keydown', (e) => {
+    window.addEventListener('keydown', async (e) => {
       if (!(e instanceof KeyboardEvent)) return;
       if (e.key !== 'T' || !e.altKey) return;
       const current = readToken();
-      const next = window.prompt('輸入 Strapi API Token（僅保存在此瀏覽器）\n\n清空可輸入空字串。', current);
+      const next = await askText('輸入 Strapi API Token（僅保存在此瀏覽器）\n\n清空可輸入空字串。', current, { okLabel: '儲存' });
       if (next == null) return;
       writeToken(String(next).trim());
       setStatus(readToken() ? '已設定 Token（Alt+T 可修改）' : '已清除 Token（改用部署環境變數）');
@@ -3984,6 +4004,13 @@ const shopProductsHref = `${shopAdminHref}/products`;
     gap: 10px;
     min-width: 0;
   }
+  .entry-skeleton { display: grid; gap: 10px; padding: 4px 0; }
+  .entry-skeleton__row { display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid #e6ece9; border-radius: 12px; background: #fff; }
+  .entry-skeleton__row span { display: block; height: 14px; border-radius: 6px; background: linear-gradient(90deg, #eef2f1 0%, #f7f9f8 50%, #eef2f1 100%); background-size: 200% 100%; animation: entry-skeleton 1.2s ease-in-out infinite; }
+  .entry-skeleton__row span:first-child { width: 56px; height: 56px; border-radius: 10px; }
+  .entry-skeleton__row span:last-child { width: 70%; }
+  @keyframes entry-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  @media (prefers-reduced-motion: reduce) { .entry-skeleton__row span { animation: none; } }
   .category-edit-entry {
     display: inline-flex;
     flex: 0 0 auto;
@@ -5051,6 +5078,16 @@ const shopProductsHref = `${shopAdminHref}/products`;
     padding: 10px 12px;
     font: inherit;
   }
+  .cat-modal__switch { display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px; border: 1px solid #dbe4e2; border-radius: 12px; background: #f7faf9; cursor: pointer; }
+  .cat-modal__switch-text { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .cat-modal__switch-text strong { font-size: 0.95rem; color: #1f2d2c; }
+  .cat-modal__switch-text small { font-size: 0.8rem; color: #64748b; line-height: 1.35; }
+  .cat-modal__switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .cat-modal__switch-track { position: relative; flex: none; width: 44px; height: 26px; border-radius: 999px; background: #cbd5e1; transition: background 0.15s ease; }
+  .cat-modal__switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.15s ease; }
+  .cat-modal__switch input:checked + .cat-modal__switch-track { background: #087e78; }
+  .cat-modal__switch input:checked + .cat-modal__switch-track::after { transform: translateX(18px); }
+  .cat-modal__switch input:focus-visible + .cat-modal__switch-track { outline: 3px solid rgba(8,126,120,0.35); outline-offset: 2px; }
   .cat-modal__hint {
     margin: 0;
     font-size: 0.82rem;

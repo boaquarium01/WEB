@@ -17,6 +17,8 @@ export type SanityCategoryRef = {
 	_id: string;
 	name: string;
 	slug: string | null;
+	/** 後台分類「活體分類」開關；舊分類沒設定為 null */
+	isLive?: boolean | null;
 };
 
 export type SanityProductVariant = {
@@ -73,6 +75,8 @@ export type ProductContent = {
 	categoryId: string | null;
 	categorySlug: string | null;
 	categoryLabel: string | null;
+	/** 分類的活體開關；沒設定過為 null（改用名稱判斷） */
+	categoryIsLive: boolean | null;
 	/** Mapped into products.product_type (category slug or fallback). */
 	productType: string;
 	excerpt: string | null;

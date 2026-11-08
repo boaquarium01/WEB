@@ -105,7 +105,7 @@ const normalizeAreaName = (value: string) => value.trim().replace(/[市縣區鄉
 									<label class="check"><input type="checkbox" name="isDefault" checked={row.isDefault} /> 設為預設地址</label><button type="submit">儲存變更</button>
 								</form>
 							</details>
-							<form method="post" onsubmit="return confirm('確定刪除此收件地址？')"><input type="hidden" name="_action" value="delete" /><input type="hidden" name="addressId" value={row.id} /><button type="submit" class="danger">刪除</button></form>
+							<form method="post" data-confirm="確定刪除此收件地址？" data-confirm-danger><input type="hidden" name="_action" value="delete" /><input type="hidden" name="addressId" value={row.id} /><button type="submit" class="danger">刪除</button></form>
 						</div>
 					</article>
 				))

@@ -25,6 +25,13 @@ export const categoryType = defineType({
       validation: (Rule) => Rule.required()
     }),
     defineField({
+      name: 'isLive',
+      title: '活體分類',
+      description: '開啟後，此分類的商品頁會標示「活體商品：需要人工確認」。',
+      type: 'boolean',
+      initialValue: false
+    }),
+    defineField({
       name: 'sortOrder',
       title: '排序（備援，舊資料）',
       description: '請改由左側「商品分類（拖曳排序）」調整順序；此欄已隱藏，僅作舊資料相容。',

@@ -1,6 +1,8 @@
 # build output
 dist/
 .vercel/
+.wrangler/
+.dev.vars*
 # generated types
 .astro/
 

@@ -92,6 +92,27 @@
       "when": 1793537176540,
       "tag": "0012_push_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1794024792212,
+      "tag": "0013_customers_phone_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1794142404710,
+      "tag": "0014_admin_users",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1794152781202,
+      "tag": "0015_store_settings",
+      "breakpoints": true
     }
   ]
 }

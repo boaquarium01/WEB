@@ -64,6 +64,13 @@ export const promotionType = defineType({
       validation: (Rule) => Rule.required()
     }),
     defineField({
+      name: 'enabled',
+      title: '前台顯示',
+      description: '關閉後前台導覽與首頁入口都不顯示，網址會導回首頁。',
+      type: 'boolean',
+      initialValue: true
+    }),
+    defineField({
       name: 'content',
       title: '內容（文字）',
       type: 'text',

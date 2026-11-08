@@ -5,6 +5,7 @@
 import Layout from './Layout.astro';
 import { getAllCategories } from '../data/products';
 import { getCartItemCount } from '../lib/services/cart';
+import { getVisiblePromoTabs } from '../lib/promoTabs';
 
 interface Props {
 	title: string;
@@ -25,14 +26,10 @@ if (user) {
 	}
 }
 
-const categories = await getAllCategories();
+const [categories, promoTabs] = await Promise.all([getAllCategories(), getVisiblePromoTabs()]);
 const currentPath = Astro.url.pathname.replace(/\/+$/, '') || '/';
 const isCurrent = (href: string) => (href === '/' ? currentPath === '/' : currentPath === href || currentPath.startsWith(`${href}/`));
-const promoLinks = [
-	{ href: '/promo/weekly-new', label: '每週新進' },
-	{ href: '/promo/special-offers', label: '預定優惠' },
-	{ href: '/promo/equipment-sale', label: '器材促銷' },
-];
+const promoLinks = promoTabs.map((tab) => ({ href: `/promo/${tab.slug}`, label: tab.shortLabel }));
 const accountLink = user ? { href: '/account', label: '會員中心' } : { href: '/account/login', label: '登入' };
 ---
 
@@ -80,9 +77,7 @@ const accountLink = user ? { href: '/account', label: '會員中心' } : { href:
 			<a href="/" class="brand">水博館水族</a>
 			<nav class="nav-desktop" aria-label="主要導覽">
 				<a href="/">首頁</a>
-				<a href="/promo/weekly-new">每週新進</a>
-				<a href="/promo/special-offers">預定優惠</a>
-				<a href="/promo/equipment-sale">器材促銷</a>
+				{promoLinks.map((l) => <a href={l.href}>{l.label}</a>)}
 				<details class="nav-cat">
 					<summary>本店商品</summary>
 					<ul>
@@ -120,18 +115,12 @@ const accountLink = user ? { href: '/account', label: '會員中心' } : { href:
 		<slot />
 	</main>
 
-	<footer class:list={['site-footer', { 'legacy-footer': legacyFooter }]}>
-		{legacyFooter ? (
-			<div class="legacy-footer-inner">
-				<a href="/#about">聯絡資訊</a>
-				<p>© 2026 水博館水族</p>
-			</div>
-		) : (
-			<>
-				<p><a href="/#about">聯絡我們</a> · 桃園市中壢區環西路二段69號</p>
-				<p>© {new Date().getFullYear()} 水博館水族 · V2 測試站</p>
-			</>
-		)}
+	{/* 全站頁尾與首頁一致 */}
+	<footer class="site-footer legacy-footer">
+		<div class="legacy-footer-inner">
+			<nav class="legacy-footer-links" aria-label="頁尾連結"><a href="/#about">聯絡資訊</a><a href="/shopping-guide">購物須知</a></nav>
+			<p>© 2026 水博館水族</p>
+		</div>
 	</footer>
 </Layout>
 
@@ -422,7 +411,7 @@ const accountLink = user ? { href: '/account', label: '會員中心' } : { href:
 		background: #fff;
 	}
 
-	.site-footer.legacy-footer{padding:2rem 1rem;background:inherit}.legacy-footer-inner{display:flex;width:100%;max-width:64rem;margin:0 auto;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;text-align:center}.legacy-footer-inner a{color:var(--aq-primary-dark);font-size:.875rem;font-weight:650;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:4px;transition:color .15s}.legacy-footer-inner a:hover{color:var(--aq-primary)}.legacy-footer-inner p{margin:0;font-size:.75rem;letter-spacing:.02em}
+	.site-footer.legacy-footer{padding:2rem 1rem;background:inherit}.legacy-footer-inner{display:flex;width:100%;max-width:64rem;margin:0 auto;flex-direction:column;align-items:center;justify-content:center;gap:.5rem;text-align:center}.legacy-footer-inner a{color:var(--aq-primary-dark);font-size:.875rem;font-weight:650;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:4px;transition:color .15s}.legacy-footer-inner a:hover{color:var(--aq-primary)}.legacy-footer-links{display:flex;gap:1.25rem;flex-wrap:wrap;justify-content:center}.legacy-footer-inner p{margin:0;font-size:.75rem;letter-spacing:.02em}
 
 	.site-footer p {
 		margin: 0.25rem 0;

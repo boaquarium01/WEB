@@ -1,9 +1,19 @@
 import type { APIRoute } from 'astro';
 import { getAuth } from '../../../lib/auth';
+import { safeLocalRedirect } from '../../../lib/auth/policies.js';
 
 export const prerender = false;
 
 export const POST: APIRoute = async (context) => {
+	// 後台登出後回到後台登入頁；其他情況回首頁
+	let location = '/';
+	try {
+		const form = await context.request.clone().formData();
+		const next = form.get('next');
+		if (typeof next === 'string' && next) location = safeLocalRedirect(next, context.url.origin);
+	} catch {
+		/* 沒有表單內容 */
+	}
 	try {
 		const signedOut = await getAuth().api.signOut({
 			headers: context.request.headers,
@@ -13,7 +23,7 @@ export const POST: APIRoute = async (context) => {
 		const redirect = new Response(null, {
 			status: 302,
 			headers: {
-				Location: '/',
+				Location: location,
 			},
 		});
 
@@ -30,6 +40,6 @@ export const POST: APIRoute = async (context) => {
 
 		return redirect;
 	} catch {
-		return context.redirect('/');
+		return context.redirect(location);
 	}
 };

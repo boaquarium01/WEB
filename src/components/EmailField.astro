@@ -12,19 +12,21 @@ interface Props {
 	name?: string;
 	placeholder?: string;
 	remember?: boolean;
+	/** 登入帳號欄：也接受手機號碼（純數字時不顯示信箱快選） */
+	acceptsPhone?: boolean;
 }
 
-const { id, label = '電子郵件', name = 'email', placeholder = '例如 name@gmail.com', remember = false } = Astro.props;
+const { id, label = '電子郵件', name = 'email', placeholder = '例如 name@gmail.com', remember = false, acceptsPhone = false } = Astro.props;
 ---
 
 <div class="email-field" data-email-field data-remember={remember ? '1' : undefined}>
 	<label for={id}>{label}</label>
 	<input
 		id={id}
-		type="email"
+		type={acceptsPhone ? 'text' : 'email'}
 		name={name}
 		required
-		autocomplete="email"
+		autocomplete={acceptsPhone ? 'username' : 'email'}
 		inputmode="email"
 		autocapitalize="off"
 		autocorrect="off"
@@ -102,7 +104,7 @@ const { id, label = '電子郵件', name = 'email', placeholder = '例如 name@g
 			const at = value.indexOf('@');
 			const local = at === -1 ? value : value.slice(0, at);
 			const typed = at === -1 ? '' : value.slice(at + 1).toLowerCase();
-			const matches = !local || value.indexOf('@', at + 1) !== -1 ? [] : DOMAINS.filter((d) => d.startsWith(typed) && d !== typed);
+			const matches = !local || /^[\d\s+-]+$/.test(local) || value.indexOf('@', at + 1) !== -1 ? [] : DOMAINS.filter((d) => d.startsWith(typed) && d !== typed);
 			chips.replaceChildren(
 				...matches.map((domain) => {
 					const chip = document.createElement('button');

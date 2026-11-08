@@ -3,6 +3,7 @@ import AccountLayout from '../../../layouts/AccountLayout.astro';
 import { formatTwd } from '../../../lib/services/catalog';
 import { attachOrderItemImages, orderThumbUrl } from '../../../lib/services/order-item-images';
 import PushOptIn from '../../../components/PushOptIn.astro';
+import DigitField from '../../../components/DigitField.astro';
 import type { ShippingAddressSnapshot } from '../../../lib/services/checkout';
 import {
 	canSubmitBankLastFive,
@@ -54,7 +55,7 @@ const addr = order.shippingAddress as ShippingAddressSnapshot;
 const payment = order.payments[0];
 const submissions = payment?.submissions ?? [];
 const latestSubmission = submissions[0] ?? null;
-const bank = getBankTransferInfo();
+const bank = await getBankTransferInfo();
 const showSubmitForm = canSubmitBankLastFive(order.status);
 const showCancellationContact = order.status === 'PENDING_PAYMENT' || order.status === 'PAYMENT_SUBMITTED';
 const pageTitle =
@@ -170,25 +171,7 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 				<form method="post" class="submit-form" action={`/account/orders/${encodeURIComponent(order.orderNumber)}`}>
 					<input type="hidden" name="_action" value="submit_last_five" />
 					<input type="hidden" name="submissionId" value={latestSubmission?.id ?? ''} />
-					<!-- 一個真正的輸入框疊在五個數字格上：貼上、自動填入、刪除都維持原生行為 -->
-					<div class="digit-field" data-digit-field>
-						<input
-							class="digit-field__input"
-							type="text"
-							name="bankLastFive"
-							inputmode="numeric"
-							pattern="\d{5}"
-							maxlength="5"
-							minlength="5"
-							required
-							value={latestSubmission?.bankLastFive ?? customer?.bankAccountLastFive ?? ''}
-							autocomplete="off"
-							aria-label="您轉出帳號的末五碼"
-						/>
-						<div class="digit-field__boxes" aria-hidden="true">
-							{[0, 1, 2, 3, 4].map(() => <span class="digit-field__box"></span>)}
-						</div>
-					</div>
+					<DigitField name="bankLastFive" length={5} value={latestSubmission?.bankLastFive ?? customer?.bankAccountLastFive ?? ''} label="您轉出帳號的末五碼" />
 					<details class="note-toggle" open={Boolean(latestSubmission?.note)}>
 						<summary><i class="fa-solid fa-plus" aria-hidden="true"></i>加備註（選填）</summary>
 						<input type="text" name="note" value={latestSubmission?.note ?? ''} placeholder="例如：已於今晚轉帳" aria-label="備註（選填）" />
@@ -329,27 +312,6 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 			}, 2000);
 		});
 	});
-	// 末五碼：把真正輸入框的內容顯示到五個數字格，並標出目前要輸入的格子
-	document.querySelectorAll<HTMLElement>('[data-digit-field]').forEach((field) => {
-		const input = field.querySelector<HTMLInputElement>('input')!;
-		const boxes = Array.from(field.querySelectorAll<HTMLElement>('.digit-field__box'));
-		const render = () => {
-			const digits = input.value.replace(/\D/g, '').slice(0, 5);
-			if (digits !== input.value) input.value = digits;
-			const focused = document.activeElement === input;
-			boxes.forEach((box, index) => {
-				box.textContent = digits[index] ?? '';
-				box.classList.toggle('is-filled', index < digits.length);
-				box.classList.toggle('is-active', focused && index === Math.min(digits.length, 4));
-			});
-			field.classList.toggle('is-complete', digits.length === 5);
-		};
-		input.addEventListener('input', render);
-		input.addEventListener('focus', render);
-		input.addEventListener('blur', render);
-		input.form?.addEventListener('reset', () => window.setTimeout(render));
-		render();
-	});
 	const editTransferButton = document.querySelector<HTMLButtonElement>('[data-edit-transfer]');
 	const transferReport = document.querySelector<HTMLElement>('[data-transfer-report]');
 	const cancelTransferButton = document.querySelector<HTMLButtonElement>('[data-cancel-transfer]');
@@ -487,20 +449,10 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		margin-top: 0.75rem;
 		max-width: 22rem;
 	}
-	/* 回報末五碼：五個大數字格（真正的輸入框透明地疊在上面） */
+	/* 回報末五碼 */
 	.transfer-report-panel .hint{margin:.25rem 0 0;font-size:.9rem}
 	.transfer-report-panel .hint strong{color:var(--aq-primary-dark)}
 	.transfer-report-panel .submit-form{max-width:none;gap:.85rem}
-	.digit-field{position:relative;width:100%;max-width:330px;margin-top:.2rem}
-	.digit-field__boxes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
-	.digit-field__box{display:grid;place-items:center;height:62px;border:2px solid #dbe3df;border-radius:12px;background:#f8faf9;color:var(--aq-ink);font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;transition:border-color .15s,background .15s,box-shadow .15s}
-	.digit-field__box.is-filled{border-color:color-mix(in srgb,var(--aq-primary) 45%,#dbe3df);background:#fff}
-	.digit-field__box.is-active{border-color:var(--aq-primary);background:#fff;box-shadow:0 0 0 4px color-mix(in srgb,var(--aq-primary) 14%,transparent)}
-	.digit-field__box.is-active:empty::after{content:'';width:2px;height:28px;background:var(--aq-primary);animation:digit-caret 1s steps(1) infinite}
-	@keyframes digit-caret{50%{opacity:0}}
-	@media (prefers-reduced-motion:reduce){.digit-field__box.is-active:empty::after{animation:none}}
-	.digit-field.is-complete .digit-field__box{border-color:var(--aq-primary)}
-	.digit-field .digit-field__input{position:absolute!important;inset:0!important;z-index:1;width:100%!important;height:100%!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important;color:transparent!important;caret-color:transparent;font-size:16px!important;letter-spacing:0;opacity:.01;cursor:text}
 	.note-toggle summary{display:inline-flex;align-items:center;gap:.35rem;color:var(--aq-muted);font-size:.85rem;font-weight:650;cursor:pointer;list-style:none}
 	.note-toggle summary::-webkit-details-marker{display:none}
 	.note-toggle summary i{font-size:.7rem}

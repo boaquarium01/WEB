@@ -2,6 +2,7 @@
 import AdminLayout from '../../../../layouts/AdminLayout.astro';
 import { getAdminBasePath, isValidAdminSecretParam } from '../../../../lib/admin/path';
 import { listShippingMethods, saveShippingMethod } from '../../../../lib/services/shipping';
+import { getBankTransferInfo, saveBankTransferInfo } from '../../../../lib/services/payment';
 
 export const prerender = false;
 
@@ -14,6 +15,14 @@ let error: string | null = null;
 let message: string | null = null;
 if (Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
+	if (form.get('_form') === 'bank') {
+		try {
+			await saveBankTransferInfo({ bankName: String(form.get('bankName') ?? ''), accountName: String(form.get('accountName') ?? ''), accountNumber: String(form.get('accountNumber') ?? '') }, String(Astro.locals.user?.email ?? ''));
+			message = '匯款帳戶已儲存，新的訂單與訂單頁會顯示這組帳戶';
+		} catch (cause) {
+			error = cause instanceof Error ? cause.message : '儲存失敗';
+		}
+	} else {
 	const rawThreshold = String(form.get('freeShippingThreshold') ?? '').trim();
 	try {
 		await saveShippingMethod({
@@ -27,11 +36,12 @@ if (Astro.request.method === 'POST') {
 	} catch (cause) {
 		error = cause instanceof Error ? cause.message : '儲存失敗';
 	}
+	}
 }
-const methods = await listShippingMethods();
+const [methods, bank] = await Promise.all([listShippingMethods(), getBankTransferInfo()]);
 ---
 
-<AdminLayout title="運費設定｜水博館水族">
+<AdminLayout title="運費設定">
 	<header class="head page-heading">
 		<div class="heading-row"><div><h1>運費設定</h1></div></div>
 	</header>
@@ -51,6 +61,20 @@ const methods = await listShippingMethods();
 				<footer><span>{method.freeShippingThreshold === null ? '未設定滿額免運' : `訂單滿 NT$ ${method.freeShippingThreshold.toLocaleString('zh-TW')} 免運`}</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存設定</button></footer>
 			</form>
 		))}
+	</section>
+
+	<section class="bank-panel" aria-labelledby="bank-title">
+		<form class="method-card" method="post" action={`${base}/shop/shipping`} data-confirm="確定更新匯款帳戶？
+顧客的訂單頁與訂單確認信會改顯示新帳戶。">
+			<input type="hidden" name="_form" value="bank" />
+			<header class="method-head"><div><h2 id="bank-title"><i class="fa-solid fa-building-columns" aria-hidden="true"></i> 匯款帳戶</h2></div></header>
+			<div class="fields">
+				<label>銀行（含代碼）<input name="bankName" maxlength="60" required value={bank.bankName} placeholder="例如：臺灣銀行（004）" /></label>
+				<label>戶名<input name="accountName" maxlength="60" required value={bank.accountName} /></label>
+				<label>帳號<input name="accountNumber" maxlength="40" required inputmode="numeric" pattern="[0-9 -]+" value={bank.accountNumber} /></label>
+			</div>
+			<footer><span>顯示在結帳後的訂單頁與訂單確認信</span><button type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存帳戶</button></footer>
+		</form>
 	</section>
 
 	<section class="add-panel">
@@ -88,8 +112,11 @@ const methods = await listShippingMethods();
 	.fields input { width: 100%; min-width: 0; min-height: 44px; box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; font-size: 15px; }
 	.method-card footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--commerce-muted); font-size: 13px; }
 	.method-card footer button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 42px; padding: 9px 14px; border: 0; border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
-	.add-panel { margin-top: 20px; }
+	.add-panel, .bank-panel { margin-top: 20px; }
+	.bank-panel .fields label:first-child { grid-column: auto; }
+	.bank-panel .fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	.method-head h2 i { color: var(--commerce-primary); font-size: .85em; }
 	.add-panel > p { margin: 7px 0 16px; color: var(--commerce-muted); font-size: 14px; }
 	@media(max-width:900px) { .methods { grid-template-columns: 1fr; } }
-	@media(max-width:560px) { .method-card,.add-panel { padding: 15px; }.method-head { align-items: flex-start; flex-direction: column; }.fields { grid-template-columns: 1fr; }.fields label:first-child { grid-column: auto; }.method-card footer { align-items: stretch; flex-direction: column; }.method-card footer button { width: 100%; } }
+	@media(max-width:560px) { .method-card,.add-panel { padding: 15px; }.method-head { align-items: flex-start; flex-direction: column; }.fields, .bank-panel .fields { grid-template-columns: 1fr; }.fields label:first-child { grid-column: auto; }.method-card footer { align-items: stretch; flex-direction: column; }.method-card footer button { width: 100%; } }
 </style>

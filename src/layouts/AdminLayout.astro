@@ -2,6 +2,7 @@
 /** Shared shell for the official website administration workspace. */
 import Layout from './Layout.astro';
 import { getAdminBasePath } from '../lib/admin/path';
+import { getAdminOrderStatusCounts } from '../lib/services/admin-orders';
 
 interface Props {
 	title: string;
@@ -9,6 +10,8 @@ interface Props {
 }
 
 const { title, description = '水博館水族官方網站後台' } = Astro.props;
+// 分頁標題統一為「頁名｜水博館水族官方網站後台」，各頁只需傳頁名
+const pageTitle = `${title.split('｜')[0]}｜水博館水族官方網站後台`;
 const user = Astro.locals.user;
 const path = Astro.url.pathname;
 const base = getAdminBasePath();
@@ -22,12 +25,26 @@ const links = [
 	{ href: `${shop}/home-display`, label: '首頁陳列', icon: 'fa-house', match: (p: string) => p.includes('/shop/home-display') },
 	{ href: `${shop}/operations`, label: '營運管理', icon: 'fa-chart-line', match: (p: string) => p.includes('/shop/operations') },
 	{ href: `${shop}/shipping`, label: '運費設定', icon: 'fa-truck-fast', match: (p: string) => p.includes('/shop/shipping') },
+	{ href: `${shop}/admins`, label: '管理員設定', icon: 'fa-user-shield', match: (p: string) => p.includes('/shop/admins') },
 ];
+/** 需要店家處理的訂單：已回報付款待核對＋待出貨，顯示在「訂單管理」徽章 */
+let pendingOrders = 0;
+try {
+	const counts = await getAdminOrderStatusCounts();
+	pendingOrders = counts.PAYMENT_SUBMITTED + counts.AWAITING_SHIPMENT;
+} catch {
+	/* 讀不到就不顯示徽章 */
+}
+const badgeFor = (href: string) => (href === `${shop}/orders` && pendingOrders > 0 ? (pendingOrders > 99 ? '99+' : String(pendingOrders)) : '');
+/** 手機底部分頁列：常用三項＋更多 */
+const tabLinks = links.slice(0, 3);
+const moreLinks = links.slice(3);
+const moreActive = moreLinks.some((link) => link.match(path));
 const today = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
 const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', weekday: 'short' }).format(new Date());
 ---
 
-<Layout title={title} description={description}>
+<Layout title={pageTitle} description={description}>
 	<div class="commerce-admin">
 		<aside class="commerce-sidebar" aria-label="官方網站後台導覽">
 			<button id="commerceSidebarToggle" class="commerce-sidebar-toggle" type="button" aria-expanded="true" aria-label="收折側邊欄" title="收折側邊欄">
@@ -48,6 +65,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 						<a href={link.href} title={link.label} class:list={[{ active: link.match(path) }]} aria-current={link.match(path) ? 'page' : undefined}>
 							<i class:list={['fa-solid', link.icon]} aria-hidden="true"></i>
 							<span><strong>{link.label}</strong></span>
+							{badgeFor(link.href) && <span class="nav-badge" aria-label={`${badgeFor(link.href)} 筆待處理`}>{badgeFor(link.href)}</span>}
 							<i class="fa-solid fa-chevron-right nav-chevron" aria-hidden="true"></i>
 						</a>
 					))}
@@ -56,13 +74,46 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 			</div>
 			<div class="commerce-sidebar__bottom">
 				<a href="/" title="查看官網"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>查看官網</span></a>
+				<form method="post" action="/api/account/logout" data-confirm="確定要登出後台？">
+					<input type="hidden" name="next" value={`${base}/login`} />
+					<button type="submit" class="commerce-logout" title="登出"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i><span>登出</span></button>
+				</form>
 			</div>
 		</aside>
+
+		<!-- 手機底部分頁列 -->
+		<nav class="commerce-tabbar" aria-label="主要功能">
+			{tabLinks.map((link) => (
+				<a href={link.href} class:list={[{ active: link.match(path) }]} aria-current={link.match(path) ? 'page' : undefined}>
+					<span class="commerce-tabbar__icon"><i class:list={['fa-solid', link.icon]} aria-hidden="true"></i>{badgeFor(link.href) && <span class="nav-badge">{badgeFor(link.href)}</span>}</span>
+					<span>{link.label.replace('管理', '').replace('營運總覽', '總覽')}</span>
+				</a>
+			))}
+			<button type="button" id="commerceMoreBtn" class:list={[{ active: moreActive }]} aria-haspopup="dialog" aria-controls="commerceMoreSheet">
+				<span class="commerce-tabbar__icon"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></span>
+				<span>更多</span>
+			</button>
+		</nav>
+		<dialog id="commerceMoreSheet" class="commerce-more" aria-label="更多功能">
+			<div class="commerce-more__body">
+				<div class="commerce-more__head"><strong>更多功能</strong><button type="button" class="commerce-more__close" data-close-more aria-label="關閉"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>
+				<div class="commerce-more__grid">
+					{moreLinks.map((link) => (
+						<a href={link.href} class:list={[{ active: link.match(path) }]} aria-current={link.match(path) ? 'page' : undefined}><i class:list={['fa-solid', link.icon]} aria-hidden="true"></i><span>{link.label}</span></a>
+					))}
+					<a href="/"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>查看官網</span></a>
+				</div>
+				<form method="post" action="/api/account/logout" data-confirm="確定要登出後台？">
+					<input type="hidden" name="next" value={`${base}/login`} />
+					<button type="submit" class="commerce-more__logout"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>登出</button>
+				</form>
+			</div>
+		</dialog>
 
 		<div class="commerce-workspace">
 			<main class="commerce-main">
 				<div class="commerce-content"><slot /></div>
-				<footer class="commerce-footer"><span>水博館水族官方網站後台</span><span>官網內容與電商營運整合管理</span></footer>
+				<footer class="commerce-footer"><span>水博館水族官方網站後台</span><span>Copyright ©mfeng</span></footer>
 			</main>
 		</div>
 	</div>
@@ -114,7 +165,10 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 	.commerce-nav a small { color: #9aa8a9; font-size: 10px; }
 	.commerce-nav .nav-chevron { flex: none; overflow: hidden; color: #a7b5b4; font-size: 10px; transition: opacity .12s ease, width .2s ease; }
 	.commerce-sidebar__bottom { margin-top: auto; padding-top: 15px; border-top: 1px solid #edf1ef; display: grid; gap: 3px; }
-	.commerce-sidebar__bottom a { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; color: #718189; text-decoration: none; font-size: 12px; }
+	.commerce-sidebar__bottom form { margin: 0; }
+	.commerce-sidebar__bottom .commerce-logout { width: 100%; border: 0; background: transparent; font: inherit; cursor: pointer; text-align: left; }
+	.commerce-sidebar__bottom a, .commerce-sidebar__bottom .commerce-logout { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 9px; color: #718189; text-decoration: none; font-size: 12px; }
+	.commerce-sidebar__bottom .commerce-logout:hover { background: #fff3f1; color: #b4443a; }
 	.commerce-sidebar__bottom a:hover,.commerce-sidebar__bottom a.active { background: #f2f7f6; color: var(--commerce-primary-dark); }
 	.commerce-sidebar__bottom i { width: 17px; text-align: center; }
 	.commerce-sidebar__bottom span { max-width: 170px; overflow: hidden; white-space: nowrap; transition: opacity .12s ease, max-width .2s ease, visibility 0s linear; }
@@ -160,12 +214,39 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__user { display: grid; width: 100%; grid-template-columns: 30px; justify-content: center; padding: 0; }
 		.commerce-admin[data-sidebar-collapsed='true'] .commerce-user__avatar { width: 30px; height: 30px; margin: 0; }
 		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav a,
-		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom a { position: relative; width: 100%; box-sizing: border-box; justify-content: center; gap: 0; padding-inline: 0; }
+		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom a, .commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom .commerce-logout { position: relative; width: 100%; box-sizing: border-box; justify-content: center; gap: 0; padding-inline: 0; }
 		.commerce-admin[data-sidebar-collapsed='true'] .commerce-nav a > i:first-child,
 		.commerce-admin[data-sidebar-collapsed='true'] .commerce-sidebar__bottom i { position: relative; left: 0; width: 22px; height: 22px; display: grid; flex: none; place-items: center; margin-inline: auto; text-align: center; }
 	}
+	.nav-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: auto; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #d64535; color: #fff; font-size: 11px; font-weight: 800; line-height: 1; }
+	.commerce-tabbar, .commerce-more { display: none; }
+
 	@media (max-width: 800px) {
 		.commerce-admin { display: block; }
+		/* 手機改用底部分頁列，頂部只留品牌與使用者 */
+		.commerce-nav-wrap { display: none !important; }
+		.commerce-sidebar { grid-template-areas: "brand context" !important; padding-bottom: 10px !important; }
+		.commerce-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: grid; grid-template-columns: repeat(4, 1fr); padding: 4px max(6px, env(safe-area-inset-right, 0px)) max(4px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-left, 0px)); border-top: 1px solid var(--commerce-line); background: rgba(255, 255, 255, 0.97); box-shadow: 0 -6px 18px rgba(28, 67, 70, 0.06); backdrop-filter: blur(8px); }
+		.commerce-tabbar a, .commerce-tabbar button { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding: 6px 2px 4px; border: 0; background: none; color: #7a8b8f; font: inherit; font-size: 11px; font-weight: 700; text-decoration: none; cursor: pointer; }
+		.commerce-tabbar .active { color: var(--commerce-primary-dark); }
+		.commerce-tabbar .active .commerce-tabbar__icon { background: var(--commerce-primary-soft); }
+		.commerce-tabbar__icon { position: relative; display: grid; place-items: center; width: 44px; height: 28px; border-radius: 999px; font-size: 16px; }
+		.commerce-tabbar__icon .nav-badge { position: absolute; top: -4px; right: -2px; margin: 0; min-width: 18px; height: 18px; font-size: 10px; border: 2px solid #fff; }
+		.commerce-main { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)) !important; }
+		/* 頁面自己有底部操作列時（訂單明細、商品編輯）先讓位 */
+		.commerce-admin:has(.actions-bar.has-actions) .commerce-tabbar,
+		.commerce-admin:has([data-mobile-panel]:not([data-mobile-panel='list'])) .commerce-tabbar { display: none; }
+		.commerce-more[open] { display: block; width: 100%; max-width: none; margin: auto 0 0; padding: 0; border: 0; border-radius: 18px 18px 0 0; background: #fff; }
+		.commerce-more::backdrop { background: rgba(16, 30, 30, 0.45); }
+		.commerce-more__body { padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+		.commerce-more__head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 16px; }
+		.commerce-more__close { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: #f2f5f4; color: #52676b; font-size: 16px; cursor: pointer; }
+		.commerce-more__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+		.commerce-more__grid a { display: grid; justify-items: center; gap: 6px; padding: 14px 4px; border: 1px solid #edf1ef; border-radius: 12px; color: #40575c; font-size: 13px; font-weight: 700; text-align: center; text-decoration: none; }
+		.commerce-more__grid a i { color: var(--commerce-primary); font-size: 18px; }
+		.commerce-more__grid a.active { border-color: #d5ebe6; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); }
+		.commerce-more form { margin: 12px 0 0; }
+		.commerce-more__logout { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 46px; border: 1px solid #f0d4cf; border-radius: 12px; background: #fff; color: #b4443a; font: inherit; font-weight: 700; cursor: pointer; }
 		.commerce-sidebar { position: relative; top: auto; z-index: auto; height: auto; display: grid; grid-template-columns: minmax(0,1fr) auto; grid-template-areas: "brand context" "nav nav"; align-items: center; gap: 8px 10px; padding: max(11px, env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 4px max(14px, env(safe-area-inset-left, 0px)); border-right: 0; border-bottom: 1px solid var(--commerce-line); }
 		.commerce-brand { grid-area: brand; min-width: 0; padding: 0 2px; }
 		.commerce-brand__mark { width: 34px; height: 34px; border-radius: 11px; font-size: 16px; }
@@ -227,6 +308,12 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 </style>
 
 <script>
+	// 手機「更多」選單
+	const moreSheet = document.getElementById('commerceMoreSheet') as HTMLDialogElement | null;
+	document.getElementById('commerceMoreBtn')?.addEventListener('click', () => moreSheet?.showModal());
+	moreSheet?.addEventListener('click', (event) => {
+		if (event.target === moreSheet || (event.target as HTMLElement).closest('[data-close-more]')) moreSheet.close();
+	});
 	const adminShell = document.querySelector('.commerce-admin');
 	const sidebarToggle = document.getElementById('commerceSidebarToggle');
 	if (adminShell instanceof HTMLElement && sidebarToggle instanceof HTMLButtonElement) {

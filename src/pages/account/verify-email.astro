@@ -1,30 +1,182 @@
 ---
 import AccountLayout from '../../layouts/AccountLayout.astro';
+import DigitField from '../../components/DigitField.astro';
 import { isAuthEmailConfigured } from '../../lib/email/adapter';
 
 export const prerender = false;
 const mailConfigured = isAuthEmailConfigured();
+const alreadySent = Astro.url.searchParams.has('sent');
 ---
 
 <AccountLayout title="驗證 Email｜水博館水族">
-	<h1>驗證 Email</h1>
-	<p class="lead">{Astro.url.searchParams.has('sent') ? '註冊已完成。請前往信箱點選驗證連結，再回來登入。' : '輸入註冊時使用的 Email，我們會以相同訊息回覆是否已寄出。'}</p>
-	{!mailConfigured && <p class="notice">驗證信服務尚未設定，請聯絡網站管理員完成郵件設定。</p>}
-	<form id="verify-form" class="form">
-		<label>Email<input type="email" name="email" required autocomplete="email" /></label>
-		<button type="submit" disabled={!mailConfigured}>重新寄送驗證信</button>
+	<div class="auth-head">
+		<h1>輸入驗證碼</h1>
+		<p data-verify-lead>請輸入註冊時使用的 Email，我們會寄送 6 位數驗證碼。</p>
+	</div>
+	{!mailConfigured && <p class="error">郵件服務尚未設定，目前無法寄送驗證碼，請聯絡店家。</p>}
+
+	<form class="form" data-email-step data-already-sent={alreadySent ? '1' : undefined}>
+		<label>電子郵件<input id="verify-email-input" type="email" required autocomplete="email" placeholder="例如 name@gmail.com" /></label>
+		<button type="submit" disabled={!mailConfigured}>寄送驗證碼</button>
 	</form>
-	<p id="verify-status" class="status" role="status" aria-live="polite"></p>
+
+	<form class="form" data-code-step hidden>
+		<DigitField name="otp" id="verify-code" length={6} label="6 位數驗證碼" autocomplete="one-time-code" />
+		<p id="verify-status" class="status" role="status" aria-live="polite"></p>
+		<button type="submit" data-verify-submit>確認驗證</button>
+		<p class="verify-help">沒收到？請查看垃圾郵件。驗證碼 10 分鐘內有效。</p>
+		<div class="verify-actions">
+			<button type="button" class="btn-plain link-button" data-resend>重新寄送</button>
+			<button type="button" class="btn-plain link-button" data-change-email>換一個 Email</button>
+		</div>
+	</form>
+
 	<p class="meta"><a href="/account/login">返回登入</a></p>
 </AccountLayout>
 
 <script>
-	const form = document.getElementById('verify-form');
-	const status = document.getElementById('verify-status');
-	form?.addEventListener('submit', async (event) => {
+	const EMAIL_KEY = 'aq-verify-email';
+	const NEXT_KEY = 'aq-verify-next';
+	const read = (key: string) => { try { return sessionStorage.getItem(key) ?? ''; } catch { return ''; } };
+	const clear = () => { try { sessionStorage.removeItem(EMAIL_KEY); sessionStorage.removeItem(NEXT_KEY); } catch {} };
+
+	const emailStep = document.querySelector<HTMLFormElement>('[data-email-step]')!;
+	const codeStep = document.querySelector<HTMLFormElement>('[data-code-step]')!;
+	const lead = document.querySelector<HTMLElement>('[data-verify-lead]')!;
+	const status = document.getElementById('verify-status') as HTMLElement;
+	const codeInput = document.getElementById('verify-code') as HTMLInputElement;
+	const emailInput = document.getElementById('verify-email-input') as HTMLInputElement;
+	const submit = document.querySelector<HTMLButtonElement>('[data-verify-submit]')!;
+	const resend = document.querySelector<HTMLButtonElement>('[data-resend]')!;
+	let email = read(EMAIL_KEY);
+	let cooldownTimer: number | undefined;
+
+	const setStatus = (message: string, isError = false) => {
+		status.textContent = message;
+		status.classList.toggle('is-error', isError);
+	};
+	const maskEmail = (value: string) => {
+		const [name, domain] = value.split('@');
+		return `${name.slice(0, Math.min(3, Math.max(1, name.length - 1)))}***@${domain}`;
+	};
+	const startCooldown = (seconds = 60) => {
+		window.clearInterval(cooldownTimer);
+		let left = seconds;
+		const tick = () => {
+			resend.disabled = left > 0;
+			resend.textContent = left > 0 ? `重新寄送（${left} 秒）` : '重新寄送';
+			left -= 1;
+			if (left < 0) window.clearInterval(cooldownTimer);
+		};
+		tick();
+		cooldownTimer = window.setInterval(tick, 1000);
+	};
+	const showCodeStep = () => {
+		emailStep.hidden = true;
+		codeStep.hidden = false;
+		lead.textContent = `驗證碼已寄到 ${maskEmail(email)}`;
+		codeInput.focus();
+	};
+	const sendCode = async () => {
+		const res = await fetch('/api/auth/email-otp/send-verification-otp', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ email, type: 'email-verification' }),
+		});
+		if (res.status === 429) throw new Error('寄送太頻繁，請稍候一分鐘再試。');
+		if (!res.ok) throw new Error('目前無法寄送驗證碼，請稍後再試。');
+	};
+
+	if (email && emailStep.dataset.alreadySent) {
+		showCodeStep();
+		startCooldown();
+	} else if (email) {
+		emailInput.value = email;
+	}
+
+	emailStep.addEventListener('submit', async (event) => {
 		event.preventDefault();
-		const data = new FormData(form);
-		await fetch('/api/account/resend-verification', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ email:data.get('email') }) });
-		status.textContent = '若此 Email 尚未驗證且已註冊，驗證信將寄至信箱。';
+		const button = emailStep.querySelector<HTMLButtonElement>('button[type=submit]')!;
+		email = emailInput.value.trim();
+		button.disabled = true;
+		try {
+			await sendCode();
+			showCodeStep();
+			startCooldown();
+			setStatus('');
+		} catch (error) {
+			lead.textContent = error instanceof Error ? error.message : '目前無法寄送驗證碼，請稍後再試。';
+		} finally {
+			button.disabled = false;
+		}
+	});
+
+	const verify = async () => {
+		const otp = codeInput.value;
+		if (otp.length !== 6) {
+			setStatus('請輸入 6 位數驗證碼。', true);
+			codeInput.focus();
+			return;
+		}
+		submit.disabled = true;
+		submit.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span>驗證中…';
+		setStatus('');
+		try {
+			const res = await fetch('/api/auth/email-otp/verify-email', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, otp }),
+			});
+			if (res.ok) {
+				const next = read(NEXT_KEY);
+				clear();
+				window.location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/account';
+				return;
+			}
+			const payload = await res.json().catch(() => ({}));
+			const expired = payload.code === 'OTP_EXPIRED' || payload.code === 'TOO_MANY_ATTEMPTS';
+			throw new Error(expired ? '驗證碼已失效，請按「重新寄送」取得新的驗證碼。' : res.status === 429 ? '嘗試太多次，請稍候一分鐘再試。' : '驗證碼不正確，請再確認一次。');
+		} catch (error) {
+			setStatus(error instanceof Error ? error.message : '目前無法驗證，請稍後再試。', true);
+			codeInput.value = '';
+			codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+			codeInput.focus();
+			submit.disabled = false;
+			submit.textContent = '確認驗證';
+		}
+	};
+	codeStep.addEventListener('submit', (event) => { event.preventDefault(); verify(); });
+	codeStep.addEventListener('digit:complete', () => { if (!submit.disabled) verify(); });
+
+	resend.addEventListener('click', async () => {
+		resend.disabled = true;
+		try {
+			await sendCode();
+			setStatus('已重新寄送，請使用最新的驗證碼。');
+			codeInput.value = '';
+			codeInput.dispatchEvent(new Event('input', { bubbles: true }));
+			startCooldown();
+		} catch (error) {
+			setStatus(error instanceof Error ? error.message : '目前無法寄送驗證碼，請稍後再試。', true);
+			resend.disabled = false;
+		}
+	});
+	document.querySelector('[data-change-email]')?.addEventListener('click', () => {
+		window.clearInterval(cooldownTimer);
+		codeStep.hidden = true;
+		emailStep.hidden = false;
+		lead.textContent = '請輸入註冊時使用的 Email，我們會寄送 6 位數驗證碼。';
+		emailInput.value = email;
+		emailInput.focus();
 	});
 </script>
+
+<style>
+	.form[hidden] { display: none; }
+	.status { margin: 0; }
+	.verify-help { margin: 0; color: var(--aq-muted); font-size: .84rem; }
+	.verify-actions { display: flex; justify-content: space-between; gap: 1rem; }
+	.link-button { padding: .35rem 0; border: 0; background: none; color: var(--aq-primary-dark); font: inherit; font-size: .88rem; font-weight: 650; cursor: pointer; }
+	.link-button:disabled { color: var(--aq-muted); cursor: default; }
+	.meta { margin: .25rem 0 0; text-align: center; }
+</style>

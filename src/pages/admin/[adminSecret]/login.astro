@@ -1,0 +1,197 @@
+---
+/** 後台專用登入頁：未登入或沒有後台權限時由 middleware 導到這裡 */
+import Layout from '../../../layouts/Layout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../lib/admin/path';
+import { safeLocalRedirect } from '../../../lib/auth/policies.js';
+import { getServerEnv } from '../../../lib/env';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const shop = `${base}/shop`;
+const loginPath = `${base}/login`;
+const rawNext = safeLocalRedirect(Astro.url.searchParams.get('next'), Astro.url.origin, shop);
+// 只接受回到後台內的頁面
+const next = rawNext.startsWith(`${base}/`) && !rawNext.startsWith(loginPath) ? rawNext : shop;
+
+const user = Astro.locals.user;
+if (user && Astro.locals.isAdmin) return Astro.redirect(next);
+const denied = Boolean(user);
+
+const authEnv = getServerEnv();
+const googleEnabled = Boolean(authEnv.GOOGLE_CLIENT_ID && authEnv.GOOGLE_CLIENT_SECRET);
+const lineEnabled = Boolean(authEnv.LINE_CHANNEL_ID && authEnv.LINE_CHANNEL_SECRET);
+Astro.response.headers.set('Cache-Control', 'private, no-store');
+---
+
+<Layout title="後台登入｜水博館水族官方網站後台" description="水博館水族官方網站後台">
+	<meta name="robots" content="noindex, nofollow" slot="head" />
+	<main class="admin-login">
+		<section class="card" aria-labelledby="admin-login-title">
+			<div class="brand">
+				<span class="brand__mark"><i class="fa-solid fa-fish-fins" aria-hidden="true"></i></span>
+				<div><strong>水博館水族</strong><small>官方網站後台</small></div>
+			</div>
+
+			{denied ? (
+				<>
+					<h1 id="admin-login-title">沒有後台權限</h1>
+					<p class="lead">目前登入的帳號 <strong>{user?.email}</strong> 不是管理員。請改用管理員帳號登入，或請總管理員在「管理員設定」加入這個帳號。</p>
+					<form method="post" action="/api/account/logout">
+						<input type="hidden" name="next" value={`${loginPath}?next=${encodeURIComponent(next)}`} />
+						<button type="submit" class="primary"><i class="fa-solid fa-right-left" aria-hidden="true"></i>改用其他帳號登入</button>
+					</form>
+					<a class="back" href="/">回到官網</a>
+				</>
+			) : (
+				<>
+					<h1 id="admin-login-title">後台登入</h1>
+					<p class="lead">請用管理員的會員帳號登入。</p>
+					<form id="admin-login-form" class="form" novalidate>
+						<label>
+							<span>手機或電子郵件</span>
+							<input id="admin-login-email" name="email" type="text" inputmode="email" autocomplete="username" required autofocus />
+						</label>
+						<label>
+							<span>密碼</span>
+							<span class="password">
+								<input id="admin-login-password" name="password" type="password" autocomplete="current-password" required minlength="8" enterkeyhint="go" />
+								<button type="button" id="admin-toggle-password" class="password__toggle" aria-label="顯示密碼" aria-pressed="false"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+							</span>
+						</label>
+						<p id="admin-login-status" class="status" role="status" aria-live="polite"></p>
+						<button type="submit" id="admin-login-submit" class="primary">登入後台</button>
+					</form>
+					{(lineEnabled || googleEnabled) && (
+						<div class="social">
+							{lineEnabled && <button type="button" data-provider="line"><i class="fa-brands fa-line" aria-hidden="true"></i>LINE 登入</button>}
+							{googleEnabled && <button type="button" data-provider="google"><span class="google-mark" aria-hidden="true">G</span>Google 登入</button>}
+						</div>
+					)}
+					<div class="links">
+						<a href="/account/forgot-password">忘記密碼</a>
+						<a href="/">回到官網</a>
+					</div>
+				</>
+			)}
+		</section>
+	</main>
+	<input type="hidden" id="admin-login-next" value={next} />
+</Layout>
+
+<script>
+	import { normalizeTaiwanMobile } from '../../../lib/auth/policies.js';
+
+	const form = document.getElementById('admin-login-form') as HTMLFormElement | null;
+	const next = (document.getElementById('admin-login-next') as HTMLInputElement | null)?.value || '/';
+	const status = document.getElementById('admin-login-status');
+	const submit = document.getElementById('admin-login-submit') as HTMLButtonElement | null;
+	const emailInput = document.getElementById('admin-login-email') as HTMLInputElement | null;
+	const passwordInput = document.getElementById('admin-login-password') as HTMLInputElement | null;
+
+	const setStatus = (message: string, isError = false) => {
+		if (!status) return;
+		status.textContent = message;
+		status.classList.toggle('is-error', isError);
+	};
+
+	const toggle = document.getElementById('admin-toggle-password');
+	toggle?.addEventListener('click', () => {
+		if (!passwordInput) return;
+		const showing = passwordInput.type === 'text';
+		passwordInput.type = showing ? 'password' : 'text';
+		toggle.setAttribute('aria-label', showing ? '顯示密碼' : '隱藏密碼');
+		toggle.setAttribute('aria-pressed', String(!showing));
+		toggle.innerHTML = showing ? '<i class="fa-regular fa-eye" aria-hidden="true"></i>' : '<i class="fa-regular fa-eye-slash" aria-hidden="true"></i>';
+	});
+
+	form?.addEventListener('input', () => { if (status?.classList.contains('is-error')) setStatus(''); });
+
+	form?.addEventListener('submit', async (event) => {
+		event.preventDefault();
+		if (!emailInput || !passwordInput || !submit) return;
+		const email = emailInput.value.trim();
+		const password = passwordInput.value;
+		if (!(email.includes('@') ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) : normalizeTaiwanMobile(email))) {
+			setStatus('請輸入正確的手機號碼或電子郵件。', true);
+			emailInput.focus();
+			return;
+		}
+		if (password.length < 8) {
+			setStatus('密碼至少 8 碼，請再確認一次。', true);
+			passwordInput.focus();
+			return;
+		}
+		submit.disabled = true;
+		submit.textContent = '登入中…';
+		setStatus('');
+		try {
+			const res = await fetch('/api/account/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, password }),
+			});
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(payload.code === 'EMAIL_NOT_VERIFIED' ? '這個帳號還沒完成 Email 驗證，請先到信箱完成驗證。' : (payload.error || '帳號或密碼不正確，請再確認一次。'));
+			}
+			// 回到原本要去的後台頁；沒有權限時 middleware 會再導回這頁並顯示說明
+			window.location.href = next;
+		} catch (error) {
+			setStatus(error instanceof Error ? error.message : '目前無法登入，請稍後再試。', true);
+			submit.disabled = false;
+			submit.textContent = '登入後台';
+		}
+	});
+
+	for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provider]')) {
+		button.addEventListener('click', async () => {
+			button.disabled = true;
+			setStatus('正在前往授權…');
+			try {
+				const { authClient } = await import('../../../lib/auth/client');
+				const result = await authClient.signIn.social({ provider: button.dataset.provider!, callbackURL: next });
+				if (result.error) throw new Error();
+			} catch {
+				setStatus('授權失敗或已取消，請再試一次。', true);
+				button.disabled = false;
+			}
+		});
+	}
+</script>
+
+<style>
+	.admin-login { display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; box-sizing: border-box; padding: 24px 16px; background: linear-gradient(160deg, #eef6f4 0%, #f7f9f8 55%, #ffffff 100%); }
+	.card { width: min(400px, 100%); box-sizing: border-box; padding: 28px 24px 22px; border: 1px solid #dfe8e5; border-radius: 18px; background: #fff; box-shadow: 0 18px 40px rgba(20, 60, 55, 0.08); }
+	.brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+	.brand__mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 12px; background: #087e78; color: #fff; font-size: 19px; }
+	.brand strong { display: block; color: #1f2d2c; font-size: 17px; }
+	.brand small { color: #6b7a78; font-size: 13px; }
+	h1 { margin: 0 0 6px; color: #1f2d2c; font-size: 22px; }
+	.lead { margin: 0 0 20px; color: #5f6f6d; font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+	.form { display: grid; gap: 14px; }
+	.form label { display: grid; gap: 6px; color: #4b5f5c; font-size: 13px; font-weight: 650; }
+	.form input { width: 100%; box-sizing: border-box; min-height: 46px; padding: 0 12px; border: 1px solid #d6e0dd; border-radius: 10px; background: #fff; color: #1f2d2c; font: inherit; font-size: 16px; }
+	.form input:focus { outline: none; border-color: #087e78; box-shadow: 0 0 0 3px rgba(8, 126, 120, 0.15); }
+	.password { position: relative; display: block; }
+	.password input { padding-right: 46px; }
+	.password__toggle { position: absolute; top: 50%; right: 4px; display: grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 0; background: transparent; color: #66756e; transform: translateY(-50%); cursor: pointer; }
+	.status { min-height: 1em; margin: 0; font-size: 13px; color: #4b5f5c; }
+	.status:empty { display: none; }
+	.status.is-error { color: #b4443a; }
+	.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; border: 0; border-radius: 10px; background: #087e78; color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+	.primary:hover { background: #066a65; }
+	.primary:disabled { opacity: 0.7; cursor: wait; }
+	.social { display: flex; gap: 10px; margin-top: 14px; }
+	.social button { flex: 1 1 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 1px solid #d6e0dd; border-radius: 10px; background: #fff; color: #1f2d2c; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
+	.social .fa-line { color: #06c755; font-size: 18px; }
+	.google-mark { font-family: Arial, sans-serif; font-weight: 800; background: conic-gradient(from -45deg, #4285f4 0 25%, #34a853 0 50%, #fbbc05 0 75%, #ea4335 0); color: transparent; background-clip: text; -webkit-background-clip: text; }
+	.links { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 14px; border-top: 1px solid #edf1ef; font-size: 13px; }
+	.links a, .back { color: #087e78; font-weight: 650; text-decoration: none; }
+	.links a:hover, .back:hover { text-decoration: underline; }
+	.back { display: block; margin-top: 14px; text-align: center; font-size: 13px; }
+</style>

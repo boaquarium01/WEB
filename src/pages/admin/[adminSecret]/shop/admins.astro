@@ -1,0 +1,153 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../lib/admin/path';
+import { addAdmin, listAdmins, removeAdmin } from '../../../../lib/services/admin-users';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const pagePath = `${base}/shop/admins`;
+const me = Astro.locals.user;
+const isOwner = Astro.locals.adminRole === 'owner';
+const myEmail = String(me?.email ?? '').toLowerCase();
+
+let error: string | null = null;
+let message: string | null = null;
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const intent = String(form.get('intent') ?? '');
+	try {
+		if (!isOwner) throw new Error('只有總管理員可以新增或移除管理員');
+		if (intent === 'add') {
+			await addAdmin({ email: String(form.get('email') ?? ''), note: String(form.get('note') ?? ''), createdBy: myEmail });
+			message = '已新增管理員，對方用這個 Email 的會員帳號登入就能進後台';
+		} else if (intent === 'remove') {
+			const email = String(form.get('email') ?? '');
+			if (email.toLowerCase() === myEmail) throw new Error('不能移除自己');
+			await removeAdmin(email);
+			message = '已移除管理員';
+		}
+	} catch (cause) {
+		error = cause instanceof Error ? cause.message : '儲存失敗';
+	}
+}
+
+let admins: Awaited<ReturnType<typeof listAdmins>> = [];
+try {
+	admins = await listAdmins();
+} catch {
+	error = error ?? '管理員名單暫時無法讀取，請稍後再試';
+}
+const dateFmt = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' });
+---
+
+<AdminLayout title="管理員設定｜水博館水族">
+	<header class="head page-heading">
+		<div class="heading-row"><div><h1>管理員設定</h1><p>能登入後台的帳號。總管理員可以新增或移除管理員。</p></div></div>
+	</header>
+	{message && <p class="notice success" role="status">{message}</p>}
+	{error && <p class="notice error" role="alert">{error}</p>}
+
+	<section class="me">
+		<div class="me__info">
+			<span class="avatar">{String(me?.name ?? me?.email ?? '管').slice(0, 1).toUpperCase()}</span>
+			<div><strong>{me?.name ?? me?.email}</strong><small>{me?.email}・{isOwner ? '總管理員' : '管理員'}</small></div>
+		</div>
+		<form method="post" action="/api/account/logout" data-confirm="確定要登出後台？">
+			<input type="hidden" name="next" value={`${base}/login`} />
+			<button type="submit" class="ghost"><i class="fa-solid fa-arrow-right-from-bracket" aria-hidden="true"></i>登出</button>
+		</form>
+	</section>
+
+	<section class="panel" aria-labelledby="admin-list-title">
+		<h2 id="admin-list-title">管理員名單<span class="count">{admins.length}</span></h2>
+		<ul class="list">
+			{admins.map((admin) => (
+				<li class="row">
+					<span class="avatar">{String(admin.name ?? admin.email).slice(0, 1).toUpperCase()}</span>
+					<div class="row__main">
+						<div class="row__title">
+							<strong>{admin.name ?? admin.note ?? admin.email.split('@')[0]}</strong>
+							<span class:list={['badge', admin.role]}>{admin.role === 'owner' ? '總管理員' : '管理員'}</span>
+							{admin.email === myEmail && <span class="badge me-badge">你</span>}
+						</div>
+						<small>{admin.email}{admin.note && admin.name ? `・${admin.note}` : ''}</small>
+						{!admin.hasAccount && <small class="warn"><i class="fa-solid fa-circle-info" aria-hidden="true"></i>尚未註冊會員，需先用這個 Email 註冊才能登入</small>}
+						{admin.createdAt && <small class="muted">{dateFmt.format(admin.createdAt)} 加入</small>}
+					</div>
+					{isOwner && admin.role === 'staff' && admin.email !== myEmail && (
+						<form method="post" action={pagePath} data-confirm={`確定移除「${admin.email}」的後台權限？`} data-confirm-danger>
+							<input type="hidden" name="intent" value="remove" />
+							<input type="hidden" name="email" value={admin.email} />
+							<button type="submit" class="remove" aria-label={`移除 ${admin.email}`}><i class="fa-solid fa-user-minus" aria-hidden="true"></i><span>移除</span></button>
+						</form>
+					)}
+				</li>
+			))}
+		</ul>
+		{admins.some((admin) => admin.role === 'owner') && <p class="hint">總管理員帳號由系統設定，不能在這裡移除。</p>}
+	</section>
+
+	{isOwner ? (
+		<section class="panel" aria-labelledby="admin-add-title">
+			<h2 id="admin-add-title">新增管理員</h2>
+			<p class="hint">輸入夥伴註冊會員時用的 Email，對方登入後就能使用後台。</p>
+			<form class="add" method="post" action={pagePath}>
+				<input type="hidden" name="intent" value="add" />
+				<label>電子郵件<input name="email" type="email" required autocomplete="off" inputmode="email" placeholder="name@example.com" /></label>
+				<label>備註（選填）<input name="note" maxlength="40" autocomplete="off" placeholder="例如：門市小王" /></label>
+				<button type="submit"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>新增管理員</button>
+			</form>
+		</section>
+	) : (
+		<p class="notice">只有總管理員可以新增或移除管理員。</p>
+	)}
+</AdminLayout>
+
+<style>
+	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); font-size: 15px; }
+	.notice { margin: 0 0 16px; padding: 12px 15px; border-radius: 10px; background: #f2f5f4; color: #52676b; font-size: 14px; }
+	.notice.success { background: #edf8f1; color: #28734b; }
+	.notice.error { background: #fff0ee; color: #a8433a; }
+	.me, .panel { box-sizing: border-box; margin-bottom: 16px; padding: 18px 20px; border: 1px solid var(--commerce-line); border-radius: 16px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.me { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.me__info { display: flex; align-items: center; gap: 12px; min-width: 0; }
+	.me__info div, .row__main { display: grid; gap: 3px; min-width: 0; }
+	.me__info strong { font-size: 16px; }
+	small { color: var(--commerce-muted); font-size: 13px; overflow-wrap: anywhere; }
+	.avatar { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: #e5f4f1; color: var(--commerce-primary-dark, #066a65); font-weight: 800; }
+	.ghost { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 14px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #a8433a; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+	.ghost:hover { background: #fff3f1; }
+	.panel h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 19px; }
+	.count { padding: 2px 9px; border-radius: 999px; background: #f1f3f2; color: #68787a; font-size: 13px; }
+	.list { margin: 0; padding: 0; list-style: none; }
+	.row { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-top: 1px solid #eef2f1; }
+	.row:first-child { border-top: 0; }
+	.row__main { flex: 1; }
+	.row__title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+	.badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+	.badge.owner { background: #fff4df; color: #9a6510; }
+	.badge.staff { background: #e8f5f0; color: #287b61; }
+	.me-badge { background: #eef1ff; color: #4757a6; }
+	.warn { display: inline-flex; align-items: center; gap: 5px; color: #9a6510; }
+	.muted { font-size: 12px; }
+	.remove { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 1px solid #f0d4cf; border-radius: 9px; background: #fff; color: #b4443a; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+	.remove:hover { background: #fff3f1; }
+	.hint { margin: 10px 0 0; color: var(--commerce-muted); font-size: 13px; }
+	.panel > .hint:first-of-type { margin: -4px 0 14px; }
+	.add { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; align-items: end; gap: 12px; }
+	.add label { display: grid; gap: 7px; color: #52676b; font-size: 13px; font-weight: 650; }
+	.add input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px 12px; border: 1px solid var(--commerce-line); border-radius: 9px; font: inherit; font-size: 16px; }
+	.add button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 16px; border: 0; border-radius: 9px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+	@media (max-width: 640px) {
+		.me, .panel { padding: 15px; }
+		.add { grid-template-columns: 1fr; }
+		.add button { width: 100%; }
+		.remove span { display: none; }
+		.remove { width: 40px; justify-content: center; padding: 0; }
+	}
+</style>

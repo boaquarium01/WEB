@@ -1,0 +1,16 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "boaquarium-v2",
+	"main": "./src/worker.ts",
+	"compatibility_date": "2026-10-01",
+	"compatibility_flags": ["nodejs_compat"],
+	"assets": { "directory": "./dist/client", "binding": "ASSETS" },
+	"routes": [{ "pattern": "v2-k7m4q9.boaquarium.com", "custom_domain": true }],
+	"workers_dev": false,
+	"preview_urls": false,
+	"observability": { "enabled": true },
+	// 資料庫連線池（已關閉查詢快取，避免庫存與訂單狀態讀到舊資料）
+	"hyperdrive": [{ "binding": "HYPERDRIVE", "id": "c15b0afa19b24888b7f08ad421bbf632" }],
+	// 每天台灣時間凌晨 3 點：自動取消逾期未付款訂單（原 vercel.json 的排程）
+	"triggers": { "crons": ["0 19 * * *"] }
+}

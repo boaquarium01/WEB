@@ -267,11 +267,36 @@ const shipProgress = (subtotal: number) =>
 			}
 			try { window.sessionStorage.setItem(storageKey, JSON.stringify(selected.map((check) => check.value))); } catch { /* Ignore unavailable session storage. */ }
 		};
+		// 數量在背景儲存，不重新載入整頁；連按會合併成一次，失敗時恢復原數量
+		const cartCountBadge = document.querySelector<HTMLElement>('.cart-float-count');
 		const persistQuantity = (form: HTMLFormElement) => {
-			const priorTimer = Number(form.dataset.submitTimer ?? 0);
-			window.clearTimeout(priorTimer);
-			form.dataset.submitTimer = String(window.setTimeout(() => form.requestSubmit(), 350));
+			const input = form.querySelector<HTMLInputElement>('input[name="quantity"]');
+			const cartItemId = (form.querySelector<HTMLInputElement>('input[name="cartItemId"]'))?.value ?? '';
+			if (!input || !cartItemId) return;
+			if (!form.dataset.savedQuantity) form.dataset.savedQuantity = input.defaultValue;
+			window.clearTimeout(Number(form.dataset.submitTimer ?? 0));
+			form.dataset.submitTimer = String(window.setTimeout(async () => {
+				const quantity = Number(input.value);
+				if (String(quantity) === form.dataset.savedQuantity) return;
+				form.classList.add('is-saving');
+				try {
+					const res = await fetch('/api/cart/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cartItemId, quantity }) });
+					const payload = await res.json().catch(() => ({}));
+					if (!res.ok) throw new Error(payload.error || '數量更新失敗');
+					form.dataset.savedQuantity = String(quantity);
+					if (cartCountBadge && typeof payload.itemCount === 'number') cartCountBadge.textContent = String(payload.itemCount);
+				} catch (error) {
+					input.value = form.dataset.savedQuantity ?? input.defaultValue;
+					input.dispatchEvent(new Event('input'));
+					const { showNotice } = await import('../../scripts/confirmSheet');
+					void showNotice(error instanceof Error ? error.message : '數量更新失敗，請再試一次');
+				} finally {
+					form.classList.remove('is-saving');
+				}
+			}, 400));
 		};
+		// 直接在數量欄按 Enter 也走背景儲存
+		document.querySelectorAll<HTMLFormElement>('form.qty').forEach((form) => form.addEventListener('submit', (event) => { event.preventDefault(); persistQuantity(form); }));
 		lines.forEach((line) => {
 			const input = line.querySelector<HTMLInputElement>('.qty input[name="quantity"]');
 			const total = line.querySelector<HTMLElement>('.line-total');
@@ -758,4 +783,5 @@ const shipProgress = (subtotal: number) =>
 		.cart-items-panel .edit-toggle { min-height: 0; padding: 0.22rem 0.6rem; font-size: 0.74rem; line-height: 1.4; }
 		.cart-items-panel .line:first-child { padding-top: 8px; }
 	}
+	.qty.is-saving input{opacity:.6}
 </style>

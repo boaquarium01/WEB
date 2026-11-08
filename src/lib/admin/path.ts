@@ -4,7 +4,7 @@
  */
 import { config as loadDotenv } from 'dotenv';
 
-loadDotenv({ path: '.env' });
+if (typeof navigator === 'undefined' || navigator.userAgent !== 'Cloudflare-Workers') loadDotenv({ path: '.env' });
 
 const ADMIN_PATH_SLUG_RE = /^[a-zA-Z0-9_-]{20,48}$/;
 /** Dev fallback when ADMIN_PATH_SLUG is unset (must stay 20–48 chars). */

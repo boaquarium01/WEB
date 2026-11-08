@@ -106,6 +106,22 @@ export async function getAllPromotions(): Promise<Promotion[]> {
   return deduped.map(mapToPromotion).filter(Boolean) as Promotion[];
 }
 
+/** 後台關閉（enabled == false）的促銷分頁 slug；讀取失敗回傳 null */
+export async function fetchHiddenPromotionSlugs(ids: string[]): Promise<Set<string> | null> {
+  const client = getClient();
+  if (!client) return new Set();
+  try {
+    const slugs = await client.fetch<(string | null)[]>(
+      `*[_type == "promotion" && _id in $ids && enabled == false].slug.current`,
+      { ids }
+    );
+    return new Set((slugs ?? []).filter((slug): slug is string => Boolean(slug)));
+  } catch (err) {
+    console.warn('[Sanity] 促銷分頁開關讀取失敗。', err instanceof Error ? err.message : String(err));
+    return null;
+  }
+}
+
 export async function getAllPromotionSlugs(): Promise<string[]> {
   return Object.keys(PROMO_DOC_ID_BY_SLUG);
 }

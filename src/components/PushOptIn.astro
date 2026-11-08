@@ -30,7 +30,7 @@ const publicKey = getVapidPublicKey();
 		<div class="push-optin__guide" data-push-guide hidden>
 			<p><strong>iPhone 請先把網站加入主畫面：</strong></p>
 			<ol>
-				<li>點下方 Safari 的 <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>「分享」</li>
+				<li data-push-guide-share>點下方 Safari 的 <i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>「分享」</li>
 				<li>選「加入主畫面」</li>
 				<li>從主畫面的「水博館水族」圖示打開，再回到這裡按「開啟通知」</li>
 			</ol>
@@ -60,6 +60,14 @@ const publicKey = getVapidPublicKey();
 		const desc = box.querySelector<HTMLElement>('[data-push-desc]')!;
 		const guide = box.querySelector<HTMLElement>('[data-push-guide]')!;
 		const key = box.dataset.vapidKey ?? '';
+		// iPhone 上不同瀏覽器「分享」按鈕的位置不同（Chrome／Edge 在網址列右側，Firefox 在選單裡）
+		const shareStep = box.querySelector<HTMLElement>('[data-push-guide-share]');
+		if (shareStep && isIOS) {
+			const shareIcon = '<i class="fa-solid fa-arrow-up-from-bracket" aria-hidden="true"></i>';
+			if (/CriOS/.test(ua)) shareStep.innerHTML = `點網址列右側 Chrome 的 ${shareIcon}「分享」`;
+			else if (/EdgiOS/.test(ua)) shareStep.innerHTML = `點網址列右側 Edge 的 ${shareIcon}「分享」`;
+			else if (/FxiOS/.test(ua)) shareStep.innerHTML = '點右下角 Firefox 的「☰ 選單」→「分享」';
+		}
 
 		const render = (state: State) => {
 			box.dataset.state = state;

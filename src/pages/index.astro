@@ -6,6 +6,7 @@ import { getAllCategories, getFeaturedProducts, getHeroSpotlightProducts } from 
 import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 import { getCartItemCount } from '../lib/services/cart';
 import { formatTwd, listCatalogProducts } from '../lib/services/catalog';
+import { getVisiblePromoTabs } from '../lib/promoTabs';
 
 export const prerender = false;
 
@@ -19,11 +20,10 @@ if (user) {
 	}
 }
 
+const promoTabs = await getVisiblePromoTabs();
 const navItems = [
   { name: '首頁', href: '#home' },
-  { name: '每週新進魚隻🐠', href: '/promo/weekly-new' },
-  { name: '預定優惠', href: '/promo/special-offers' },
-  { name: '器材促銷', href: '/promo/equipment-sale' },
+  ...promoTabs.map((tab) => ({ name: tab.label, href: `/promo/${tab.slug}` })),
   { name: '服務項目', href: '#services' },
   { name: '關於我們', href: '#about' }
 ];
@@ -33,13 +33,6 @@ const [heroSpotlightProducts, categories] = await Promise.all([
   getAllCategories()
 ]);
 
-const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
-  slug: p.slug,
-  name: p.name,
-  excerpt: p.excerpt,
-  categoryLabel: p.categoryLabel,
-  imageUrl: p.image
-}));
 
 /** 僅顯示 Sanity「首頁熱銷」已勾選之商品；未勾選任何筆時本區塊不顯示。 */
 /** 勿因「主打」重複排除：同商品可同時在主打與熱銷，否則同時勾熱銷與主打的商品會從熱銷區被排除而看起來像沒顯示。 */
@@ -49,7 +42,7 @@ const featuredProducts = (await getFeaturedProducts(HOME_FEATURED_LIMIT)).slice(
 
 /** 價格來自資料庫（與商品列表一致）；查不到時顯示「價格洽詢」 */
 const catalogPrices = new Map<string, string>();
-if (featuredProducts.length > 0) {
+if (featuredProducts.length > 0 || heroSpotlightProducts.length > 0) {
   try {
     for (const item of await listCatalogProducts()) {
       const min = item.priceMin ?? (item.sellingPrice > 0 ? item.sellingPrice : null);
@@ -61,6 +54,15 @@ if (featuredProducts.length > 0) {
     console.warn('[Home] featured prices unavailable', err);
   }
 }
+
+const heroSpotlightItems = heroSpotlightProducts.map((p) => ({
+  slug: p.slug,
+  name: p.name,
+  excerpt: p.excerpt,
+  categoryLabel: p.categoryLabel,
+  imageUrl: p.image,
+  priceLabel: catalogPrices.get(p.slug) ?? null
+}));
 
 const featuredStaggerItems = featuredProducts.map((p) => ({
   slug: p.slug,
@@ -224,7 +226,8 @@ const MAP_EMBED_URL =
               <div class="hero-content wrap">
                 <div class="hero-content-inner">
                   <div class="hero-drift-layer">
-                    <h1>{slide.title}</h1>
+                    {/* 整頁只留一個 H1，其餘輪播標題用 H2 */}
+                    {idx === 0 ? <h1 class="hero-title">{slide.title}</h1> : <h2 class="hero-title">{slide.title}</h2>}
                     <p>{slide.subtitle}</p>
                   </div>
                 </div>
@@ -232,6 +235,8 @@ const MAP_EMBED_URL =
             </article>
           ))}
         </div>
+        {/* 固定在主圖右下角，不隨輪播切換移動 */}
+        <a class="hero-cta" href="/products">逛全部商品<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
         <div class="hero-scrub">
           <div class="hero-scrub-inner" style={`--hero-n: ${heroSlides.length}; --hero-i: 0`}>
             <div class="hero-scrub-rail-wrap">
@@ -255,37 +260,34 @@ const MAP_EMBED_URL =
       </section>
 
       <div class="home-below-hero">
+      {promoTabs.length > 0 && (
       <section id="home-promo-links" class="wrap section hero-tight-promo pb-5" aria-label="促銷分頁導覽">
-        <div class="home-promo-links-grid mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3">
-          <a
-            href="/promo/weekly-new"
-            class="home-promo-link group col-span-2 rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)] sm:col-span-1"
-          >
-            <div class="relative flex items-center justify-center">
-              <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">每週新進魚隻🐠</h2>
-              <i class="fa-solid fa-chevron-right absolute right-0 text-sm text-[var(--aq-muted)] transition group-hover:translate-x-1" aria-hidden="true"></i>
-            </div>
-          </a>
-          <a
-            href="/promo/special-offers"
-            class="home-promo-link group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
-          >
-            <div class="relative flex items-center justify-center">
-              <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">預定優惠</h2>
-              <i class="fa-solid fa-chevron-right absolute right-0 text-sm text-[var(--aq-muted)] transition group-hover:translate-x-1" aria-hidden="true"></i>
-            </div>
-          </a>
-          <a
-            href="/promo/equipment-sale"
-            class="home-promo-link group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]"
-          >
-            <div class="relative flex items-center justify-center">
-              <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">器材促銷</h2>
-              <i class="fa-solid fa-chevron-right absolute right-0 text-sm text-[var(--aq-muted)] transition group-hover:translate-x-1" aria-hidden="true"></i>
-            </div>
-          </a>
+        <div class="home-promo-links-grid mx-auto grid max-w-5xl grid-cols-2 gap-3 sm:grid-cols-3" data-count={promoTabs.length}>
+          {promoTabs.map((tab, index) => (
+            <a
+              href={`/promo/${tab.slug}`}
+              class:list={['home-promo-link group rounded-2xl border border-[var(--aq-line)] bg-white/80 p-4 shadow-[0_10px_30px_rgba(26,34,33,0.06)] backdrop-blur transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(26,34,33,0.1)]', { 'col-span-2': index === 0 && promoTabs.length === 3 }]}
+            >
+              {promoTabs.length === 1 ? (
+                <div class="promo-single">
+                  <span class="promo-single__icon" aria-hidden="true"><i class="fa-solid fa-fish"></i></span>
+                  <span class="promo-single__text">
+                    <h2>{tab.label.replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim()}</h2>
+                    <small>本週到貨的新魚，數量有限</small>
+                  </span>
+                  <span class="promo-single__go" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>
+                </div>
+              ) : (
+              <div class="relative flex items-center justify-center">
+                <h2 class="text-center text-lg font-extrabold tracking-tight text-[var(--aq-ink)]">{tab.label}</h2>
+                <i class="fa-solid fa-chevron-right absolute right-0 text-sm text-[var(--aq-muted)] transition group-hover:translate-x-1" aria-hidden="true"></i>
+              </div>
+              )}
+            </a>
+          ))}
         </div>
       </section>
+      )}
       {heroSpotlightItems.length > 0 ? (
         <section id="hero-spotlight" class="section home-section wrap" aria-labelledby="hero-spotlight-heading">
           <HomeHeroSpotlight items={heroSpotlightItems} />
@@ -400,12 +402,10 @@ const MAP_EMBED_URL =
 
     <footer class="border-t border-[var(--aq-line)] bg-inherit px-4 py-8 sm:px-6">
       <div class="mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-2 text-center">
-        <a
-          href="/#about"
-          class="text-sm font-semibold text-[var(--aq-primary-dark)] underline decoration-[1.5px] underline-offset-4 transition hover:text-[var(--aq-primary)]"
-        >
-          聯絡資訊
-        </a>
+        <nav class="flex flex-wrap justify-center gap-5" aria-label="頁尾連結">
+          <a href="/#about" class="text-sm font-semibold text-[var(--aq-primary-dark)] underline decoration-[1.5px] underline-offset-4 transition hover:text-[var(--aq-primary)]">聯絡資訊</a>
+          <a href="/shopping-guide" class="text-sm font-semibold text-[var(--aq-primary-dark)] underline decoration-[1.5px] underline-offset-4 transition hover:text-[var(--aq-primary)]">購物須知</a>
+        </nav>
         <p class="m-0 text-xs tracking-[0.02em] text-[var(--aq-muted)]">© 2026 水博館水族</p>
       </div>
     </footer>
@@ -1451,7 +1451,7 @@ const MAP_EMBED_URL =
     }
   }
 
-  .hero-content h1 {
+  .hero-content .hero-title {
     margin: 0;
     font-size: clamp(1.75rem, 4vw, 2.75rem);
     font-weight: 800;
@@ -1472,11 +1472,46 @@ const MAP_EMBED_URL =
   }
 
   @media (max-width: 639px) {
-    .hero-content h1 {
+    .hero-content .hero-title {
       /* 略降 vw 係數，避免「一行標題」實際寬度仍大於 320～390px 內容區 */
       font-size: clamp(1.28rem, 4.2vw, 1.95rem);
       line-height: 1.22;
     }
+  }
+
+  .hero-cta {
+    position: absolute;
+    z-index: 6;
+    right: max(clamp(16px, 4.5vw, 40px), env(safe-area-inset-right, 0px));
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--hero-scrub-channel) + 22px);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.5rem;
+    border-radius: 999px;
+    /* 毛玻璃：半透明白底＋背景模糊，和主圖融合不顯生硬 */
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(12, 40, 38, 0.28);
+    -webkit-backdrop-filter: blur(14px) saturate(1.5);
+    backdrop-filter: blur(14px) saturate(1.5);
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 800;
+    text-decoration: none;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .hero-cta:hover { background: rgba(12, 40, 38, 0.42); transform: translateY(-1px); }
+  /* 不支援背景模糊的瀏覽器改用較不透明的底色，維持文字可讀 */
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .hero-cta { background: rgba(15, 77, 74, 0.72); }
+  }
+  .hero-cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .hero-cta i { font-size: 0.8em; }
+  @media (max-width: 639px) {
+    /* 手機：移到主圖右上，不和底部標題文字搶位置 */
+    .hero-cta { top: 14px; bottom: auto; right: 14px; padding: 0.55rem 1rem; font-size: 0.85rem; }
   }
 
   .hero-content p {
@@ -1642,13 +1677,15 @@ const MAP_EMBED_URL =
    */
   #home-promo-links.hero-tight-promo.section {
     margin-top: 0;
-    padding-top: clamp(0.6rem, 2.2vw, 1.05rem);
-    padding-bottom: clamp(0.9rem, 2.4vw, 1.5rem);
+    /* 上下留白相同，卡片在主圖與分隔線之間置中 */
+    padding-top: clamp(1rem, 2.6vw, 1.5rem);
+    padding-bottom: clamp(1rem, 2.6vw, 1.5rem);
   }
 
   @media (max-width: 639px) {
     #home-promo-links.hero-tight-promo.section {
-      padding-top: clamp(0.65rem, 3.2vw, 1rem);
+      padding-top: 16px;
+      padding-bottom: 16px;
     }
   }
 
@@ -1735,6 +1772,24 @@ const MAP_EMBED_URL =
     #home-promo-links .home-promo-links-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+    #home-promo-links .home-promo-links-grid[data-count="2"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* 後台只開一個促銷分頁時佔滿整列 */
+  #home-promo-links [data-count="1"] .home-promo-link { padding: 12px 14px; border-color: color-mix(in srgb, var(--aq-primary) 22%, transparent); background: linear-gradient(120deg, #ffffff 0%, #eef7f4 100%); }
+  .promo-single { display: flex; align-items: center; gap: 12px; }
+  .promo-single__icon { display: grid; flex: none; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: var(--aq-primary); color: #fff; font-size: 18px; }
+  .promo-single__text { display: grid; flex: 1; gap: 2px; min-width: 0; text-align: left; }
+  .promo-single__text h2 { margin: 0; color: var(--aq-ink); font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+  .promo-single__text small { color: var(--aq-muted); font-size: 12.5px; }
+  .promo-single__go { display: grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fff; color: var(--aq-primary); font-size: 13px; box-shadow: 0 2px 8px rgba(26, 34, 33, 0.08); transition: transform 0.18s ease; }
+  .home-promo-link:hover .promo-single__go { transform: translateX(3px); }
+  @media (prefers-reduced-motion: reduce) { .promo-single__go { transition: none; } }
+
+  #home-promo-links .home-promo-links-grid[data-count="1"] {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   #home-promo-links .home-promo-link {
@@ -1758,18 +1813,25 @@ const MAP_EMBED_URL =
     word-break: break-word;
   }
 
+  /* 首頁各區塊統一上下留白（上下相同），區塊之間以細線分隔 */
+  .home-below-hero {
+    --home-section-gap: clamp(1.75rem, 4.2vw, 3rem);
+  }
+
   .home-below-hero .home-section {
     position: relative;
     z-index: 1;
-    padding-bottom: clamp(2.4rem, 4.75vw, 3.65rem);
+    padding-top: var(--home-section-gap);
+    padding-bottom: var(--home-section-gap);
   }
 
-  .home-below-hero .home-section:first-child {
-    padding-top: clamp(2.5rem, 5.5vw, 3.75rem);
+  /* 主打緊接在促銷入口下方、沒有可見標題，留白收小，避免和上方卡片拉太開 */
+  .home-below-hero #hero-spotlight.home-section {
+    padding-top: clamp(1.25rem, 3vw, 2rem);
+    padding-bottom: clamp(1.25rem, 3vw, 2rem);
   }
 
   .home-below-hero .home-section:not(:first-child) {
-    padding-top: clamp(2rem, 4.25vw, 3.25rem);
     border-top: 1px solid color-mix(in srgb, var(--aq-ink) 4%, transparent);
   }
 
@@ -2294,7 +2356,8 @@ const MAP_EMBED_URL =
     }
   }
 
-  @media (max-width: 900px) {
+  /* 與上方 1024px 的桌機排版銜接，中間不留空檔（否則地圖會把聯絡文字擠成一條） */
+  @media (max-width: 1023px) {
     .contact-card {
       flex-direction: column;
       align-items: stretch;
@@ -2603,10 +2666,6 @@ const MAP_EMBED_URL =
   }
 
   /* 服務項目：壓縮上下留白（區塊內距、標題下距、卡片間距與卡片內距） */
-  .home-below-hero #services.home-section {
-    padding-top: clamp(1.5rem, 3vw, 2.25rem);
-    padding-bottom: clamp(1.5rem, 3vw, 2.25rem);
-  }
   #services :global(.home-section-title) {
     margin-bottom: clamp(1rem, 2.5vw, 1.35rem);
   }

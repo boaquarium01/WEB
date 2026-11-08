@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import ConfirmSheet from '../components/ConfirmSheet.astro';
 import { SITE_TITLE as defaultTitle, SITE_DESCRIPTION as defaultDescription } from '../config/site';
 import { getCartItemCount } from '../lib/services/cart';
 
@@ -106,6 +107,8 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 				<img class="line-float__icon" src="/line.png" alt="LINE" width="56" height="56" loading="lazy" />
 			</a>
 		) : null}
+
+		<ConfirmSheet />
 
 		<script>
 			import { initScrollReveal } from '../scripts/initScrollReveal';

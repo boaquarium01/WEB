@@ -15,7 +15,14 @@ if (!slug) {
 	return Astro.redirect('/products');
 }
 
-const product = await getCatalogProductBySlug(slug);
+let product: Awaited<ReturnType<typeof getCatalogProductBySlug>>;
+try {
+	product = await getCatalogProductBySlug(slug);
+} catch (error) {
+	// 資料庫暫時連不上：顯示友善頁面，不出現白底錯誤
+	console.error('[Product] load failed', error);
+	return Astro.rewrite('/unavailable');
+}
 if (!product) {
 	return Astro.redirect('/products');
 }
@@ -30,6 +37,8 @@ const displayPrices = product.skus.filter((sku) => sku.isActive && sku.sellingPr
 const minimumPrice = displayPrices.length ? Math.min(...displayPrices) : 0;
 const maximumPrice = displayPrices.length ? Math.max(...displayPrices) : 0;
 const priceRange = minimumPrice > 0 ? (minimumPrice === maximumPrice ? formatTwd(minimumPrice) : `${formatTwd(minimumPrice)}–${new Intl.NumberFormat('zh-TW').format(maximumPrice)}`) : '價格洽詢';
+// 後台設為禁售（規格全部停用）不是缺貨，不顯示「暫無庫存」
+const saleStopped = product.skus.length > 0 && product.skus.every((sku) => !sku.isActive);
 const defaultCanPurchase = Boolean(defaultSku?.isActive && defaultSku.sellingPrice > 0 && (defaultSku.available < 0 || defaultSku.available >= product.minimumPurchaseQuantity));
 const hasNamedVariants = product.specifications.length > 0 && product.skus.some((sku) => sku.optionIds?.length);
 const specificationImages = [...new Set(product.specifications[0]?.options.map((option) => option.imageUrl).filter((url): url is string => Boolean(url)) ?? [])];
@@ -64,10 +73,12 @@ const images = [...new Set([
 
 	{error && <p class="banner error">{error}</p>}
 
-	<article class="detail" data-product-revision={productRevision}>
+	<article class:list={['detail', { 'detail--no-media': images.length === 0 }]} data-product-revision={productRevision}>
+		{/* 沒有任何圖片就不顯示圖片區，避免一大塊空白 */}
+		{images.length > 0 && (
 		<section class="media detail-media">
 			{
-				images.length > 0 ? (
+				(
 					<div class="product-carousel" data-product-carousel data-product-lightbox-group data-base-image={product.imageUrl ?? defaultSku?.imageUrl ?? product.galleryUrls[0] ?? ''} aria-roledescription="輪播" aria-label={`${product.name} 商品圖片`}>
 						<div class="carousel-main">
 							<div class="carousel-viewport" tabindex="0" aria-label="滑動瀏覽商品圖片">
@@ -91,27 +102,22 @@ const images = [...new Set([
 							</>}
 						</div>
 					</div>
-				) : (
-					<div class="placeholder">暫無圖片</div>
 				)
 			}
 		</section>
+		)}
 
 		<section class="summary">
 			<h1>{product.name}</h1>
-			<p id="product-price" class="price">{priceRange}</p>
-			{hasNamedVariants && <button type="button" class="spec-summary" data-open-spec aria-label="選擇規格"><span class="spec-summary__rows">{product.specifications.map((specification) => <span class="spec-summary__row"><span class="spec-summary__label">{specification.name}</span><span class="spec-summary__values">{specification.options.map((option) => option.name).join('、')}</span></span>)}</span><i class="fa-solid fa-chevron-right spec-summary__arrow" aria-hidden="true"></i></button>}
-			{product.minimumPurchaseQuantity > 1 && <p class="minimum-purchase-hint">最低購買數量：{product.minimumPurchaseQuantity} 件</p>}
-			{product.priceTiers.length > 0 && <p class="minimum-purchase-hint">多件優惠：{product.priceTiers.map((tier) => `${tier.minQuantity}${tier.maxQuantity ? `–${tier.maxQuantity}` : '+'} 件 NT$ ${tier.unitPrice}/件`).join('・')}</p>}
-			{!product.inStock && <p class="stock out" role="status">暫無庫存</p>}
-			{
-				product.requiresManualConfirmation && (
-					<p class="note">活體商品：出貨前可能需要人工確認。</p>
-				)
-			}
+			{/* 上架但禁售：只介紹商品，不顯示價格、庫存與購買區 */}
+			{!saleStopped && <p id="product-price" class="price">{priceRange}</p>}
+			{!saleStopped && hasNamedVariants && <button type="button" class="spec-summary" data-open-spec aria-label="選擇規格"><span class="spec-summary__rows">{product.specifications.map((specification) => <span class="spec-summary__row"><span class="spec-summary__label">{specification.name}</span><span class="spec-summary__values">{specification.options.map((option) => option.name).join('、')}</span></span>)}</span><i class="fa-solid fa-chevron-right spec-summary__arrow" aria-hidden="true"></i></button>}
+			{!saleStopped && product.minimumPurchaseQuantity > 1 && <p class="minimum-purchase-hint">最低購買數量：{product.minimumPurchaseQuantity} 件</p>}
+			{!saleStopped && product.priceTiers.length > 0 && <p class="minimum-purchase-hint">多件優惠：{product.priceTiers.map((tier) => `${tier.minQuantity}${tier.maxQuantity ? `–${tier.maxQuantity}` : '+'} 件 NT$ ${tier.unitPrice}/件`).join('・')}</p>}
+			{!product.inStock && !saleStopped && <p class="stock out" role="status">暫無庫存</p>}
 
 			{
-				defaultSkuId && product.skus.some((sku) => sku.sellingPrice > 0) ? (
+				saleStopped ? null : defaultSkuId && product.skus.some((sku) => sku.sellingPrice > 0) ? (
 					<form method="post" action="/api/cart/add" data-minimum-purchase={product.minimumPurchaseQuantity} data-base-price={defaultSku?.sellingPrice ?? product.sellingPrice} data-price-tiers={JSON.stringify(product.priceTiers)} class:list={['add-form', { 'is-unavailable': !defaultCanPurchase }]}>
 						<input type="hidden" name="returnTo" value={`/product/${product.slug}`} />
 						<p class="selected-variant-price" data-selected-price aria-live="polite">{defaultSku && defaultSku.sellingPrice > 0 ? formatTwd(defaultSku.sellingPrice) : '價格洽詢'}</p>
@@ -135,7 +141,7 @@ const images = [...new Set([
 							<select name="productSkuId" required disabled={!defaultCanPurchase} data-product-spec>
 								{product.skus.map((sku) => (
 								<option value={sku.id} selected={sku.id === defaultSkuId} disabled={!sku.isActive || (sku.available >= 0 && sku.available < product.minimumPurchaseQuantity) || sku.sellingPrice <= 0} data-available={sku.available} data-price={sku.sellingPrice} data-option-ids={JSON.stringify(sku.optionIds ?? [])} data-image={sku.imageUrl ?? ''}>
-										{sku.name}{sku.sellingPrice !== product.sellingPrice ? ` · ${formatTwd(sku.sellingPrice)}` : ''}{sku.available === 0 ? '（暫無庫存）' : ''}
+										{sku.name}{sku.sellingPrice !== product.sellingPrice ? ` · ${formatTwd(sku.sellingPrice)}` : ''}{sku.isActive && sku.available === 0 ? '（暫無庫存）' : ''}
 									</option>
 								))}
 							</select>
@@ -163,7 +169,7 @@ const images = [...new Set([
 							<button class="btn-buy-now" type="submit" name="intent" value="buy-now" disabled={!defaultCanPurchase}>直接購買</button>
 						</div>
 					</form>
-				) : <p class="note">商品價格尚待確認，請洽門市或 LINE 詢問。</p>
+				) : null
 			}
 
 			{
@@ -175,6 +181,7 @@ const images = [...new Set([
 					<p class="product-body-empty">尚未填寫商品介紹。</p>
 				)
 			}
+			{product.requiresManualConfirmation && <p class="ref-note">活體商品：需要人工確認。</p>}
 			<p class="ref-note">網站僅供參考，實際以門市與訂單確認為準。</p>
 			<div class="detail-back-actions">
 				<a href="/" class="btn-secondary"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>首頁</a>
@@ -242,6 +249,9 @@ const images = [...new Set([
 	@media (min-width: 900px) {
 		.detail {
 			grid-template-columns: 1fr 1fr;
+		}
+		.detail.detail--no-media {
+			grid-template-columns: minmax(0, 720px);
 		}
 	}
 

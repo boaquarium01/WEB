@@ -5,6 +5,7 @@ import {
 	orderStatusHistory,
 	paymentSubmissions,
 	payments,
+	storeSettings,
 } from '../db/schema';
 
 export type BankTransferInfo = {
@@ -23,24 +24,50 @@ export type PaymentSubmissionView = {
 	note: string | null;
 };
 
-/**
- * Public bank transfer instructions for customers.
- * Prefer PUBLIC_* env; fall back to V2 test placeholders.
- */
-export function getBankTransferInfo(): BankTransferInfo {
-	const bankName =
-		readPublic('PUBLIC_BANK_NAME') || '（測試）請洽門市確認收款銀行';
-	const accountName =
-		readPublic('PUBLIC_BANK_ACCOUNT_NAME') || '水博館水族';
-	const accountNumber =
-		readPublic('PUBLIC_BANK_ACCOUNT_NUMBER') || '請洽門市或 LINE 取得帳號';
+const BANK_SETTING_KEY = 'bank_transfer';
+const NOTE_HINT = '轉帳備註請填寫訂單編號，方便對帳。';
 
+/** 環境變數的預設值（後台沒設定過時使用） */
+function envBankTransferInfo(): BankTransferInfo {
 	return {
-		bankName,
-		accountName,
-		accountNumber,
-		noteHint: '轉帳備註請填寫訂單編號，方便對帳。',
+		bankName: readPublic('PUBLIC_BANK_NAME') || '（測試）請洽門市確認收款銀行',
+		accountName: readPublic('PUBLIC_BANK_ACCOUNT_NAME') || '水博館水族',
+		accountNumber: readPublic('PUBLIC_BANK_ACCOUNT_NUMBER') || '請洽門市或 LINE 取得帳號',
+		noteHint: NOTE_HINT,
 	};
+}
+
+/**
+ * 顧客看到的匯款資訊：優先用後台「運費設定 → 匯款帳戶」，沒設定或讀取失敗時用環境變數。
+ */
+export async function getBankTransferInfo(): Promise<BankTransferInfo> {
+	const fallback = envBankTransferInfo();
+	try {
+		const [row] = await getDb().select({ value: storeSettings.value }).from(storeSettings).where(eq(storeSettings.key, BANK_SETTING_KEY)).limit(1);
+		const value = (row?.value ?? {}) as Partial<BankTransferInfo>;
+		return {
+			bankName: value.bankName?.trim() || fallback.bankName,
+			accountName: value.accountName?.trim() || fallback.accountName,
+			accountNumber: value.accountNumber?.trim() || fallback.accountNumber,
+			noteHint: NOTE_HINT,
+		};
+	} catch (error) {
+		console.error('[payment] bank settings unavailable', error);
+		return fallback;
+	}
+}
+
+/** 後台儲存匯款帳戶 */
+export async function saveBankTransferInfo(input: { bankName: string; accountName: string; accountNumber: string }, updatedBy: string): Promise<void> {
+	const bankName = input.bankName.trim().slice(0, 60);
+	const accountName = input.accountName.trim().slice(0, 60);
+	const accountNumber = input.accountNumber.trim().slice(0, 40);
+	if (!bankName || !accountName || !accountNumber) throw new Error('銀行、戶名、帳號都要填寫');
+	if (!/^[\d\s-]+$/.test(accountNumber)) throw new Error('帳號只能包含數字、空白或連字號');
+	const value = { bankName, accountName, accountNumber };
+	const updatedAt = new Date();
+	await getDb().insert(storeSettings).values({ key: BANK_SETTING_KEY, value, updatedBy, updatedAt })
+		.onConflictDoUpdate({ target: storeSettings.key, set: { value, updatedBy, updatedAt } });
 }
 
 function readPublic(key: string): string {

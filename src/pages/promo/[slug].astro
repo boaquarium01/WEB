@@ -5,6 +5,7 @@ import { getPromotionBySlug } from '../../data/promotions';
 import type { SanityImageSource } from '@sanity/image-url';
 import { buildDefaultSrc } from '../../lib/sanity/image';
 import { getCartItemCount } from '../../lib/services/cart';
+import { getVisiblePromoTabs } from '../../lib/promoTabs';
 
 function isStrapiPromoImg(img: unknown): boolean {
   return Boolean(
@@ -36,13 +37,10 @@ export const prerender = false;
 Astro.response.headers.set('Cache-Control', 'private, no-store, max-age=0, must-revalidate');
 
 const BRAND_SUFFIX = '水博館水族館';
-const PROMO_TABS = [
-  { slug: 'weekly-new', label: '每週新進魚隻🐠' },
-  { slug: 'special-offers', label: '預定優惠' },
-  { slug: 'equipment-sale', label: '器材促銷' }
-] as const;
-
 const slug = String(Astro.params.slug ?? '').trim();
+// 後台關閉的分頁直接導回首頁
+const visibleTabs = await getVisiblePromoTabs();
+if (!visibleTabs.some((tab) => tab.slug === slug)) return Astro.redirect('/');
 const promo = await getPromotionBySlug(slug);
 if (!promo) return Astro.redirect('/');
 
@@ -59,7 +57,7 @@ if (user) {
 const contentText = String(promo.content ?? '').trim();
 const pageTitle = `${promo.title}｜${BRAND_SUFFIX}`;
 const description = contentText ? contentText.slice(0, 160) : `${promo.title} 最新資訊與圖片。`;
-const tabs = PROMO_TABS.filter((tab) => tab.slug !== slug);
+const tabs = visibleTabs.filter((tab) => tab.slug !== slug);
 const promoImages = promo.promoImages.slice(0, 25).map((img) => ({
   source: img,
   fullSrc:
@@ -107,13 +105,13 @@ const collectionJsonLd = {
           </a>
         </div>
       </div>
-      <div class="mx-auto w-full max-w-5xl px-4 pb-3 sm:px-6">
-        <nav class="grid grid-cols-2 gap-2" aria-label="促銷分頁切換">
+      {tabs.length > 0 && <div class="mx-auto w-full max-w-5xl px-4 pb-3 sm:px-6">
+        <nav class:list={['grid gap-2', tabs.length > 1 ? 'grid-cols-2' : 'grid-cols-1']} aria-label="促銷分頁切換">
           {tabs.map((tab) => (
             <a href={`/promo/${tab.slug}`} class="aq-btn-soft aq-hover-lift rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-sm font-semibold text-slate-700 transition">{tab.label}</a>
           ))}
         </nav>
-      </div>
+      </div>}
     </header>
 
     <main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">

@@ -1,12 +1,15 @@
 import { betterAuth } from 'better-auth';
 import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { emailOTP } from 'better-auth/plugins/email-otp';
 import { genericOAuth, line } from 'better-auth/plugins/generic-oauth';
 import { eq } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import * as schema from '../db/schema';
 import { getServerEnv } from '../env';
+import { getRequestScope } from '../request-scope';
 import { sendAuthEmail } from '../email/adapter';
+import { passwordResetEmail, verificationOtpEmail } from '../email/templates';
 import { ensureCustomerForUser } from '../services/customer';
 import { isSyntheticProviderEmail, passwordPolicyMessage } from './policies.js';
 
@@ -67,7 +70,26 @@ function createAuth() {
 				},
 			} : {}),
 		},
-		plugins: lineProvider ? [genericOAuth({ config: [lineProvider] })] : [],
+		plugins: [
+			...(lineProvider ? [genericOAuth({ config: [lineProvider] })] : []),
+			emailOTP({
+				otpLength: 6,
+				expiresIn: 10 * 60,
+				allowedAttempts: 3,
+				storeOTP: 'hashed',
+				disableSignUp: true,
+				overrideDefaultEmailVerification: true,
+				sendVerificationOTP: async ({ email, otp, type }) => {
+					if (type !== 'email-verification' || isSyntheticProviderEmail(email)) return;
+					// .test 是保留網域，寄了只會退信；本機測試時改印在終端機
+					if (email.endsWith('.test')) {
+						if (import.meta.env?.DEV) console.info(`[email-otp] ${email} 驗證碼 ${otp}`);
+						return;
+					}
+					await sendAuthEmail({ to: email, ...verificationOtpEmail(otp) });
+				},
+			}),
+		],
 		account: {
 			accountLinking: {
 				enabled: true,
@@ -97,27 +119,25 @@ function createAuth() {
 			onExistingUserSignUp: async () => undefined,
 			sendResetPassword: async ({ user, url }) => {
 				if (isSyntheticProviderEmail(user.email)) return;
-				await sendAuthEmail({
-					to: user.email,
-					subject: '重設您的水博館水族會員密碼',
-					text: `您好，我們收到重設水博館水族會員密碼的請求。請點選下方連結，在一小時內設定新密碼：\n\n${url}\n\n若連結已逾期，請重新申請密碼重設。完成重設前，您的原密碼仍可使用。若您未提出此請求，請忽略此信。`,
-				});
+				await sendAuthEmail({ to: user.email, ...passwordResetEmail(url) });
 			},
 		},
 		emailVerification: {
 			sendOnSignUp: true,
 			sendOnSignIn: true,
-			autoSignInAfterVerification: false,
-			expiresIn: 60 * 60,
-			sendVerificationEmail: async ({ user, url }) => {
-				if (isSyntheticProviderEmail(user.email)) return;
-				await sendAuthEmail({
-					to: user.email,
-					subject: '驗證您的水博館水族會員 Email',
-					text: `您好，感謝您註冊水博館水族會員。請點選下方連結，在一小時內完成 Email 驗證；驗證完成後即可登入會員中心：\n\n${url}\n\n若連結已逾期，請回到登入頁重新寄送驗證信。若您未申請註冊，請忽略此信。`,
-				});
-			},
+			// 輸入驗證碼成功後直接登入，不用再輸入一次帳密
+			autoSignInAfterVerification: true,
 		},
+		// 只開放「寄驗證碼」與「驗證 Email」；其他驗證碼功能目前用不到
+		disabledPaths: [
+			'/sign-in/email-otp',
+			'/email-otp/check-verification-otp',
+			'/email-otp/request-password-reset',
+			'/forget-password/email-otp',
+			'/email-otp/reset-password',
+			'/email-otp/request-email-change',
+			'/email-otp/change-email',
+		],
 		rateLimit: {
 			enabled: true,
 			storage: 'database',
@@ -128,11 +148,14 @@ function createAuth() {
 				'/sign-up/email': { window: 60, max: 5 },
 				'/request-password-reset': { window: 60, max: 1 },
 				'/send-verification-email': { window: 60, max: 3 },
+				'/email-otp/send-verification-otp': { window: 60, max: 2 },
+				'/email-otp/verify-email': { window: 60, max: 10 },
 				'/sign-in/social': { window: 60, max: 10 },
 			},
 		},
 		advanced: {
 			useSecureCookies: env.BETTER_AUTH_URL.startsWith('https://'),
+			ipAddress: { ipAddressHeaders: ['cf-connecting-ip', 'x-forwarded-for'] },
 		},
 		trustedOrigins: [
 			env.BETTER_AUTH_URL,
@@ -168,6 +191,12 @@ let auth: AuthInstance | null = null;
  * Better Auth instance (server-only).
  */
 export function getAuth(): AuthInstance {
+	// 綁定了當次請求的資料庫連線，所以 Workers 上每次請求各建一個
+	const scope = getRequestScope();
+	if (scope) {
+		scope.auth ??= createAuth();
+		return scope.auth as AuthInstance;
+	}
 	if (!auth) {
 		auth = createAuth();
 	}

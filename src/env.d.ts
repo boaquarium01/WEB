@@ -39,5 +39,7 @@ declare namespace App {
 		user: AuthSession['user'] | null;
 		session: AuthSession['session'] | null;
 		isAdmin: boolean;
+		/** owner＝總管理員（ADMIN_EMAILS），staff＝後台新增的管理員 */
+		adminRole: import('./lib/services/admin-users').AdminRole | null;
 	}
 }

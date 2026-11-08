@@ -6,6 +6,7 @@
 import AdminLayout from '../../../../layouts/AdminLayout.astro';
 import { isValidAdminSecretParam } from '../../../../lib/admin/path';
 import { getSanityClient } from '../../../../lib/sanity/client';
+import { PROMO_TABS } from '../../../../lib/promoTabs';
 
 export const prerender = false;
 
@@ -69,6 +70,19 @@ const candidates = {
 	featured: products.filter((p) => !p.featured && p.enabled !== false).map(toCandidate),
 	spotlight: products.filter((p) => !p.heroSpotlight && p.enabled !== false).map(toCandidate),
 };
+// 促銷分頁開關：沒設定過 enabled 視為開啟
+let promoDocs: { _id: string; enabled: boolean | null }[] = [];
+try {
+	promoDocs = await getSanityClient()
+		.withConfig({ useCdn: false })
+		.fetch(`*[_type == "promotion" && _id in $ids]{ _id, enabled }`, { ids: PROMO_TABS.map((tab) => tab.id) });
+} catch (error) {
+	console.error('[home-display] promotion load failed', error);
+}
+const promoRows = PROMO_TABS.map((tab) => {
+	const doc = promoDocs.find((item) => item._id === tab.id);
+	return { ...tab, exists: Boolean(doc), enabled: doc ? doc.enabled !== false : false };
+});
 const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=format` : null);
 ---
 
@@ -82,6 +96,30 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 
 	{loadError && <p class="display-notice is-error" role="alert">{loadError}</p>}
 	<p class="display-notice" data-status role="status" hidden></p>
+
+	<section class="display-card" aria-labelledby="promo-tabs-heading">
+		<header class="display-card__head">
+			<div>
+				<h2 id="promo-tabs-heading">促銷分頁</h2>
+				<p>關閉後前台導覽與首頁入口都不顯示，網址會導回首頁。切換後約 15 秒內生效。</p>
+			</div>
+			<span class="count-pill" data-promo-count>{promoRows.filter((row) => row.enabled).length} 個開啟</span>
+		</header>
+		<ul class="toggle-list">
+			{promoRows.map((row) => (
+				<li class="toggle-row">
+					<span class="row-text">
+						<strong>{row.label}</strong>
+						<small data-promo-state>{!row.exists ? '尚未建立內容，請先到商品管理的促銷分頁編輯' : row.enabled ? '前台顯示中' : '已隱藏'}</small>
+					</span>
+					<label class="switch">
+						<input type="checkbox" role="switch" data-promo-toggle={row.id} data-label={row.label} checked={row.enabled} disabled={!row.exists} aria-label={`${row.label}在前台顯示`} />
+						<span class="switch__track" aria-hidden="true"></span>
+					</label>
+				</li>
+			))}
+		</ul>
+	</section>
 
 	<section class="display-card" aria-labelledby="spotlight-heading">
 		<header class="display-card__head">
@@ -168,6 +206,8 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 </AdminLayout>
 
 <script>
+	import { askConfirm } from '../../../../scripts/confirmSheet';
+
 	type Candidate = { id: string; name: string; categoryLabel: string | null };
 	const HOME_LIMIT = 8;
 	const list = document.querySelector<HTMLOListElement>('[data-sort-list]');
@@ -175,6 +215,38 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	const dirtyHint = document.querySelector<HTMLElement>('[data-dirty-hint]');
 	const statusBox = document.querySelector<HTMLElement>('[data-status]');
 	let dirty = false;
+
+	// 促銷分頁開關：切換即儲存，失敗就切回原狀
+	const promoCount = document.querySelector<HTMLElement>('[data-promo-count]');
+	const promoToggles = Array.from(document.querySelectorAll<HTMLInputElement>('[data-promo-toggle]'));
+	for (const toggle of promoToggles) {
+		toggle.addEventListener('change', async () => {
+			const enabled = toggle.checked;
+			const label = toggle.dataset.label ?? '分頁';
+			const state = toggle.closest('.toggle-row')?.querySelector<HTMLElement>('[data-promo-state]');
+			toggle.disabled = true;
+			if (state) state.textContent = '儲存中…';
+			try {
+				const response = await fetch('/api/admin/sanity-dashboard', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ path: `/api/promotions/${encodeURIComponent(toggle.dataset.promoToggle ?? '')}`, method: 'PUT', body: { data: { enabled } } }),
+				});
+				if (!response.ok) {
+					const body = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+					throw new Error(body?.error?.message ?? `儲存失敗（${response.status}）`);
+				}
+				showStatus(enabled ? `已開啟「${label}」` : `已隱藏「${label}」`);
+			} catch (error) {
+				toggle.checked = !enabled;
+				showStatus(error instanceof Error ? error.message : '儲存失敗，請稍後再試', true);
+			} finally {
+				toggle.disabled = false;
+				if (state) state.textContent = toggle.checked ? '前台顯示中' : '已隱藏';
+				if (promoCount) promoCount.textContent = `${promoToggles.filter((item) => item.checked).length} 個開啟`;
+			}
+		});
+	}
 
 	const showStatus = (text: string, isError = false) => {
 		if (!statusBox) return;
@@ -285,9 +357,9 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 		const button = featuredBtn ?? spotlightBtn ?? addBtn ?? addSpotBtn;
 		if (!button) return;
 		const name = button.closest('.sort-row, .search-row')?.querySelector('strong')?.textContent ?? '這個商品';
-		if (featuredBtn && !window.confirm(`確定把「${name}」從熱銷推薦移除？`)) return;
-		if (spotlightBtn && !window.confirm(`確定取消「${name}」的主打？`)) return;
-		if (dirty && !window.confirm('排序還沒儲存，繼續會放棄目前的排序變更。要繼續嗎？')) return;
+		if (featuredBtn && !(await askConfirm(`確定把「${name}」從熱銷推薦移除？`, { okLabel: '移除', danger: true }))) return;
+		if (spotlightBtn && !(await askConfirm(`確定取消「${name}」的主打？`, { okLabel: '取消主打', danger: true }))) return;
+		if (dirty && !(await askConfirm('排序還沒儲存，繼續會放棄目前的排序變更。要繼續嗎？', { okLabel: '放棄排序', danger: true }))) return;
 		button.disabled = true;
 		try {
 			if (featuredBtn) await updateProduct(featuredBtn.dataset.removeFeatured ?? '', { featured: false });
@@ -339,6 +411,19 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	.display-card__head h2 { margin: 0; font-size: 18px; }
 	.display-card__head p { margin: 4px 0 0; color: var(--commerce-muted); font-size: 12.5px; line-height: 1.5; }
 	.count-pill { flex: none; padding: 3px 10px; border-radius: 999px; background: var(--commerce-primary-soft); color: var(--commerce-primary-dark); font-size: 12px; font-weight: 750; }
+	.toggle-list { margin: 0; padding: 0; list-style: none; }
+	.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; padding: 10px 18px; border-bottom: 1px solid #edf1ef; }
+	.toggle-row:last-child { border-bottom: 0; }
+	.switch { position: relative; flex: none; display: inline-flex; width: 48px; height: 28px; cursor: pointer; }
+	.switch input { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+	.switch__track { width: 100%; height: 100%; border-radius: 999px; background: #cfd8d6; transition: background-color 0.18s ease; }
+	.switch__track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(20, 40, 40, 0.25); transition: transform 0.18s ease; }
+	.switch input:checked + .switch__track { background: var(--commerce-primary); }
+	.switch input:checked + .switch__track::after { transform: translateX(20px); }
+	.switch input:focus-visible + .switch__track { outline: 3px solid rgba(21, 106, 102, 0.35); outline-offset: 2px; }
+	.switch input:disabled { cursor: not-allowed; }
+	.switch input:disabled + .switch__track { opacity: 0.5; }
+	@media (prefers-reduced-motion: reduce) { .switch__track, .switch__track::after { transition: none; } }
 	.empty-line { margin: 0; padding: 18px; color: var(--commerce-muted); font-size: 13px; }
 	.sort-list { margin: 0; padding: 0; list-style: none; }
 	.sort-row { display: grid; grid-template-columns: 36px 26px 48px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid #f1f4f3; background: #fff; }

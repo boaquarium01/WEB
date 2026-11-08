@@ -1,0 +1,186 @@
+---
+/** 購物須知與售後服務：運費、出貨、付款、活體保證、退換貨與保固，整理成一頁 */
+import SiteLayout from '../layouts/SiteLayout.astro';
+
+import { listShippingMethods } from '../lib/services/shipping';
+
+export const prerender = false;
+
+/** 運費與免運門檻跟著後台「運費設定」走（取第一個啟用中的配送方式）；讀不到時用預設值 */
+let SHIPPING_FEE = 99;
+let FREE_SHIPPING: number | null = 1200;
+try {
+	const [method] = await listShippingMethods(true);
+	if (method) {
+		SHIPPING_FEE = method.fee;
+		FREE_SHIPPING = method.freeShippingThreshold;
+	}
+} catch (error) {
+	console.error('[shopping-guide] shipping settings unavailable', error);
+}
+const freeText = FREE_SHIPPING === null ? null : FREE_SHIPPING.toLocaleString('zh-TW');
+const LINE_URL = 'https://line.me/R/ti/p/@407hrczr?oat_content=url&ts=03301229';
+const PHONE = '03-402-8721';
+
+const sections = [
+	{ id: 'shipping-fee', icon: 'fa-truck-fast', title: '運費' },
+	{ id: 'delivery', icon: 'fa-box', title: '出貨與配送' },
+	{ id: 'payment', icon: 'fa-building-columns', title: '付款方式' },
+	{ id: 'live', icon: 'fa-fish', title: '活體與水草' },
+	{ id: 'receive', icon: 'fa-clipboard-check', title: '收到商品' },
+	{ id: 'returns', icon: 'fa-rotate-left', title: '退換貨' },
+	{ id: 'warranty', icon: 'fa-screwdriver-wrench', title: '保固維修' },
+];
+---
+
+<SiteLayout title="購物須知與售後服務｜水博館水族" description={`水博館水族購物須知：本島運費 ${SHIPPING_FEE} 元${freeText ? `、滿 ${freeText} 免運` : ''}，銀行轉帳付款後黑貓宅配出貨，活體到貨保證與退換貨、保固說明。`}>
+	<article class="guide">
+		<header class="guide__head">
+			<h1>購物須知與售後服務</h1>
+			<p>下單前請先閱讀以下說明，有任何問題歡迎透過 <a href={LINE_URL} target="_blank" rel="noreferrer">官方 LINE</a> 或電話 <a href={`tel:${PHONE.replace(/-/g, '')}`}>{PHONE}</a> 詢問。</p>
+			<ul class="guide__highlights">
+				<li><strong>${SHIPPING_FEE}</strong><span>本島運費</span></li>
+				{freeText && <li><strong>${freeText}</strong><span>滿額免運</span></li>}
+				<li><strong>預估 1–2 天</strong><span>付款後出貨</span></li>
+			</ul>
+		</header>
+
+		<nav class="guide__toc" aria-label="本頁目錄">
+			{sections.map((s) => <a href={`#${s.id}`}><i class:list={['fa-solid', s.icon]} aria-hidden="true"></i>{s.title}</a>)}
+		</nav>
+
+		<section id="shipping-fee" class="guide__section">
+			<h2><i class="fa-solid fa-truck-fast" aria-hidden="true"></i>運費</h2>
+			<ol>
+				<li>台灣本島黑貓宅配，運費優惠價 <strong>NT$ {SHIPPING_FEE}</strong>。</li>
+				{freeText && <li>單筆訂單商品金額滿 <strong>NT$ {freeText}</strong> 免運費。</li>}
+				<li>離島（澎湖、金門、馬祖、綠島、蘭嶼等）運費另計，下單後我們會以電話或 LINE 與您確認運費，確認後再付款。</li>
+				<li>魚缸、冷水機、長燈具等大型或易碎商品需單獨包裝，若運費與網站計算不同，會先與您聯繫確認。</li>
+			</ol>
+		</section>
+
+		<section id="delivery" class="guide__section">
+			<h2><i class="fa-solid fa-box" aria-hidden="true"></i>出貨與配送</h2>
+			<ol>
+				<li><strong>僅提供付款後宅配出貨</strong>，不提供貨到付款。</li>
+				<li>款項核對完成後預估 <strong>1–2 個工作天</strong>內出貨，「週日及國定假日」可能不出貨。</li>
+				<li>以黑貓宅急便配送到府，或寄到黑貓營業所「到站自取」（請在訂單備註寫上營業所名稱與地址）。部分地區沒有到站自取服務，可先洽黑貓客服確認。</li>
+				<li>宅配依路線配送，遇節慶、颱風或貨量大時可能延誤，敬請見諒。</li>
+				<li>為保護活體，<strong>活體與水草不寄送超商</strong>，宅配包裹也請勿改送超商；改送造成的損傷恕不補償。</li>
+				<li>商品不接受保留或延後寄出。</li>
+			</ol>
+		</section>
+
+		<section id="payment" class="guide__section">
+			<h2><i class="fa-solid fa-building-columns" aria-hidden="true"></i>付款方式</h2>
+			<ol>
+				<li>目前提供 <strong>ATM／網路銀行轉帳</strong>，下單完成後會寄出訂單確認信，內含轉帳帳號。</li>
+				<li>請於 <strong>下單後 3 天內</strong>完成轉帳，逾期未付款的訂單會自動取消並釋放庫存。</li>
+				<li>轉帳後請到「會員中心 → 我的訂單 → 點選訂單」<strong>回報轉出帳號末五碼</strong>，我們核對款項後會更新訂單狀態，並開始備貨。</li>
+				<li>轉帳備註請填寫訂單編號，方便我們快速核對。</li>
+			</ol>
+		</section>
+
+		<section id="live" class="guide__section">
+			<h2><i class="fa-solid fa-fish" aria-hidden="true"></i>活體與水草送達保證</h2>
+			<ol>
+				<li>魚蝦皆於店內穩定後才出貨，包裝使用水族專用保護箱，視季節加放保溫或保冷材料。</li>
+				<li>收件當天請盡快拆箱檢查。若有運送途中死亡，請於 <strong>收件後 60 分鐘內</strong>拍照或錄影，並<strong>包含未拆封的原始魚袋</strong>，傳至官方 LINE。</li>
+				<li>確認屬運送造成的死亡，<strong>於您下次訂購時補償同款活體</strong>；若該品項已售完，則於下次消費時抵扣該活體金額。</li>
+				<li>蝦、螺類不提供死亡補償。</li>
+				<li>收件人無法收件、地址或電話錯誤、退件、改送他處，或到站自取未於當天領取所造成的損傷，恕不補償。</li>
+				<li>本保證僅限台灣本島，離島配送不適用。</li>
+			</ol>
+		</section>
+
+		<section id="receive" class="guide__section">
+			<h2><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i>收到商品請先檢查</h2>
+			<ol>
+				<li>收到商品請先核對品項、數量與外觀，若有短少、錯誤或運送損壞，請拍照並於 <strong>3 天內</strong>與我們聯繫。</li>
+				<li>檢查時請保留完整外箱、包裝、配件、說明書與保固卡，退換貨時需一併寄回。</li>
+			</ol>
+		</section>
+
+		<section id="returns" class="guide__section">
+			<h2><i class="fa-solid fa-rotate-left" aria-hidden="true"></i>退換貨</h2>
+			<ol>
+				<li>器材類商品依消費者保護法享有<strong>到貨隔日起 7 天猶豫期</strong>，請先以 LINE 或電話告知，並於期限內寄回。猶豫期並非試用期，商品須保持原狀與完整包裝。</li>
+				<li>商品經使用、下水運轉或包裝毀損，致價值減損時，依法由消費者負擔回復原狀或減損費用。</li>
+				<li><strong>活體、水草屬易於腐敗、保存期限較短之商品，不適用 7 天猶豫期</strong>，到貨問題依上方「活體與水草送達保證」處理。</li>
+				<li>商品瑕疵、寄錯或運送損壞，退換貨運費由本店負擔；非瑕疵（例如不喜歡、聲音或亮度不如預期）的退換貨，來回運費由顧客負擔。</li>
+				<li>換貨若有價差，多退少補；確認寄回商品完整後再寄出更換商品或辦理退款。</li>
+			</ol>
+		</section>
+
+		<section id="warranty" class="guide__section">
+			<h2><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>保固與維修</h2>
+			<ol>
+				<li>各品牌器材依原廠保固條件辦理，保固期間以商品說明或保固卡為準，送修時請附上保固卡或購買證明。</li>
+				<li>到貨 7 天內發生非人為故障，經確認後換新品，來回運費由本店負擔。</li>
+				<li>超過 7 天的故障，請將商品寄回並附上紙條註明：故障狀況、姓名、聯絡電話、收件地址；我們會交由原廠檢修，送修期間預估約 2–3 週，來回運費由顧客負擔。</li>
+				<li>保固期內非人為損壞不收維修費（以原廠判定為準）；如需付費維修，會先報價並與您確認。</li>
+			</ol>
+		</section>
+
+		<p class="guide__note">本頁內容如有更新，以網站最新公告為準；未盡事宜依 <a href="/terms">購物條款與規則</a> 及相關法令辦理。</p>
+	</article>
+</SiteLayout>
+
+<style>
+	.guide { max-width: 820px; margin: 0 auto; padding: 8px 0 32px; line-height: 1.8; color: var(--aq-ink); }
+	.guide a { color: var(--aq-primary-dark); font-weight: 650; }
+	.guide__head h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 4vw, 2rem); font-weight: 800; }
+	.guide__head > p { margin: 0; color: var(--aq-muted); }
+	.guide__highlights { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 10px; margin: 20px 0 0; padding: 0; list-style: none; }
+	.guide__highlights li { display: grid; gap: 2px; padding: 14px 12px; border: 1px solid var(--aq-line); border-radius: 14px; background: #fff; text-align: center; }
+	.guide__highlights strong { color: var(--aq-primary-dark); font-size: 1.15rem; font-weight: 800; line-height: 1.3; }
+	.guide__highlights span { color: var(--aq-muted); font-size: .82rem; }
+	/* 目錄黏在頂欄正下方：實心底色避免內文透出，右側漸層提示還能往右滑 */
+	.guide__toc { position: sticky; top: var(--guide-toc-top, 52px); z-index: 5; display: flex; gap: 6px; margin: 20px -18px 8px; padding: 10px 18px; overflow-x: auto; background: var(--aq-sand, #f7f5f0); border-bottom: 1px solid transparent; scrollbar-width: none; scroll-padding-inline: 18px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+	.guide__toc.is-stuck { border-bottom-color: var(--aq-line); }
+	.guide__toc a.is-active { border-color: var(--aq-primary); background: var(--aq-primary); color: #fff; }
+	.guide__toc::-webkit-scrollbar { display: none; }
+	.guide__toc a { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border: 1px solid var(--aq-line); border-radius: 999px; background: #fff; font-size: .85rem; text-decoration: none; white-space: nowrap; }
+	.guide__toc a i { font-size: .8rem; }
+	.guide__section { margin-top: 16px; padding: 20px 20px 8px; border: 1px solid var(--aq-line); border-radius: 16px; background: #fff; scroll-margin-top: 44px; /* 全站已預留 80px 頂欄，再加目錄高度 */ }
+	.guide__section h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 1.2rem; font-weight: 800; }
+	.guide__section h2 i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--aq-primary-soft); color: var(--aq-primary); font-size: .95rem; }
+	.guide__section ol { margin: 0; padding-left: 1.4em; list-style: decimal; }
+	.guide__section li { margin-bottom: 10px; padding-left: 2px; }
+	.guide__section li::marker { color: var(--aq-primary); font-weight: 800; }
+	.guide__section strong { color: var(--aq-ink); }
+	.guide__note { margin: 24px 0 0; color: var(--aq-muted); font-size: .85rem; text-align: center; }
+	@media (max-width: 600px) {
+		.guide { padding-top: 4px; }
+		.guide__highlights { gap: 8px; }
+		.guide__highlights li { padding: 12px 6px; }
+		.guide__highlights strong { font-size: 1rem; }
+		.guide__section { padding: 16px 14px 4px; }
+	}
+</style>
+
+<script>
+	// 目錄跟著頂欄實際高度黏住，並標示目前讀到的段落
+	const toc = document.querySelector<HTMLElement>('.guide__toc');
+	const header = document.getElementById('siteHeader');
+	const setTop = () => { if (toc && header) toc.style.setProperty('--guide-toc-top', `${Math.round(header.getBoundingClientRect().height)}px`); };
+	setTop();
+	window.addEventListener('resize', setTop);
+	const links = new Map(Array.from(toc?.querySelectorAll<HTMLAnchorElement>('a') ?? []).map((a) => [a.hash.slice(1), a]));
+	const setActive = (id: string) => {
+		links.forEach((a, key) => a.classList.toggle('is-active', key === id));
+		const active = links.get(id);
+		if (active && toc) toc.scrollTo({ left: active.offsetLeft - 18, behavior: 'smooth' });
+	};
+	const sections = Array.from(document.querySelectorAll<HTMLElement>('.guide__section'));
+	let current = '';
+	const onScroll = () => {
+		// 目錄下緣往下 24px 內已經捲到的最後一段，就是目前段落
+		const line = (toc?.getBoundingClientRect().bottom ?? 0) + 24;
+		const id = sections.filter((section) => section.getBoundingClientRect().top <= line).pop()?.id ?? '';
+		if (id !== current) { current = id; setActive(id); }
+	};
+	window.addEventListener('scroll', onScroll, { passive: true });
+	onScroll();
+	if (toc) new IntersectionObserver(([e]) => toc.classList.toggle('is-stuck', e.intersectionRatio < 1), { rootMargin: '-60px 0px 0px 0px', threshold: [1] }).observe(toc);
+</script>

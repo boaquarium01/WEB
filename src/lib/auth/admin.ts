@@ -4,7 +4,7 @@
  */
 import { config as loadDotenv } from 'dotenv';
 
-loadDotenv({ path: '.env' });
+if (typeof navigator === 'undefined' || navigator.userAgent !== 'Cloudflare-Workers') loadDotenv({ path: '.env' });
 
 function readAdminEmailsRaw(): string {
 	const fromProcess = process.env.ADMIN_EMAILS;

@@ -1,5 +1,6 @@
 ---
 import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import OrderList from '../../../../components/admin/OrderList.astro';
 import { cancelExpiredUnpaidOrders } from '../../../../lib/services/admin-orders';
 import {
 	getAdminBasePath,
@@ -132,57 +133,7 @@ const todoCards = [
 		{recent.length === 0 ? (
 			<div class="empty"><i class="fa-regular fa-clipboard" aria-hidden="true"></i><strong>目前還沒有訂單</strong></div>
 		) : (
-			<div class="recent table-wrap">
-				<table>
-					<thead><tr><th>訂單</th><th>顧客</th><th>狀態</th><th>金額</th><th>操作</th></tr></thead>
-					<tbody>
-						{recent.map((row) => (
-							<tr>
-								<td>
-									<a class="mono order-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>{row.orderNumber}</a>
-									<div class="order-time-customer">
-										<time class="order-time" datetime={row.createdAt.toISOString()}>{formatOrderTime(row.createdAt)}</time>
-										<span class="mobile-customer-name">{row.customerName ?? '—'}</span>
-									</div>
-									<small class="order-age">{formatOrderAge(row.createdAt)}</small>
-									<a class="order-row-link" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} aria-label={`查看訂單 ${row.orderNumber}`}></a>
-								</td>
-								<td>
-									<div class="customer-summary"><strong>{row.customerName ?? '—'}</strong></div>
-									{row.items[0] && <span class="desk-item-line">{row.items[0].productName}{row.items[0].skuName && row.items[0].skuName !== row.items[0].productName ? `（${row.items[0].skuName}）` : ''} ×{row.items[0].quantity}{row.itemLineCount > 1 ? ` 等 ${row.itemLineCount} 項` : ''}</span>}
-									{row.items[0] && (
-										<div class="order-item-summary">
-											<div class="order-item-feature">
-												<strong class="order-item-name">{row.items[0].productName}</strong>
-												<span class="order-item-unit-price">{formatTwd(row.items[0].unitPrice)}</span>
-												{row.items[0].skuName && <small class="order-item-spec">{row.items[0].skuName}</small>}
-												<span class="order-item-quantity">×{row.items[0].quantity}</span>
-											</div>
-											{row.itemLineCount > 1 && <small class="order-more-items">另有 {row.itemLineCount - 1} 項商品，查看更多</small>}
-										</div>
-									)}
-								</td>
-								<td><span class={`status-pill status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span></td>
-								<td class="amount"><span class="mobile-cell-label">金額</span>{formatTwd(row.total)}</td>
-								<td>
-									<div class="order-actions">
-										<div class="mobile-order-total-group">
-											<strong class="mobile-order-total">{formatTwd(row.total)}</strong>
-											<small class="mobile-order-count">共 {row.itemLineCount} 項・{row.itemCount} 件</small>
-										</div>
-										<div class="order-action-buttons">
-										{row.status === 'PAYMENT_SUBMITTED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認已收到這筆訂單的款項？');"><input type="hidden" name="_action" value="confirm_payment" /><button class="row-action row-action--payment" type="submit">確認付款</button></form>}
-											{['PAID', 'PROCESSING'].includes(row.status) && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成出貨？');"><input type="hidden" name="_action" value="mark_shipped" /><button class="row-action row-action--shipping" type="submit">標記出貨</button></form>}
-											{row.status === 'SHIPPED' && <form method="post" action={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`} onsubmit="return confirm('確認此訂單已完成？');"><input type="hidden" name="_action" value="complete" /><button class="row-action row-action--complete" type="submit">完成訂單</button></form>}
-											<a class="row-action" href={`${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`}>查看</a>
-										</div>
-									</div>
-								</td>
-							</tr>
-						))}
-					</tbody>
-				</table>
-			</div>
+			<OrderList rows={recent} base={base} flush />
 		)}
 	</section>
 </AdminLayout>

@@ -25,3 +25,12 @@ export function requireUser(context: APIContext) {
 export function hasSameOrigin(request: Request, origin: string): boolean {
 	return request.headers.get('origin') === origin;
 }
+
+/** 把請求轉給 Better Auth 的 HTTP 入口（server 端直接呼叫 api.* 不會套用 rateLimit） */
+export function authRequest(context: APIContext, path: string, body: unknown): Request {
+	const headers = new Headers(context.request.headers);
+	headers.set('content-type', 'application/json');
+	headers.set('origin', context.url.origin);
+	headers.delete('content-length');
+	return new Request(new URL(`/api/auth${path}`, context.url.origin), { method: 'POST', headers, body: JSON.stringify(body) });
+}

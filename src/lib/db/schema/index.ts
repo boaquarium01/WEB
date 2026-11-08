@@ -173,7 +173,11 @@ export const customers = pgTable(
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	},
-	(t) => [uniqueIndex('customers_user_id_uidx').on(t.userId)],
+	(t) => [
+		uniqueIndex('customers_user_id_uidx').on(t.userId),
+		// 手機可當登入帳號，所以不可重複
+		uniqueIndex('customers_phone_uidx').on(t.phone).where(sql`${t.phone} is not null`),
+	],
 );
 
 export const addresses = pgTable(
@@ -599,3 +603,19 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
 	items: many(orderItems),
 	payments: many(payments),
 }));
+
+/** 後台管理員名單（總管理員在後台新增）；ADMIN_EMAILS 環境變數裡的帳號一律是總管理員，不放這裡 */
+export const adminUsers = pgTable('admin_users', {
+	email: text('email').primaryKey(),
+	note: text('note'),
+	createdBy: text('created_by'),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** 店家設定（例如匯款帳戶），後台可編輯；以 key 區分 */
+export const storeSettings = pgTable('store_settings', {
+	key: text('key').primaryKey(),
+	value: jsonb('value').notNull(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+	updatedBy: text('updated_by'),
+});

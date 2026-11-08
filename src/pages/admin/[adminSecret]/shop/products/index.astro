@@ -98,7 +98,7 @@ const pageHref = (page: number) => {
 
 <AdminLayout title="價格／庫存｜水博館水族官方網站後台">
 	<header class="head page-heading">
-		<div class="heading-row"><h1>價格與庫存明細</h1><div class="heading-actions"><a class="commerce-back-link" href={`${base}/dashboard?model=product`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>商品</a><span class="summary-pill">{productCount} 商品 <i>·</i> {sellingProductCount} 販售</span><button class="movement-link" type="button" aria-label="異動紀錄" title="異動紀錄" aria-controls="inventory-movements" aria-expanded="false"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></button></div></div>
+		<div class="heading-row"><h1>價格與庫存明細</h1><div class="heading-actions"><a class="commerce-back-link" href={`${base}/dashboard?model=product`}><i class="fa-solid fa-arrow-left" aria-hidden="true"></i>商品</a><span class="summary-pill">共 {productCount} 件 <i>·</i> {sellingProductCount} 件販售中</span><button class="movement-link" type="button" aria-label="異動紀錄" title="異動紀錄" aria-controls="inventory-movements" aria-expanded="false"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i></button></div></div>
 		<form class="product-filters" method="get" action={`${base}/shop/products`}>
 			<label class="filter-category"><span class="sr-only">分類</span><select name="category" aria-label="分類" onchange="this.form.requestSubmit()"><option value="">分類</option>{categories.map((item) => <option value={item.slug} selected={category === item.slug}>{item.label || categoryLabels.get(item.slug) || '其他分類'}</option>)}</select></label>
 			<label class="filter-sort"><span class="sr-only">排序</span><select name="sort" aria-label="排序" onchange="this.form.requestSubmit()"><option value="default" selected={sortChoice === 'default'}>排序</option><option value="name-asc" selected={sortChoice === 'name-asc'}>名稱↑</option><option value="price-asc" selected={sortChoice === 'price-asc'}>價格↑</option><option value="price-desc" selected={sortChoice === 'price-desc'}>價格↓</option><option value="stock-asc" selected={sortChoice === 'stock-asc'}>庫存↑</option><option value="stock-desc" selected={sortChoice === 'stock-desc'}>庫存↓</option></select></label>
@@ -123,7 +123,7 @@ const pageHref = (page: number) => {
 							<div class="product-title-row"><a class="product-name" href={`/product/${row.slug}`} title={row.productName}>{row.productName}</a><a class="edit-content-link" aria-label={`編輯 ${row.productName}`} title="編輯商品" href={`${base}/dashboard?model=product&product=${encodeURIComponent(row.slug)}`}><i class="fa-solid fa-pen" aria-hidden="true"></i></a></div>
 							<div class="product-subtitle">{row.skuName !== row.productName && <span>{row.skuName}</span>}{!row.productOnline || !row.productActive ? <span class="offline-badge">未上架</span> : null}</div>
 						</td>
-						<td class="price-cell" data-label="售價"><label class="price-field"><span>$</span><input form={`sku-edit-${row.productSkuId}`} type="number" inputmode="numeric" name="sellingPrice" min="0" step="1" required value={row.sellingPrice} aria-label={`${row.productName} ${row.skuName} 售價`}/></label></td>
+						<td class="price-cell" data-label="售價"><label class="price-field"><span>$</span><input form={`sku-edit-${row.productSkuId}`} type="number" inputmode="numeric" name="sellingPrice" min="0" step="1" placeholder="價格洽詢" value={row.sellingPrice > 0 ? row.sellingPrice : ''} aria-label={`${row.productName} ${row.skuName} 售價`}/></label></td>
 						<td class="stock-cell" data-label="庫存"><label class="stock-field"><input form={`sku-edit-${row.productSkuId}`} type="number" inputmode="numeric" name="onHand" min="0" step="1" placeholder="不限量" value={row.onHand < 0 ? '' : row.onHand} aria-label={`${row.productName} ${row.skuName} 庫存`}/></label>{row.reserved > 0 && <small class="reserved-hint">預留 {row.reserved}</small>}</td>
 						<td class="sale-cell" data-label="販售"><fieldset class="sale-mode-editor" aria-label={`${row.productName} ${row.skuName} 販售狀態`}><label><input form={`sku-edit-${row.productSkuId}`} type="radio" name="saleMode" value="open" checked={row.saleEnabled}/><span>販售</span></label><label><input form={`sku-edit-${row.productSkuId}`} type="radio" name="saleMode" value="stop" checked={!row.saleEnabled}/><span>停售</span></label></fieldset></td>
 						<td class="save-cell" data-label="儲存"><form id={`sku-edit-${row.productSkuId}`} class="sku-edit-form" data-product-id={row.sanityProductId} method="post" action={`${base}/shop/products${currentSearch ? `?${currentSearch}` : ''}`}><input type="hidden" name="productSkuId" value={row.productSkuId}/><button class="save-row" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存</button><span class="row-feedback" role="status" aria-live="polite"></span></form></td>
@@ -415,6 +415,8 @@ const pageHref = (page: number) => {
 </style>
 
 <script>
+	import { askConfirm, showNotice } from '../../../../../scripts/confirmSheet';
+
 	const movementDetails = document.querySelector<HTMLDetailsElement>('#inventory-movements');
 	const movementToggle = document.querySelector<HTMLButtonElement>('.movement-link');
 	if (movementDetails && movementToggle) {
@@ -433,16 +435,24 @@ const pageHref = (page: number) => {
 	const dirtyForms = new Set<HTMLFormElement>();
 	let savingRows = 0, navigationApproved = false;
 	window.addEventListener('beforeunload', (event) => { if (!navigationApproved && (dirtyForms.size || savingRows)) { event.preventDefault(); event.returnValue = ''; } });
-	const allowNavigation = () => {
-		if (savingRows) { window.alert('儲存中，請稍候'); return false; }
-		if (!dirtyForms.size) return true;
-		if (!window.confirm('尚有未儲存變更，確定離開？')) return false;
+	const needsLeaveCheck = () => !navigationApproved && Boolean(savingRows || dirtyForms.size);
+	const confirmLeave = async () => {
+		if (savingRows) { await showNotice('儲存中，請稍候'); return false; }
+		if (!(await askConfirm('尚有未儲存變更，確定離開？', { okLabel: '離開', danger: true }))) return false;
 		navigationApproved = true; setTimeout(() => { navigationApproved = false; }, 1500); return true;
 	};
-	document.querySelector('.product-filters')?.addEventListener('submit', (event) => { if (!allowNavigation()) event.preventDefault(); });
+	document.querySelector<HTMLFormElement>('.product-filters')?.addEventListener('submit', (event) => {
+		if (!needsLeaveCheck()) return;
+		event.preventDefault();
+		const form = event.currentTarget as HTMLFormElement;
+		const submitter = event.submitter instanceof HTMLElement ? event.submitter : null;
+		void confirmLeave().then((ok) => { if (ok) form.requestSubmit(submitter); });
+	});
 	document.addEventListener('click', (event) => {
 		const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('.pagination a,.commerce-back-link,.product-name,.edit-content-link') : null;
-		if (link && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey && !allowNavigation()) event.preventDefault();
+		if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || !needsLeaveCheck()) return;
+		event.preventDefault();
+		void confirmLeave().then((ok) => { if (ok) window.location.href = link.href; });
 	});
 	document.querySelectorAll<HTMLFormElement>('.sku-edit-form').forEach((form) => {
 		const price = form.elements.namedItem('sellingPrice') as HTMLInputElement;

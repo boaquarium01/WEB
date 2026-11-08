@@ -110,7 +110,7 @@ async function syncOneProduct(
 				unit: 'pcs',
 				isActive: item.isEnabled,
 				isOnline: item.isEnabled,
-				requiresManualConfirmation: shouldRequireManualConfirmation(
+				requiresManualConfirmation: item.categoryIsLive ?? shouldRequireManualConfirmation(
 					item.categorySlug,
 					item.categoryLabel,
 				),

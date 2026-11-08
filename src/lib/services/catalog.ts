@@ -214,6 +214,16 @@ function mergeListItem(
  * Online catalog list: Sanity content + PostgreSQL price/stock.
  * Only products present in both systems and marked online/active.
  */
+/** 多件優惠讀取失敗（例如資料庫暫時斷線）時不顯示優惠，不讓整頁壞掉 */
+async function loadPriceTiers(productId: string) {
+	try {
+		return await getDb().select({ minQuantity: productPriceTiers.minQuantity, maxQuantity: productPriceTiers.maxQuantity, unitPrice: productPriceTiers.unitPrice }).from(productPriceTiers).where(eq(productPriceTiers.productId, productId)).orderBy(asc(productPriceTiers.sortOrder));
+	} catch (error) {
+		console.error('[Catalog] price tiers unavailable', error);
+		return [];
+	}
+}
+
 export async function listCatalogProducts(options?: {
 	categorySlug?: string;
 }): Promise<CatalogProductListItem[]> {
@@ -294,7 +304,7 @@ export async function getCatalogProductBySlug(
 		const first = matching[0]!;
 		const skus = buildSkus(matching);
 		const db = getDb();
-		const priceTiers = await db.select({ minQuantity: productPriceTiers.minQuantity, maxQuantity: productPriceTiers.maxQuantity, unitPrice: productPriceTiers.unitPrice }).from(productPriceTiers).where(eq(productPriceTiers.productId, first.productId)).orderBy(asc(productPriceTiers.sortOrder));
+		const priceTiers = await loadPriceTiers(first.productId);
 		const base: CatalogProductListItem = {
 			productId: first.productId,
 			sanityProductId: first.sanityProductId,
@@ -333,7 +343,7 @@ export async function getCatalogProductBySlug(
 	const skus = buildSkus(rows);
 	const first = rows[0]!;
 	const db = getDb();
-	const priceTiers = await db.select({ minQuantity: productPriceTiers.minQuantity, maxQuantity: productPriceTiers.maxQuantity, unitPrice: productPriceTiers.unitPrice }).from(productPriceTiers).where(eq(productPriceTiers.productId, first.productId)).orderBy(asc(productPriceTiers.sortOrder));
+	const priceTiers = await loadPriceTiers(first.productId);
 	for (const sku of skus) {
 		const variant = findContentVariant(content, sku);
 		if (variant) {
@@ -354,7 +364,8 @@ export async function getCatalogProductBySlug(
 		galleryUrls: content.galleryUrls,
 		skus,
 		specifications: content.specifications,
-		requiresManualConfirmation: first.requiresManualConfirmation,
+		// 只看後台分類的「活體分類」開關，沒開就不顯示
+		requiresManualConfirmation: content.categoryIsLive === true,
 		minimumPurchaseQuantity: first.minimumPurchaseQuantity,
 		priceTiers,
 		seoTitle: content.seoTitle,

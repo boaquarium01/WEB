@@ -4,7 +4,7 @@ export type ProductCardItem = {
   name: string;
   excerpt: string;
   categoryLabel?: string;
-  /** 空字串或缺漏時不顯示圖片區；載入失敗也會隱藏圖片區 */
+  /** 空字串或缺漏時為無圖卡（一格高）；載入失敗也會改成無圖卡 */
   imageUrl?: string | null;
   priceLabel?: string;
   stockLabel?: string;
@@ -13,11 +13,17 @@ export type ProductCardItem = {
 
 type Props = {
   items: ProductCardItem[];
-  /** 首頁精選為 true 時不顯示分類行 */
+  /** 為 true 時顯示商品簡介 */
   compact?: boolean;
 };
 
 const { items, compact = false } = Astro.props as Props;
+
+/** 商品名依字數選字級：短名字放大，長名字縮小；超過兩行用「…」 */
+const nameSize = (name: string) => {
+  const length = [...name.trim()].length;
+  return length <= 6 ? 'is-short' : length <= 12 ? 'is-medium' : 'is-long';
+};
 ---
 
 <div
@@ -32,15 +38,15 @@ const { items, compact = false } = Astro.props as Props;
       return (
       <article
         data-stagger-card
-        class="product-stagger-card group/card opacity-0 translate-y-4 transition-[opacity,transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] [transition-delay:var(--stagger-delay)] group-[.is-visible]:opacity-100 group-[.is-visible]:translate-y-0"
+        class:list={[hasImage ? 'has-image' : 'no-image', 'product-stagger-card group/card opacity-0 translate-y-4 transition-[opacity,transform,box-shadow] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)] [transition-delay:var(--stagger-delay)] group-[.is-visible]:opacity-100 group-[.is-visible]:translate-y-0']}
         style={`--stagger-delay: ${i * 70}ms`}
       >
         <a
           href={`/product/${product.slug}`}
           class="product-stagger-card__link flex h-full flex-col overflow-hidden rounded-[var(--aq-radius-lg)] border border-[color-mix(in_srgb,var(--aq-ink)_10%,transparent)] bg-[color-mix(in_srgb,white_94%,var(--aq-sand))] text-inherit no-underline shadow-[0_1px_2px_rgba(26,34,33,0.04),0_10px_28px_rgba(26,34,33,0.07)] outline-none ring-[color-mix(in_srgb,var(--aq-ink)_4%,transparent)] ring-1 transition-[transform,box-shadow,border-color] duration-200 ease-out [touch-action:manipulation] [-webkit-tap-highlight-color:transparent] hover:border-[color-mix(in_srgb,var(--aq-primary)_22%,transparent)] hover:shadow-[0_4px_14px_rgba(26,34,33,0.06),0_18px_40px_rgba(21,106,102,0.1)] active:scale-[0.98] active:shadow-[0_2px_8px_rgba(26,34,33,0.05)] focus-visible:ring-2 focus-visible:ring-[color-mix(in_srgb,var(--aq-primary)_65%,transparent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--aq-sand)]"
         >
-          <div class:list={['product-stagger-card__media relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-[var(--aq-mist)] to-[color-mix(in_srgb,var(--aq-sand-2)_85%,var(--aq-muted))]', { 'is-empty': !hasImage }]}>
-            {hasImage ? (
+          {hasImage ? (
+            <div class="product-stagger-card__media relative min-h-0 flex-1 overflow-hidden bg-gradient-to-br from-[var(--aq-mist)] to-[color-mix(in_srgb,var(--aq-sand-2)_85%,var(--aq-muted))]">
               <img
                 src={imageSrc}
                 alt=""
@@ -49,25 +55,16 @@ const { items, compact = false } = Astro.props as Props;
                 loading="lazy"
                 decoding="async"
                 class="product-stagger-card__img absolute inset-0 z-[1] h-full w-full object-cover object-center transition-[opacity,filter,transform] duration-500 ease-out group-hover/card:brightness-[1.03] motion-reduce:transition-none"
-                onerror="const m=this.closest('.product-stagger-card__media'); if(m) m.classList.add('is-empty'); this.remove();"
+                onerror="const c=this.closest('.product-stagger-card'); if(c){c.classList.replace('has-image','no-image'); this.closest('.product-stagger-card__media')?.remove();}"
               />
-            ) : null}
-            <div class="product-stagger-card__placeholder" aria-hidden="true">
-              <i class="fa-solid fa-fish"></i>
-              <span>圖片準備中</span>
+              <div
+                class="product-stagger-card__media-overlay pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-[color-mix(in_srgb,var(--aq-primary-dark)_35%,transparent)] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none"
+                aria-hidden="true"
+              />
             </div>
-            <div
-              class="product-stagger-card__media-overlay pointer-events-none absolute inset-0 z-[2] bg-gradient-to-t from-[color-mix(in_srgb,var(--aq-primary-dark)_35%,transparent)] via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover/card:opacity-100 motion-reduce:transition-none"
-              aria-hidden="true"
-            />
-          </div>
-          <div class="flex flex-1 flex-col px-3 pb-3.5 pt-3 sm:px-4 sm:pb-4 sm:pt-3.5">
-            {!compact && product.categoryLabel ? (
-              <p class="mb-1 text-[0.6875rem] font-medium uppercase tracking-wider text-[color-mix(in_srgb,var(--aq-primary)_78%,var(--aq-muted))] sm:text-[0.75rem]">
-                {product.categoryLabel}
-              </p>
-            ) : null}
-            <h2 class="mb-3 line-clamp-2 text-[0.875rem] font-bold leading-snug tracking-tight text-[var(--aq-ink)] sm:text-[0.9375rem]">
+          ) : null}
+          <div class="product-stagger-card__body flex flex-col px-3 pb-3 pt-2.5 sm:px-4 sm:pb-3.5 sm:pt-3">
+            <h2 class:list={['product-stagger-card__name line-clamp-2 font-bold leading-snug tracking-tight text-[var(--aq-ink)]', nameSize(product.name)]}>
               {product.name}
             </h2>
             {compact && product.excerpt.trim() && product.excerpt.trim() !== product.name.trim() ? (
@@ -149,35 +146,69 @@ const { items, compact = false } = Astro.props as Props;
     height: 100%;
   }
 
-  .product-stagger-card__placeholder {
-    display: none;
+  /* 有圖卡佔兩格、無圖卡佔一格；dense 讓無圖卡補滿空位 */
+  .product-stagger-grid {
+    grid-auto-flow: dense;
+    grid-auto-rows: 112px;
   }
 
-  .product-stagger-card__media.is-empty .product-stagger-card__placeholder {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    color: color-mix(in srgb, var(--aq-primary) 55%, var(--aq-muted));
-    background:
-      radial-gradient(circle at 30% 25%, color-mix(in srgb, white 70%, transparent), transparent 55%),
-      linear-gradient(160deg, color-mix(in srgb, var(--aq-mist) 90%, white), color-mix(in srgb, var(--aq-primary) 14%, var(--aq-sand)));
+  .product-stagger-card.has-image {
+    grid-row: span 2;
   }
 
-  .product-stagger-card__placeholder i {
-    font-size: clamp(1.6rem, 6vw, 2.2rem);
-    opacity: 0.55;
+  /* 文字區固定高度，同一排的圖片才會等高、底部切齊 */
+  .product-stagger-card__body {
+    flex: none;
+    height: 100px;
   }
 
-  .product-stagger-card__placeholder span {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    opacity: 0.8;
+  @media (min-width: 640px) {
+    .product-stagger-card__body {
+      height: 110px;
+    }
+  }
+
+  .product-stagger-card.no-image .product-stagger-card__body {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  .product-stagger-card__name {
+    margin-bottom: 0.45rem;
+    font-size: 0.875rem;
+  }
+
+  .product-stagger-card__name.is-short {
+    font-size: 1.05rem;
+  }
+
+  .product-stagger-card__name.is-long {
+    font-size: 0.8125rem;
+  }
+
+  @media (min-width: 640px) {
+    .product-stagger-grid {
+      grid-auto-rows: 128px;
+    }
+
+    .product-stagger-card__name {
+      font-size: 0.9375rem;
+    }
+
+    .product-stagger-card__name.is-short {
+      font-size: 1.125rem;
+    }
+
+    .product-stagger-card__name.is-long {
+      font-size: 0.875rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .product-stagger-grid {
+      grid-auto-rows: 130px;
+    }
   }
 
   /**

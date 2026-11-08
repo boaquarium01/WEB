@@ -9,7 +9,8 @@ export const PRODUCT_PROJECTION = /* groq */ `
   "category": category->{
     _id,
     name,
-    "slug": slug.current
+    "slug": slug.current,
+    isLive
   },
   excerpt,
   body,

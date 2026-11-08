@@ -1,0 +1,77 @@
+---
+/**
+ * 大數字格輸入（末五碼、驗證碼共用）：一個真正的輸入框透明地疊在數字格上，
+ * 貼上、自動填入、刪除都維持原生行為。填滿時發出 digit:complete 事件。
+ */
+interface Props {
+	name: string;
+	id?: string;
+	length?: number;
+	value?: string;
+	label: string;
+	autocomplete?: string;
+}
+
+const { name, id, length = 5, value = '', label, autocomplete = 'off' } = Astro.props;
+---
+
+<div class="digit-field" data-digit-field data-length={length} style={`--digits:${length}`}>
+	<input
+		class="digit-field__input"
+		id={id}
+		type="text"
+		name={name}
+		inputmode="numeric"
+		pattern={`\\d{${length}}`}
+		maxlength={length}
+		minlength={length}
+		required
+		value={value}
+		autocomplete={autocomplete}
+		aria-label={label}
+	/>
+	<div class="digit-field__boxes" aria-hidden="true">
+		{Array.from({ length }, () => <span class="digit-field__box"></span>)}
+	</div>
+</div>
+
+<script>
+	document.querySelectorAll<HTMLElement>('[data-digit-field]').forEach((field) => {
+		const input = field.querySelector<HTMLInputElement>('input')!;
+		const boxes = Array.from(field.querySelectorAll<HTMLElement>('.digit-field__box'));
+		const length = Number(field.dataset.length) || boxes.length;
+		const render = () => {
+			const digits = input.value.replace(/\D/g, '').slice(0, length);
+			if (digits !== input.value) input.value = digits;
+			const focused = document.activeElement === input;
+			boxes.forEach((box, index) => {
+				box.textContent = digits[index] ?? '';
+				box.classList.toggle('is-filled', index < digits.length);
+				box.classList.toggle('is-active', focused && index === Math.min(digits.length, length - 1));
+			});
+			field.classList.toggle('is-complete', digits.length === length);
+			return digits;
+		};
+		input.addEventListener('input', () => {
+			if (render().length === length) field.dispatchEvent(new CustomEvent('digit:complete', { bubbles: true }));
+		});
+		input.addEventListener('focus', render);
+		input.addEventListener('blur', render);
+		input.form?.addEventListener('reset', () => window.setTimeout(render));
+		render();
+	});
+</script>
+
+<style>
+	.digit-field { position: relative; width: 100%; max-width: 340px; margin-top: .2rem; }
+	.digit-field__boxes { display: grid; grid-template-columns: repeat(var(--digits), minmax(0, 1fr)); gap: 8px; }
+	.digit-field__box { display: grid; place-items: center; height: 62px; border: 2px solid #dbe3df; border-radius: 12px; background: #f8faf9; color: var(--aq-ink); font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; transition: border-color .15s, background .15s, box-shadow .15s; }
+	.digit-field__box.is-filled { border-color: color-mix(in srgb, var(--aq-primary) 45%, #dbe3df); background: #fff; }
+	.digit-field__box.is-active { border-color: var(--aq-primary); background: #fff; box-shadow: 0 0 0 4px color-mix(in srgb, var(--aq-primary) 14%, transparent); }
+	.digit-field__box.is-active:empty::after { content: ''; width: 2px; height: 28px; background: var(--aq-primary); animation: digit-caret 1s steps(1) infinite; }
+	@keyframes digit-caret { 50% { opacity: 0; } }
+	@media (prefers-reduced-motion: reduce) { .digit-field__box.is-active:empty::after { animation: none; } }
+	.digit-field.is-complete .digit-field__box { border-color: var(--aq-primary); }
+	.digit-field .digit-field__input { position: absolute !important; inset: 0 !important; z-index: 1; width: 100% !important; height: 100% !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; background: transparent !important; box-shadow: none !important; color: transparent !important; caret-color: transparent; font-size: 16px !important; letter-spacing: 0; opacity: .01; cursor: text; }
+	@media (max-width: 360px) { .digit-field__boxes { gap: 5px; } .digit-field__box { height: 54px; font-size: 24px; } }
+</style>

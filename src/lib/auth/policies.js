@@ -31,3 +31,11 @@ export function passwordPolicyMessage(password) {
 	const missing = passwordProblems(password);
 	return missing.length ? `密碼需包含：${missing.join('、')}` : '';
 }
+/**
+ * 台灣手機號碼正規化：接受 0912-345-678、+886912345678 等寫法，回傳 09xxxxxxxx；不合法回傳空字串。
+ * @param {string|null|undefined} value
+ */
+export function normalizeTaiwanMobile(value) {
+	const digits = String(value ?? '').replace(/\D/g, '').replace(/^886(?=9)/, '0');
+	return /^09\d{8}$/.test(digits) ? digits : '';
+}

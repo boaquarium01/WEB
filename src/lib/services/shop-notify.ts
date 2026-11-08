@@ -16,7 +16,7 @@ const NOTIFY_TIMEOUT_MS = 4000;
 
 function readEnv(name: string): string {
 	const fromProcess = typeof process !== 'undefined' ? process.env?.[name] : undefined;
-	const fromMeta = (import.meta.env as Record<string, string | undefined>)[name];
+	const fromMeta = (import.meta.env as Record<string, string | undefined> | undefined)?.[name];
 	return String(fromProcess ?? fromMeta ?? '').trim();
 }
 

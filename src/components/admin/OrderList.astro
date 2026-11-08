@@ -1,0 +1,175 @@
+---
+/**
+ * 後台訂單列表（訂單管理、營運總覽共用）。
+ * 電腦：表格式欄位；手機：卡片。paginate 時手機一次顯示 10 筆，由頁面的腳本處理「顯示更多」。
+ */
+import { formatTwd } from '../../lib/services/catalog';
+import { orderStatusLabel, paymentStatusLabel } from '../../lib/services/order';
+import { shippingStatusLabel } from '../../lib/services/order-management';
+import type { listAdminOrders } from '../../lib/services/admin-orders';
+
+interface Props {
+	rows: Awaited<ReturnType<typeof listAdminOrders>>;
+	base: string;
+	paginate?: boolean;
+	/** 放在白色面板裡時用：手機版改成分隔線列表，不用一張張卡片 */
+	flush?: boolean;
+}
+
+const { rows, base, paginate = false, flush = false } = Astro.props;
+const formatOrderTime = (date: Date) => date.toLocaleString('zh-TW', {
+	timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+});
+/** 待核對付款或待出貨超過 3 天的訂單標紅提醒；回傳等待天數（未逾期為 0） */
+const OVERDUE_DAYS = 3;
+const overdueDays = (row: { status: string; createdAt: Date }) => {
+	if (!['PAYMENT_SUBMITTED', 'PAID', 'PROCESSING'].includes(row.status)) return 0;
+	const days = Math.floor((Date.now() - row.createdAt.getTime()) / 86_400_000);
+	return days >= OVERDUE_DAYS ? days : 0;
+};
+/** 左側色條：需要店家處理（橘）、待出貨（綠）、等顧客付款（黃） */
+const statusTone = (value: string) => value === 'PAYMENT_SUBMITTED' ? 'action' : ['PAID', 'PROCESSING'].includes(value) ? 'ship' : value === 'PENDING_PAYMENT' ? 'wait' : value === 'CANCELLED' ? 'cancel' : 'done';
+const relativeTime = (date: Date) => {
+	const minutes = Math.max(0, Math.round((Date.now() - date.getTime()) / 60_000));
+	if (minutes < 1) return '剛剛';
+	if (minutes < 60) return `${minutes} 分鐘前`;
+	const hours = Math.round(minutes / 60);
+	if (hours < 24) return `${hours} 小時前`;
+	return `${Math.round(hours / 24)} 天前`;
+};
+---
+
+<div class:list={['ol-list', { 'ol-list--flush': flush }]} role="list">
+	<div class="ol-row ol-row--head" aria-hidden="true"><span>訂單</span><span>顧客</span><span>商品</span><span>狀態</span><span class="ol-right">金額</span><span class="ol-right">處理</span></div>
+	{rows.map((row, index) => {
+		const href = `${base}/shop/orders/${encodeURIComponent(row.orderNumber)}`;
+		const late = overdueDays(row);
+		const first = row.items[0];
+		return (
+			<article role="listitem" data-order-row class:list={['ol-row', `tone--${statusTone(row.status)}`, { 'is-order-hidden': paginate && index >= 10, 'is-overdue': late > 0 }]}>
+				<a class="ol-row__link" href={href} aria-label={`查看訂單 ${row.orderNumber}`}></a>
+				<div class="ol-cell ol-order">
+					<span class="ol-order__no">{row.orderNumber}<span class="ol-order__name">{row.customerName ?? '—'}</span></span>
+					<time datetime={row.createdAt.toISOString()} title={row.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}>{formatOrderTime(row.createdAt)}<span class="ol-ago">・{relativeTime(row.createdAt)}</span></time>
+				</div>
+				<div class="ol-cell ol-customer">
+					<strong>{row.customerName ?? '—'}</strong>
+				</div>
+				<div class="ol-cell ol-items">
+					{first ? (
+						<>
+							<span class="ol-items__name">{first.productName}{first.skuName && first.skuName !== first.productName && <small>（{first.skuName}）</small>}</span>
+							<small class="ol-count">{row.itemLineCount} 項 · {row.itemCount} 件</small>
+						</>
+					) : <small>—</small>}
+				</div>
+				<div class="ol-cell ol-status">
+					<span class={`status-chip status--${row.status.toLowerCase()}`}>{orderStatusLabel(row.status)}</span>
+					{late > 0 && <span class="overdue-chip"><i class="fa-solid fa-clock" aria-hidden="true"></i>已等 {late} 天</span>}
+					<small class="ol-sub">{paymentStatusLabel(row.paymentStatus)} · {shippingStatusLabel(row.shippingStatus)}</small>
+				</div>
+				<div class="ol-cell ol-total">
+					<strong>{formatTwd(row.total)}</strong>
+				</div>
+				<div class="ol-cell ol-actions">
+					{row.status === 'PAYMENT_SUBMITTED' && <form method="post" action={href} data-confirm={`確認已收到訂單 ${row.orderNumber} 的款項？`}><input type="hidden" name="_action" value="confirm_payment" /><button class="row-action row-action--payment" type="submit"><i class="fa-solid fa-check" aria-hidden="true"></i>確認付款</button></form>}
+					{['PAID', 'PROCESSING'].includes(row.status) && <form method="post" action={href} data-confirm={`確認訂單 ${row.orderNumber} 已出貨？`}><input type="hidden" name="_action" value="mark_shipped" /><button class="row-action row-action--shipping" type="submit"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i>標記出貨</button></form>}
+					{row.status === 'SHIPPED' && <form method="post" action={href} data-confirm={`確認訂單 ${row.orderNumber} 已完成？`}><input type="hidden" name="_action" value="complete" /><button class="row-action row-action--complete" type="submit"><i class="fa-solid fa-flag-checkered" aria-hidden="true"></i>完成訂單</button></form>}
+					<i class="fa-solid fa-chevron-right ol-chevron" aria-hidden="true"></i>
+				</div>
+			</article>
+		);
+	})}
+	{paginate && <button class="load-more-orders" type="button" hidden>顯示更多訂單</button>}
+</div>
+
+<style is:global>
+	/* ── 訂單列表（電腦：表格式欄位；手機：卡片） ── */
+	.ol-list { overflow: hidden; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.ol-list .ol-row { position: relative; display: grid; grid-template-columns: 150px minmax(120px, 1fr) minmax(140px, 1.3fr) 150px 110px 150px; align-items: center; gap: 14px; padding: 13px 18px 13px 20px; border-top: 1px solid #eef2f1; transition: background-color .12s ease; }
+	.ol-list .ol-row::before { position: absolute; top: 0; bottom: 0; left: 0; width: 4px; background: var(--tone, transparent); content: ''; }
+	.ol-list .ol-row:hover:not(.ol-row--head) { background: #f8fbfa; }
+	.ol-list .ol-row--head { padding-top: 10px; padding-bottom: 10px; border-top: 0; background: #f6f8f7; color: #75878b; font-size: 12px; font-weight: 700; }
+	.ol-list .ol-row__link { position: absolute; inset: 0; z-index: 1; border-radius: inherit; }
+	.ol-list .ol-row__link:focus-visible { outline: 3px solid rgba(8, 126, 120, .35); outline-offset: -3px; }
+	.ol-list .ol-cell { display: grid; gap: 3px; min-width: 0; }
+	.ol-list .ol-cell small { display: block; color: var(--commerce-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	.ol-list .ol-right { text-align: right; }
+	.ol-list .ol-order__name { display: none; }
+	.ol-list .ol-order__no { color: var(--commerce-primary-dark); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; font-weight: 800; letter-spacing: .02em; }
+	.ol-list .ol-order time { color: #5d7074; font-size: 12px; font-variant-numeric: tabular-nums; }
+	.ol-list .ol-ago { color: #93a5a6; }
+	.ol-list .ol-customer strong { overflow: hidden; color: var(--commerce-ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+	.ol-list .ol-items__name { overflow: hidden; color: #34535a; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+	.ol-list .ol-items__name small { display: inline; font-weight: 500; }
+	.ol-list .ol-more { color: var(--commerce-primary); font-weight: 700; }
+	.ol-list .ol-status { justify-items: start; }
+	.ol-list .ol-sub { font-size: 11px !important; }
+	.ol-list .ol-total { justify-items: end; text-align: right; }
+	.ol-list .ol-total strong { color: var(--commerce-ink); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.ol-list .ol-actions { position: relative; z-index: 2; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+	.ol-list .ol-actions form { margin: 0; }
+	.ol-list .ol-chevron { color: #b3c2c2; font-size: 12px; pointer-events: none; }
+
+	/* 狀態色：左側色條 */
+	.ol-list .tone--action { --tone: #d9822b; }
+	.ol-list .tone--ship { --tone: var(--commerce-primary); }
+	.ol-list .tone--wait { --tone: #e0c27a; }
+	.ol-list .tone--done { --tone: transparent; }
+	.ol-list .tone--cancel { --tone: transparent; }
+	.ol-list .tone--cancel .ol-order__no, .ol-list .tone--cancel .ol-total strong { color: #9aa8a9; }
+	.ol-list .tone--cancel .ol-total strong { text-decoration: line-through; }
+	.ol-list .ol-row.is-overdue { --tone: #d64535; }
+
+	.ol-list .status-chip { display: inline-block; padding: 4px 10px; border: 1px solid #d8e9e3; border-radius: 999px; background: #edf5f2; color: #4b766f; font-size: 12px; font-weight: 750; white-space: nowrap; }
+	.ol-list .status-chip.status--pending_payment { border-color: #f2d7ab; background: #fff4e5; color: #8a5209; }
+	.ol-list .status-chip.status--payment_submitted { border-color: #f3cfa6; background: #fff1e2; color: #a2551a; }
+	.ol-list .status-chip.status--paid { border-color: #c7e4ed; background: #e8f5f9; color: #176176; }
+	.ol-list .status-chip.status--processing { border-color: #c7e4ed; background: #e8f5f9; color: #176176; }
+	.ol-list .status-chip.status--shipped { border-color: #d8d3fa; background: #efedff; color: #51488f; }
+	.ol-list .status-chip.status--completed { border-color: #bee2cb; background: #e4f4eb; color: #1e6840; }
+	.ol-list .status-chip.status--cancelled { border-color: #e5e9e8; background: #f4f6f5; color: #8a9897; }
+	.ol-list .overdue-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: #fdecea; color: #b4362a; font-size: 11px; font-weight: 800; white-space: nowrap; }
+
+	.ol-list .row-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border: 1px solid transparent; border-radius: 10px; color: #fff; font: inherit; font-size: 13px; font-weight: 750; white-space: nowrap; cursor: pointer; transition: filter .12s ease, transform .12s ease; }
+	.ol-list .row-action:hover { filter: brightness(1.06); }
+	.ol-list .row-action:active { transform: scale(.97); }
+	.ol-list .row-action--payment { background: #d9822b; }
+	.ol-list .row-action--shipping { background: var(--commerce-primary); }
+	.ol-list .row-action--complete { background: #21834b; }
+
+	.ol-list .load-more-orders { display: none; }
+	/* 平板：收掉商品欄 */
+	@media (max-width: 1180px) and (min-width: 701px) {
+		.ol-list .ol-row { grid-template-columns: 140px minmax(120px, 1fr) 140px 100px 140px; }
+		.ol-list .ol-items, .ol-list .ol-row--head span:nth-child(3) { display: none; }
+	}
+
+	/* 手機：卡片 */
+	@media (max-width: 700px) {
+		.ol-list { display: grid; gap: 10px; overflow: visible; border: 0; background: transparent; box-shadow: none; }
+		.ol-list .ol-row--head { display: none; }
+		.ol-list .ol-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "order status" "items items" "total actions"; gap: 10px 12px; padding: 14px 14px 12px 16px; overflow: hidden; border: 1px solid var(--commerce-line); border-radius: 14px; background: #fff; box-shadow: 0 6px 20px rgba(28, 67, 70, .05); }
+		.ol-list .ol-order { grid-area: order; }
+		/* 手機：顧客名稱併到訂單編號旁，卡片少一列 */
+		.ol-list .ol-customer { display: none; }
+		.ol-list .ol-order__no { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+		.ol-list .ol-order__name { display: block; overflow: hidden; color: var(--commerce-ink); font-family: inherit; font-size: 15px; font-weight: 800; letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+		.ol-list .ol-items { grid-area: items; display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 9px 10px; border-radius: 10px; background: #f6f8f7; }
+		.ol-list .ol-items small { flex: none; }
+		.ol-list .ol-status { grid-area: status; justify-items: end; align-self: start; }
+		.ol-list .ol-sub { display: none !important; }
+		.ol-list .ol-total { grid-area: total; justify-items: start; text-align: left; align-self: center; }
+		.ol-list .ol-total strong { font-size: 18px; }
+		.ol-list .ol-actions { grid-area: actions; align-self: center; }
+		.ol-list .ol-chevron { display: none; }
+		.ol-list .row-action { min-height: 40px; }
+		.ol-list .ol-row.is-order-hidden { display: none !important; }
+		.ol-list .load-more-orders { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: center; border: 1px solid var(--commerce-line); border-radius: 12px; background: #fff; color: var(--commerce-primary-dark); font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+		.ol-list .load-more-orders[hidden] { display: none; }
+		/* 面板內：連續列表，以分隔線區隔，避免卡片之間露出白縫 */
+		.ol-list.ol-list--flush { gap: 0; margin: 0; }
+		.ol-list.ol-list--flush .ol-row { border: 0; border-top: 1px solid #eef2f1; border-radius: 0; box-shadow: none; }
+		.ol-list.ol-list--flush .ol-row__link { border-radius: 0; }
+	}
+</style>

@@ -22,6 +22,7 @@ import {
 	paymentStatusLabel,
 } from '../../../../../lib/services/order';
 import { sendAuthEmail } from '../../../../../lib/email/adapter';
+import { orderShippedEmail } from '../../../../../lib/email/templates';
 import { isSyntheticProviderEmail } from '../../../../../lib/auth/policies.js';
 
 export const prerender = false;
@@ -33,14 +34,6 @@ if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
 const base = getAdminBasePath();
 const user = Astro.locals.user!;
 const orderNumber = String(Astro.params.orderNumber ?? '').trim();
-	const htmlEscapes: Record<string, string> = {
-	'&': '&amp;',
-	'<': '&lt;',
-	'>': '&gt;',
-	'"': '&quot;',
-	"'": '&#39;',
-};
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => htmlEscapes[character]);
 
 let error: string | null = null;
 let message: string | null = null;
@@ -82,51 +75,9 @@ if (Astro.request.method === 'POST') {
 			if (!shippedOrder.customerEmail || !shippedOrder.customerEmailVerified || isSyntheticProviderEmail(shippedOrder.customerEmail)) {
 				message = '已標記出貨並扣減庫存；顧客沒有可寄送的已驗證電子郵件，因此未寄出通知。';
 			} else {
-				const address = shippedOrder.shippingAddress;
 				const orderUrl = new URL(`/account/orders/${encodeURIComponent(shippedOrder.orderNumber)}`, Astro.url.origin).toString();
-				const itemLines = shippedOrder.items.map((item) => {
-					const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
-					return `• ${item.productName}${specification} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}`;
-				});
 				try {
-					const sent = await sendAuthEmail({
-						to: shippedOrder.customerEmail,
-						subject: `${address.recipientName}您好，水博館水族訂單已出貨｜${shippedOrder.orderNumber}`,
-						text: [
-							`${address.recipientName}您好：`,
-							'',
-							`感謝您的訂購！您的訂單 ${shippedOrder.orderNumber} 已標記出貨。`,
-							'商品已交由配送，請留意收件。',
-							...(address.shippingMethodName ? [`配送方式：${address.shippingMethodName}`] : []),
-							`收件人：${address.recipientName}`,
-							`收件地址：${address.postalCode} ${address.city}${address.district}${address.addressLine}`,
-							'',
-							'【訂單明細】',
-							...itemLines,
-							'',
-							`商品小計：${formatTwd(shippedOrder.subtotal)}`,
-							`運費：${formatTwd(shippedOrder.shippingFee)}`,
-							...(shippedOrder.discount > 0 ? [`折扣：-${formatTwd(shippedOrder.discount)}`] : []),
-							`應付總額：${formatTwd(shippedOrder.total)}`,
-							'',
-							`查看訂單：${orderUrl}`,
-							'',
-							'感謝您支持水博館水族，祝您順心！',
-						].join('\n'),
-						html: [
-							`<p>${escapeHtml(address.recipientName)}您好：</p>`,
-							`<p>感謝您的訂購！您的訂單 <strong>${escapeHtml(shippedOrder.orderNumber)}</strong> 已標記出貨。商品已交由配送，請留意收件。</p>`,
-							...(address.shippingMethodName ? [`<p>配送方式：${escapeHtml(address.shippingMethodName)}</p>`] : []),
-							`<p>收件人：${escapeHtml(address.recipientName)}<br>收件地址：${escapeHtml(`${address.postalCode} ${address.city}${address.district}${address.addressLine}`)}</p>`,
-							`<h3>訂單明細</h3><ul>${shippedOrder.items.map((item) => {
-								const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
-								return `<li>${escapeHtml(item.productName)}${escapeHtml(specification)} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}</li>`;
-							}).join('')}</ul>`,
-							`<p>商品小計：${formatTwd(shippedOrder.subtotal)}<br>運費：${formatTwd(shippedOrder.shippingFee)}${shippedOrder.discount > 0 ? `<br>折扣：-${formatTwd(shippedOrder.discount)}` : ''}<br><strong>應付總額：${formatTwd(shippedOrder.total)}</strong></p>`,
-							`<p><a href="${escapeHtml(orderUrl)}">查看訂單進度</a></p>`,
-							'<p>感謝您支持水博館水族，祝您順心！</p>',
-						].join('\n'),
-					});
+					const sent = await sendAuthEmail({ to: shippedOrder.customerEmail, ...orderShippedEmail(shippedOrder, orderUrl) });
 					message = sent
 						? '已標記出貨、扣減庫存，並寄出顧客出貨通知。'
 						: '已標記出貨並扣減庫存；郵件服務尚未設定，未寄出顧客通知。';
@@ -213,6 +164,18 @@ const currentProgressIndex = order.status === 'CANCELLED'
 				: order.status === 'PAYMENT_SUBMITTED'
 					? 1
 					: 0;
+/** 右側「下一步」卡：告訴夥伴這筆訂單現在要做什麼 */
+const nextStepTitles: Record<string, string> = {
+	PENDING_PAYMENT: '等待顧客轉帳',
+	PAYMENT_SUBMITTED: '核對轉帳款項',
+	PAID: '備貨並出貨',
+	PROCESSING: '備貨並出貨',
+	SHIPPED: '送達後完成訂單',
+	COMPLETED: '訂單已完成',
+	CANCELLED: '訂單已取消',
+};
+const nextStepTitle = nextStepTitles[order.status] ?? orderStatusLabel(order.status);
+const nextTone = order.status === 'PAYMENT_SUBMITTED' ? 'action' : ['PAID', 'PROCESSING'].includes(order.status) ? 'ship' : order.status === 'CANCELLED' ? 'muted' : order.status === 'COMPLETED' ? 'done' : 'wait';
 const cancellationEvent = order.statusHistory.find((event) => event.status === 'CANCELLED');
 
 const canConfirm =
@@ -235,141 +198,116 @@ const canCancel = [
 			<div class="customer-row"><p class="meta"><i class="fa-regular fa-user" aria-hidden="true"></i><strong>{order.customerName ?? '—'}</strong><span>{order.customerEmail ?? '—'}</span></p>{memberOrdersHref && <a class="member-orders-link" href={memberOrdersHref}><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i>查看此會員的訂單</a>}</div>
 			<p class="current-summary"><i class="fa-regular fa-calendar" aria-hidden="true"></i><span>下單時間　{formatDateTime(order.createdAt)}</span></p>
 		</div>
-		<div class:list={['actions-bar', { 'has-actions': canConfirm || canShip || canComplete || canCancel }]}>
-			{canConfirm && submissions[0] && <p class="actions-bar__info">末五碼 <strong class="mono">{submissions[0].bankLastFive}</strong>・應付 <strong>{formatTwd(order.total)}</strong></p>}
-			{canConfirm && <form method="post" data-confirm={`確認已收到 ${formatTwd(order.total)} 的款項？${submissions[0] ? `\n末五碼：${submissions[0].bankLastFive}` : ''}\n確認後訂單會進入備貨中。`}><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-payment">確認付款</button></form>}
-			{canShip && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已出貨？\n確認後會扣除庫存，並寄出貨通知信給顧客。`}><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-shipping">標記出貨</button></form>}
-			{canComplete && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已送達並完成？`}><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-complete">完成訂單</button></form>}
-			{canCancel && <form method="post" data-confirm={`確定取消訂單 ${order.orderNumber}？
-取消後會釋放預留庫存。`} data-confirm-danger><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
-		</div>
 	</header>
 
 	{message && <p class="banner ok">{message}</p>}
 	{error && <p class="banner error">{error}</p>}
 
-	<section class:list={['panel status-panel', { 'is-completed': order.status === 'COMPLETED' }]}>
-		<div class="section-heading section-heading--stack"><h2>訂單進度</h2>{order.status === 'COMPLETED'
-			? <strong class="completed-summary"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>訂單已完成</strong>
-			: <strong>目前：{currentStateSummary[order.status] ?? orderStatusLabel(order.status)}</strong>}</div>
-		{order.status === 'CANCELLED' ? (
-			<div class="cancelled-progress"><span class="timeline-dot"></span><strong>訂單已取消</strong>{cancellationEvent && <time>{formatDateTime(cancellationEvent.createdAt)}</time>}</div>
-		) : (
-			<ol class="order-progress">{progressSteps.map((step, index) => <li class:list={{ reached: step.reached, current: index === currentProgressIndex, passed: index < currentProgressIndex, pending: !step.reached && index !== currentProgressIndex }} aria-current={index === currentProgressIndex && !step.reached ? 'step' : undefined}><span class="progress-marker" aria-hidden="true">{step.reached ? <i class="fa-solid fa-check"></i> : index === currentProgressIndex ? <span class="progress-dot"></span> : null}</span><strong>{step.label}</strong><time>{step.event ? formatDateTime(step.event.createdAt) : index === currentProgressIndex ? '進行中' : '等待中'}</time></li>)}</ol>
-		)}
-	</section>
-
-	<div class="order-panels">
-	<section class="panel delivery-panel">
-		<div class="section-heading"><h2>收件資訊</h2><button class="copy-address" type="button" data-copy={copyAddress}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製資訊</button></div>
-		<div class="address-details"><strong>{addr.recipientName}</strong><span>{addr.phone}</span>{addr.shippingMethodName && <span>配送方式：{addr.shippingMethodName}</span>}<span>{addr.postalCode} {addr.city}{addr.district}{addr.addressLine}</span>{order.note && <span class="order-note"><b>備註</b><span>{order.note}</span></span>}</div>
-	</section>
-
-	<section class="panel payment-panel">
-		<div class="section-heading payment-heading"><h2>付款／末五碼</h2>{paymentHeadingStatus && <span class:list={['badge', { ok: payment?.status === 'PAID' }]}>{paymentHeadingStatus}</span>}</div>
-		{
-			payment ? (
-				<div class="payment-summary">
-					<p>{payment.method === 'BANK_TRANSFER' ? '銀行轉帳' : payment.method}<strong>{formatTwd(payment.amount)}</strong></p>
-					{payment.paidAt && <small class="muted" title={formatDateTime(payment.paidAt)}>核對 {compactPaymentTime(payment.paidAt)}</small>}
-				</div>
+	<div class="od-layout">
+		<div class="od-main">
+		<section class:list={['panel status-panel', { 'is-completed': order.status === 'COMPLETED' }]}>
+			<div class="section-heading section-heading--stack"><h2>訂單進度</h2>{order.status === 'COMPLETED'
+				? <strong class="completed-summary"><i class="fa-solid fa-circle-check" aria-hidden="true"></i>訂單已完成</strong>
+				: <strong>目前：{currentStateSummary[order.status] ?? orderStatusLabel(order.status)}</strong>}</div>
+			{order.status === 'CANCELLED' ? (
+				<div class="cancelled-progress"><span class="timeline-dot"></span><strong>訂單已取消</strong>{cancellationEvent && <time>{formatDateTime(cancellationEvent.createdAt)}</time>}</div>
 			) : (
-				<p class="muted">無付款紀錄</p>
-			)
-		}
-		{primarySubmission ? (
-			<div class="payment-reference">
-				<span>末五碼 <strong class="mono">{primarySubmission.bankLastFive}</strong></span>
-				{primarySubmission.amount !== payment?.amount && <span>回報金額 {formatTwd(primarySubmission.amount)}</span>}
-				{!payment?.paidAt && <time class="muted" datetime={primarySubmission.submittedAt.toISOString()} title={formatDateTime(primarySubmission.submittedAt)}>回報 {compactPaymentTime(primarySubmission.submittedAt)}</time>}
-			</div>
-		) : <p class="muted">顧客尚未回報末五碼</p>}
-		{previousSubmissions.length > 0 && <details class="payment-history">
-			<summary>其他回報紀錄（{previousSubmissions.length}）</summary>
-			<ul class="subs">{previousSubmissions.map((submission) => <li>
-				<span class="mono">{submission.bankLastFive}</span><span>{formatTwd(submission.amount)}</span>
-				<time class="muted" datetime={submission.submittedAt.toISOString()} title={formatDateTime(submission.submittedAt)}>{compactPaymentTime(submission.submittedAt)}</time>
-				<span class:list={['badge', { ok: Boolean(submission.verifiedAt) }]}>{submission.verifiedAt ? '已核對' : '待核對'}</span>
-			</li>)}</ul>
-		</details>}
-	</section>
-	</div>
+				<ol class="order-progress">{progressSteps.map((step, index) => <li class:list={{ reached: step.reached, current: index === currentProgressIndex, passed: index < currentProgressIndex, pending: !step.reached && index !== currentProgressIndex }} aria-current={index === currentProgressIndex && !step.reached ? 'step' : undefined}><span class="progress-marker" aria-hidden="true">{step.reached ? <i class="fa-solid fa-check"></i> : index === currentProgressIndex ? <span class="progress-dot"></span> : null}</span><strong>{step.label}</strong><time>{step.event ? formatDateTime(step.event.createdAt) : index === currentProgressIndex ? '進行中' : '等待中'}</time></li>)}</ol>
+			)}
+		</section>
 
-	<section class="panel item-panel">
-		<h2>商品明細 <span>{order.items.length} 項</span></h2>
-		<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
-		<ul class="lines order-lines">
-			{order.items.map((item) => <li>
-				<span class="order-product">
-					<span class="order-thumb" aria-hidden="true">{item.imageUrl ? <img src={orderThumbUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" /> : <i class="fa-solid fa-fish"></i>}</span>
-					<span class="order-product__text"><span class="order-product__name">{item.productName}</span>
-						{item.skuName?.trim() && item.skuName.trim() !== item.productName.trim() && <small>規格：{item.skuName}</small>}
-						{!item.skuName?.trim() && <small>規格：未記錄</small>}
+
+		<section class="panel item-panel">
+			<h2>商品明細 <span>{order.items.length} 項</span></h2>
+			<div class="order-items-header" aria-hidden="true"><span>商品</span><span>單價</span><span>數量</span><span>總計</span></div>
+			<ul class="lines order-lines">
+				{order.items.map((item) => <li>
+					<span class="order-product">
+						<span class="order-thumb" aria-hidden="true">{item.imageUrl ? <img src={orderThumbUrl(item.imageUrl)} alt="" loading="lazy" decoding="async" /> : <i class="fa-solid fa-fish"></i>}</span>
+						<span class="order-product__text"><span class="order-product__name">{item.productName}</span>
+							{item.skuName?.trim() && item.skuName.trim() !== item.productName.trim() && <small>規格：{item.skuName}</small>}
+							{!item.skuName?.trim() && <small>規格：未記錄</small>}
+						</span>
 					</span>
-				</span>
-				<span class="order-unit-price" aria-label="單價">{dollars(item.unitPrice)}</span>
-				<span class="order-quantity" aria-label="數量">{item.quantity}</span>
-				<span class="order-calc">{dollars(item.unitPrice)} × <b>{item.quantity}</b></span>
-				<strong class="order-line-total" aria-label="總計">{dollars(item.subtotal)}</strong>
-			</li>)}
-		</ul>
-		<dl class="totals">
-			<div>
-				<dt>小計</dt>
-				<dd>{dollars(order.subtotal)}</dd>
-			</div>
-			<div>
-				<dt>運費</dt>
-				<dd>{dollars(order.shippingFee)}</dd>
-			</div>
-			<div class="grand">
-				<dt>總計</dt>
-				<dd>{formatTwd(order.total)}</dd>
-			</div>
-		</dl>
-	</section>
-
-	<dialog id="confirm-sheet" class="confirm-sheet" aria-labelledby="confirm-sheet-message" tabindex="-1" autofocus>
-		<p id="confirm-sheet-message" class="confirm-sheet__message"></p>
-		<div class="confirm-sheet__actions">
-			<button type="button" class="confirm-sheet__cancel" data-confirm-cancel>返回</button>
-			<button type="button" class="confirm-sheet__ok" data-confirm-ok>確認</button>
+					<span class="order-unit-price" aria-label="單價">{dollars(item.unitPrice)}</span>
+					<span class="order-quantity" aria-label="數量">{item.quantity}</span>
+					<span class="order-calc">{dollars(item.unitPrice)} × <b>{item.quantity}</b></span>
+					<strong class="order-line-total" aria-label="總計">{dollars(item.subtotal)}</strong>
+				</li>)}
+			</ul>
+			<dl class="totals">
+				<div>
+					<dt>小計</dt>
+					<dd>{dollars(order.subtotal)}</dd>
+				</div>
+				<div>
+					<dt>運費</dt>
+					<dd>{dollars(order.shippingFee)}</dd>
+				</div>
+				<div class="grand">
+					<dt>總計</dt>
+					<dd>{formatTwd(order.total)}</dd>
+				</div>
+			</dl>
+		</section>
 		</div>
-	</dialog>
-</AdminLayout>
+		<aside class="od-side">
+		<section class={`panel next-panel next--${nextTone}`}>
+			<div class="next-panel__head">
+				<span class="next-panel__eyebrow">下一步</span>
+				<strong>{nextStepTitle}</strong>
+			</div>
+			<dl class="next-facts">
+				<div><dt>應付金額</dt><dd class="next-facts__amount">{formatTwd(order.total)}</dd></div>
+				{submissions[0] && <div><dt>轉帳末五碼</dt><dd class="mono next-facts__code">{submissions[0].bankLastFive}</dd></div>}
+			</dl>
+			<div class:list={['actions-bar', { 'has-actions': canConfirm || canShip || canComplete || canCancel }]}>
+				{canConfirm && submissions[0] && <p class="actions-bar__info">末五碼 <strong class="mono">{submissions[0].bankLastFive}</strong>・應付 <strong>{formatTwd(order.total)}</strong></p>}
+				{canConfirm && <form method="post" data-confirm={`確認已收到 ${formatTwd(order.total)} 的款項？${submissions[0] ? `\n末五碼：${submissions[0].bankLastFive}` : ''}\n確認後訂單會進入備貨中。`}><input type="hidden" name="_action" value="confirm_payment" />{submissions[0] && <input type="hidden" name="submissionId" value={submissions[0].id} />}<button type="submit" class="btn-payment">確認付款</button></form>}
+				{canShip && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已出貨？\n確認後會扣除庫存，並寄出貨通知信給顧客。`}><input type="hidden" name="_action" value="mark_shipped" /><button type="submit" class="btn-shipping">標記出貨</button></form>}
+				{canComplete && <form method="post" data-confirm={`確認訂單 ${order.orderNumber} 已送達並完成？`}><input type="hidden" name="_action" value="complete" /><button type="submit" class="btn-complete">完成訂單</button></form>}
+				{canCancel && <form method="post" data-confirm={`確定取消訂單 ${order.orderNumber}？
+	取消後會釋放預留庫存。`} data-confirm-danger><input type="hidden" name="_action" value="cancel" /><button type="submit" class="btn-danger">取消訂單</button></form>}
+			</div>
+		</section>
 
-<script>
-	/*
-	 * 操作確認改用頁面內建的彈窗：系統 confirm() 在部分 PWA／App 內建瀏覽器不會跳出，
-	 * 會直接當成「取消」，按鈕看起來就像沒反應。
-	 */
-	const sheet = document.getElementById('confirm-sheet') as HTMLDialogElement | null;
-	const sheetMessage = document.getElementById('confirm-sheet-message');
-	const sheetOk = sheet?.querySelector<HTMLButtonElement>('[data-confirm-ok]');
-	let pendingForm: HTMLFormElement | null = null;
-	for (const form of document.querySelectorAll<HTMLFormElement>('form[data-confirm]')) {
-		form.addEventListener('submit', (event) => {
-			if (form.dataset.confirmed === '1' || !sheet || typeof sheet.showModal !== 'function') return;
-			event.preventDefault();
-			pendingForm = form;
-			if (sheetMessage) sheetMessage.textContent = form.dataset.confirm ?? '確定執行？';
-			if (sheetOk) {
-				sheetOk.textContent = form.querySelector('button[type=submit]')?.textContent?.trim() || '確認';
-				sheetOk.classList.toggle('is-danger', form.hasAttribute('data-confirm-danger'));
+		<section class="panel delivery-panel">
+			<div class="section-heading"><h2>收件資訊</h2><button class="copy-address" type="button" data-copy={copyAddress}><i class="fa-regular fa-copy" aria-hidden="true"></i>複製資訊</button></div>
+			<div class="address-details"><strong>{addr.recipientName}</strong><a class="tel-link" href={`tel:${addr.phone.replace(/[^\d+]/g, '')}`}><i class="fa-solid fa-phone" aria-hidden="true"></i>{addr.phone}</a>{addr.shippingMethodName && <span>配送方式：{addr.shippingMethodName}</span>}<span>{addr.postalCode} {addr.city}{addr.district}{addr.addressLine}</span>{order.note && <span class="order-note"><b>備註</b><span>{order.note}</span></span>}</div>
+		</section>
+
+		<section class="panel payment-panel">
+			<div class="section-heading payment-heading"><h2>付款／末五碼</h2>{paymentHeadingStatus && <span class:list={['badge', { ok: payment?.status === 'PAID' }]}>{paymentHeadingStatus}</span>}</div>
+			{
+				payment ? (
+					<div class="payment-summary">
+						<p>{payment.method === 'BANK_TRANSFER' ? '銀行轉帳' : payment.method}<strong>{formatTwd(payment.amount)}</strong></p>
+						{payment.paidAt && <small class="muted" title={formatDateTime(payment.paidAt)}>核對 {compactPaymentTime(payment.paidAt)}</small>}
+					</div>
+				) : (
+					<p class="muted">無付款紀錄</p>
+				)
 			}
-			sheet.showModal();
-		});
-	}
-	sheet?.querySelector('[data-confirm-cancel]')?.addEventListener('click', () => sheet.close());
-	sheet?.addEventListener('click', (event) => { if (event.target === sheet) sheet.close(); });
-	sheetOk?.addEventListener('click', () => {
-		if (!pendingForm) return;
-		sheetOk.disabled = true;
-		sheetOk.textContent = '處理中…';
-		pendingForm.dataset.confirmed = '1';
-		pendingForm.requestSubmit();
-	});
-</script>
+			{primarySubmission ? (
+				<div class="payment-reference">
+					<span>末五碼 <strong class="mono">{primarySubmission.bankLastFive}</strong></span>
+					{primarySubmission.amount !== payment?.amount && <span>回報金額 {formatTwd(primarySubmission.amount)}</span>}
+					{!payment?.paidAt && <time class="muted" datetime={primarySubmission.submittedAt.toISOString()} title={formatDateTime(primarySubmission.submittedAt)}>回報 {compactPaymentTime(primarySubmission.submittedAt)}</time>}
+				</div>
+			) : <p class="muted">顧客尚未回報末五碼</p>}
+			{previousSubmissions.length > 0 && <details class="payment-history">
+				<summary>其他回報紀錄（{previousSubmissions.length}）</summary>
+				<ul class="subs">{previousSubmissions.map((submission) => <li>
+					<span class="mono">{submission.bankLastFive}</span><span>{formatTwd(submission.amount)}</span>
+					<time class="muted" datetime={submission.submittedAt.toISOString()} title={formatDateTime(submission.submittedAt)}>{compactPaymentTime(submission.submittedAt)}</time>
+					<span class:list={['badge', { ok: Boolean(submission.verifiedAt) }]}>{submission.verifiedAt ? '已核對' : '待核對'}</span>
+				</li>)}</ul>
+			</details>}
+		</section>
+
+		</aside>
+	</div>
+</AdminLayout>
 
 <script>
 	const copyButton = document.querySelector<HTMLButtonElement>('.copy-address');
@@ -679,19 +617,47 @@ const canCancel = [
 		.actions-bar.has-actions .btn-danger { border-color: var(--commerce-line); background: #fff; color: var(--commerce-muted); font-weight: 600; }
 		.actions-bar.has-actions .btn-danger:active { border-color: rgba(180, 35, 24, 0.45); color: var(--aq-danger); }
 	}
-	/* 操作確認彈窗：電腦置中、手機從底部升起 */
-	.confirm-sheet { width: min(420px, calc(100vw - 32px)); padding: 22px 20px 18px; border: 0; border-radius: 16px; background: #fff; color: var(--commerce-ink); box-shadow: 0 20px 50px rgba(20, 40, 40, 0.25); }
-	.confirm-sheet::backdrop { background: rgba(16, 30, 30, 0.45); }
-	.confirm-sheet:focus { outline: none; }
-	.confirm-sheet__actions button:focus-visible { outline: 3px solid rgba(21, 106, 102, 0.35); outline-offset: 2px; }
-	.confirm-sheet__message { margin: 0 0 18px; font-size: 16px; font-weight: 650; line-height: 1.6; white-space: pre-line; }
-	.confirm-sheet__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-	.confirm-sheet__actions button { min-height: 46px; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
-	.confirm-sheet__cancel { border: 1px solid var(--commerce-line); background: #fff; color: var(--commerce-muted); }
-	.confirm-sheet__ok { border: 1px solid var(--commerce-primary); background: var(--commerce-primary); color: #fff; }
-	.confirm-sheet__ok.is-danger { border-color: var(--aq-danger); background: var(--aq-danger); }
-	.confirm-sheet__ok:disabled { opacity: 0.7; cursor: wait; }
+/* ── 兩欄版面：左邊進度與商品，右邊下一步、收件、付款（電腦版固定在畫面上） ── */
+	.od-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+	.od-main, .od-side { display: grid; gap: 16px; min-width: 0; }
+	.od-main > .panel, .od-side > .panel { margin: 0 !important; }
+	.od-side { position: sticky; top: 16px; }
+	.next-panel { position: relative; overflow: hidden; padding-top: 18px !important; border-top: 4px solid var(--next-tone, var(--commerce-line)) !important; }
+	.next--action { --next-tone: #d9822b; }
+	.next--ship { --next-tone: var(--commerce-primary); }
+	.next--wait { --next-tone: #e0c27a; }
+	.next--done { --next-tone: #21834b; }
+	.next--muted { --next-tone: #c9d2d1; }
+	.next-panel__head { display: grid; gap: 2px; margin-bottom: 12px; }
+	.next-panel__eyebrow { color: var(--commerce-muted); font-size: 12px; font-weight: 700; letter-spacing: .08em; }
+	.next-panel__head strong { color: var(--commerce-ink); font-size: 20px; }
+	.next-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 0 0 14px; }
+	.next-facts div { padding: 10px 12px; border-radius: 10px; background: #f6f8f7; }
+	.next-facts dt { color: var(--commerce-muted); font-size: 12px; font-weight: 700; }
+	.next-facts dd { margin: 2px 0 0; color: var(--commerce-ink); font-weight: 800; font-variant-numeric: tabular-nums; }
+	.next-facts__amount { font-size: 18px; }
+	.next-facts__code { font-size: 20px; letter-spacing: .12em; }
+	.next-panel .actions-bar { display: grid; gap: 8px; margin: 0; }
+	.next-panel .actions-bar:not(.has-actions) { display: none; }
+	.next-panel .actions-bar form, .next-panel .actions-bar button { width: 100%; }
+	.next-panel .actions-bar button { min-height: 46px; font-size: 15px; }
+	.next-panel .actions-bar form:has(.btn-danger) { order: 9; }
+	.next-panel .actions-bar .btn-danger { min-height: 40px; border-color: transparent; background: transparent; color: var(--commerce-muted); font-size: 13px; font-weight: 600; }
+	.next-panel .actions-bar .btn-danger:hover { color: var(--aq-danger); background: #fff3f1; }
+	.tel-link { display: inline-flex; align-items: center; gap: 6px; width: fit-content; color: var(--commerce-primary-dark); font-weight: 700; text-decoration: none; }
+	.tel-link i { font-size: 12px; }
+	@media (max-width: 1100px) {
+		.od-layout { grid-template-columns: 1fr; }
+		.od-side { position: static; order: -1; }
+		.od-main { order: 1; }
+		.od-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.od-side .next-panel { grid-column: 1 / -1; }
+	}
 	@media (max-width: 720px) {
-		.confirm-sheet { width: 100%; max-width: none; margin: auto 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); border-radius: 18px 18px 0 0; }
+		.od-side { grid-template-columns: 1fr; gap: 12px; }
+		.od-main { gap: 12px; }
+		.od-layout { gap: 12px; }
+		.next-panel .actions-bar.has-actions { display: flex; }
+		.next-panel .actions-bar .btn-danger { min-height: 46px; border-color: var(--commerce-line); background: #fff; }
 	}
 </style>

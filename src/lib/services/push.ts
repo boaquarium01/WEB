@@ -2,10 +2,10 @@
  * 網頁推播（顧客端）：訂閱管理與發送。
  *
  * 環境變數（未設定時整個功能自動略過，不影響下單與後台操作）：
- * - VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY  推播金鑰（npx web-push generate-vapid-keys）
+ * - VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY  推播金鑰（base64url 格式）
  * - VAPID_SUBJECT                         聯絡方式，例如 mailto:you@example.com
  */
-import webpush from 'web-push';
+import { buildPushHTTPRequest } from '@pushforge/builder';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '../db/client';
 import { pushSubscriptions } from '../db/schema';
@@ -24,13 +24,16 @@ export function isPushConfigured(): boolean {
 	return Boolean(readEnv('VAPID_PUBLIC_KEY') && readEnv('VAPID_PRIVATE_KEY'));
 }
 
-let vapidReady = false;
-function ensureVapid(): boolean {
-	if (vapidReady) return true;
-	if (!isPushConfigured()) return false;
-	webpush.setVapidDetails(readEnv('VAPID_SUBJECT') || 'mailto:noreply@example.com', readEnv('VAPID_PUBLIC_KEY'), readEnv('VAPID_PRIVATE_KEY'));
-	vapidReady = true;
-	return true;
+/** 把 base64url 金鑰組成 Web Crypto 使用的 JWK（公鑰是 0x04 + X + Y，各 32 bytes） */
+function vapidJwk(): JsonWebKey {
+	const publicKey = Buffer.from(readEnv('VAPID_PUBLIC_KEY'), 'base64url');
+	return {
+		kty: 'EC',
+		crv: 'P-256',
+		x: publicKey.subarray(1, 33).toString('base64url'),
+		y: publicKey.subarray(33, 65).toString('base64url'),
+		d: readEnv('VAPID_PRIVATE_KEY'),
+	};
 }
 
 export type BrowserSubscription = { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -58,7 +61,7 @@ export type PushMessage = { title: string; body: string; url: string; tag?: stri
  * 裝置已取消授權（404／410）時自動刪除該筆訂閱。
  */
 export async function sendOrderPush(userId: string, message: PushMessage): Promise<number> {
-	if (!ensureVapid()) return 0;
+	if (!isPushConfigured()) return 0;
 	try {
 		const db = getDb();
 		const rows = await db
@@ -66,17 +69,24 @@ export async function sendOrderPush(userId: string, message: PushMessage): Promi
 			.from(pushSubscriptions)
 			.where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.wantsOrder, true)));
 		if (!rows.length) return 0;
-		const payload = JSON.stringify({ ...message, icon: '/web-app-manifest-192x192.png', badge: '/favicon-96x96.png' });
+		const payload = { ...message, icon: '/web-app-manifest-192x192.png', badge: '/favicon-96x96.png' };
+		const privateJWK = vapidJwk();
+		const adminContact = (readEnv('VAPID_SUBJECT') || 'mailto:noreply@example.com') as `mailto:${string}`;
 		const gone: string[] = [];
 		let sent = 0;
 		await Promise.all(rows.map(async (row) => {
 			try {
-				await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth } }, payload, { TTL: 60 * 60 * 24, timeout: 5000 });
-				sent += 1;
+				const { endpoint, headers, body } = await buildPushHTTPRequest({
+					privateJWK,
+					subscription: { endpoint: row.endpoint as `https://${string}`, keys: { p256dh: row.p256dh, auth: row.auth } },
+					message: { payload, adminContact, options: { ttl: 60 * 60 * 23 } },
+				});
+				const response = await fetch(endpoint, { method: 'POST', headers, body, signal: AbortSignal.timeout(5000) });
+				if (response.ok) sent += 1;
+				else if (response.status === 404 || response.status === 410) gone.push(row.id);
+				else console.error('[push] 發送失敗：', response.status);
 			} catch (error) {
-				const status = (error as { statusCode?: number }).statusCode;
-				if (status === 404 || status === 410) gone.push(row.id);
-				else console.error('[push] 發送失敗：', status ?? error);
+				console.error('[push] 發送失敗：', error);
 			}
 		}));
 		if (gone.length) await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.id, gone));

@@ -9,6 +9,7 @@ import { getShippingFee, listShippingMethods } from '../../lib/services/shipping
 import { getOrderForUser } from '../../lib/services/order';
 import { getBankTransferInfo } from '../../lib/services/payment';
 import { sendAuthEmail } from '../../lib/email/adapter';
+import { orderCreatedEmail } from '../../lib/email/templates';
 import { notifyShopEvent } from '../../lib/services/shop-notify';
 import { isSyntheticProviderEmail } from '../../lib/auth/policies.js';
 
@@ -16,14 +17,6 @@ export const prerender = false;
 
 const user = Astro.locals.user!;
 
-const htmlEscapes: Record<string, string> = {
-	'&': '&amp;',
-	'<': '&lt;',
-	'>': '&gt;',
-	'"': '&quot;',
-	"'": '&#39;',
-};
-const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => htmlEscapes[character]);
 let error: string | null = null;
 let submittedShippingMethodId = '';
 let selectedCartItemIds: string[] | undefined;
@@ -39,82 +32,29 @@ if (Astro.request.method === 'POST') {
 			note: String(form.get('note') ?? ''),
 			...(selectedCartItemIds ? { cartItemIds: selectedCartItemIds } : {}),
 		});
-		if (user.emailVerified && !isSyntheticProviderEmail(user.email)) {
-			try {
-				const order = await getOrderForUser(user.id, result.orderNumber);
-				if (!order) throw new Error('Created order could not be loaded for its confirmation email');
-				const bank = getBankTransferInfo();
-				const orderUrl = new URL(
-					`/account/orders/${encodeURIComponent(order.orderNumber)}`,
-					Astro.url.origin,
-				).toString();
-				const itemLines = order.items.map((item) => {
-					const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
-					return `• ${item.productName}${specification} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}`;
-				});
-				const htmlItemLines = order.items.map((item) => {
-					const specification = item.skuName && item.skuName !== item.productName ? `（${item.skuName}）` : '';
-					return `<li>${escapeHtml(item.productName)}${escapeHtml(specification)} × ${item.quantity}｜單價 ${formatTwd(item.unitPrice)}｜小計 ${formatTwd(item.subtotal)}</li>`;
-				}).join('');
-				const address = order.shippingAddress;
-				const reportUrlLink = `<a href="${escapeHtml(orderUrl)}">前往訂單頁回報轉帳末五碼</a>`;
-				const sent = await sendAuthEmail({
-					to: user.email,
-					subject: `${address.recipientName}您好，水博館水族訂單已建立｜${order.orderNumber}`,
-					text: [
-						`${address.recipientName}您好，水博館水族訂單已建立`,
-						'',
-						`訂單編號：${order.orderNumber}`,
-						'目前狀態：待付款',
-						`應付總額：${formatTwd(order.total)}`,
-						`建立時間：${order.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`,
-						'',
-						'【銀行轉帳提醒】',
-						`銀行：${bank.bankName}`,
-						`戶名：${bank.accountName}`,
-						`帳號：${bank.accountNumber}`,
-						`應付總額：${formatTwd(order.total)}`,
-						`轉帳備註請填訂單編號「${order.orderNumber}」，方便我們核對。`,
-						'',
-						`完成轉帳後，請前往訂單頁回報轉出帳號末五碼：${orderUrl}`,
-						'完成回報後請等候門市核帳，核帳後會更新訂單狀態，無須重複下單。',
-						'',
-						'【收件資訊】',
-						address.recipientName,
-						`${address.postalCode} ${address.city}${address.district}${address.addressLine}`,
-						`電話：${address.phone}`,
-						`配送方式：${address.shippingMethodName ?? '依訂單頁面顯示'}`,
-						'',
-						'【訂單明細】',
-						...itemLines,
-						'',
-						`商品小計：${formatTwd(order.subtotal)}`,
-						`運費：${formatTwd(order.shippingFee)}`,
-						...(order.discount > 0 ? [`折扣：-${formatTwd(order.discount)}`] : []),
-						`應付總額：${formatTwd(order.total)}`,
-						'',
-						'如對訂單或轉帳有疑問，請洽水博館水族 03-402-8721。',
-					].join('\n'),
-					html: [
-						`<p>${escapeHtml(address.recipientName)}您好，水博館水族訂單已建立</p>`,
-						`<p>訂單編號：<strong>${escapeHtml(order.orderNumber)}</strong><br>目前狀態：待付款<br>應付總額：<strong>${formatTwd(order.total)}</strong><br>建立時間：${escapeHtml(order.createdAt.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }))}</p>`,
-						'<h3>銀行轉帳提醒</h3>',
-						`<p>銀行：${escapeHtml(bank.bankName)}<br>戶名：${escapeHtml(bank.accountName)}<br>帳號：${escapeHtml(bank.accountNumber)}<br>應付總額：<strong>${formatTwd(order.total)}</strong><br>轉帳備註請填訂單編號「${escapeHtml(order.orderNumber)}」，方便我們核對。</p>`,
-						`<p>完成轉帳後，請${reportUrlLink}，填寫轉出帳號末五碼。完成回報後請等候門市核帳，核帳後會更新訂單狀態，無須重複下單。</p>`,
-						'<h3>收件資訊</h3>',
-						`<p>${escapeHtml(address.recipientName)}<br>${escapeHtml(`${address.postalCode} ${address.city}${address.district}${address.addressLine}`)}<br>電話：${escapeHtml(address.phone)}<br>配送方式：${escapeHtml(address.shippingMethodName ?? '依訂單頁面顯示')}</p>`,
-						'<h3>訂單明細</h3>',
-						`<ul>${htmlItemLines}</ul>`,
-						`<p>商品小計：${formatTwd(order.subtotal)}<br>運費：${formatTwd(order.shippingFee)}${order.discount > 0 ? `<br>折扣：-${formatTwd(order.discount)}` : ''}<br><strong>應付總額：${formatTwd(order.total)}</strong></p>`,
-						'<p>如對訂單或轉帳有疑問，請洽水博館水族 03-402-8721。</p>',
-					].join('\n'),
-				});
-				if (!sent) console.warn(`Order confirmation email is not configured for order ${order.orderNumber}`);
-			} catch (emailError) {
-				console.error(`Failed to send order confirmation email for order ${result.orderNumber}:`, emailError);
+		// 訂單已成立：確認信與店家通知改在背景寄出，顧客不用等寄信就能看到訂單
+		const afterOrder = async () => {
+			if (user.emailVerified && !isSyntheticProviderEmail(user.email)) {
+				try {
+					const order = await getOrderForUser(user.id, result.orderNumber);
+					if (!order) throw new Error('Created order could not be loaded for its confirmation email');
+					const bank = await getBankTransferInfo();
+					const orderUrl = new URL(
+						`/account/orders/${encodeURIComponent(order.orderNumber)}`,
+						Astro.url.origin,
+					).toString();
+					const sent = await sendAuthEmail({ to: user.email, ...orderCreatedEmail(order, bank, orderUrl) });
+					if (!sent) console.warn(`Order confirmation email is not configured for order ${order.orderNumber}`);
+				} catch (emailError) {
+					console.error(`Failed to send order confirmation email for order ${result.orderNumber}:`, emailError);
+				}
 			}
-		}
-		await notifyShopEvent('SHOP_NEW_ORDER', user.id, result.orderNumber, Astro.url.origin);
+			await notifyShopEvent('SHOP_NEW_ORDER', user.id, result.orderNumber, Astro.url.origin).catch((notifyError) => console.error('[checkout] notify failed', notifyError));
+		};
+		const background = afterOrder();
+		const cfContext = (Astro.locals as { cfContext?: { waitUntil(promise: Promise<unknown>): void } }).cfContext;
+		if (cfContext?.waitUntil) cfContext.waitUntil(background);
+		else void background;
 		return Astro.redirect(
 			`/account/orders/${encodeURIComponent(result.orderNumber)}`,
 		);
@@ -377,8 +317,17 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		confirmButton.setAttribute('aria-busy', 'true');
 		confirmButton.innerHTML = '<span class="checkout-spinner" aria-hidden="true"></span>建立訂單中…';
 		submittingOverlay ??= Object.assign(document.createElement('div'), { className: 'checkout-submitting', role: 'status' });
-		submittingOverlay.innerHTML = '<div class="checkout-submitting__card"><span class="checkout-spinner checkout-spinner--lg" aria-hidden="true"></span><strong>正在建立訂單</strong><span>請稍候，不要關閉或重新整理頁面</span></div>';
+		// 等待時顯示步驟進度與小魚動畫，而不是只有轉圈圈
+		submittingOverlay.innerHTML = '<div class="checkout-submitting__card"><div class="checkout-fishbowl" aria-hidden="true"><i class="fa-solid fa-fish"></i><span></span><span></span><span></span></div><strong data-step-title>正在建立訂單</strong><ol class="checkout-steps"><li class="is-active">確認商品與庫存</li><li>保留您的商品</li><li>建立訂單編號</li><li>準備付款資訊</li></ol><div class="checkout-progress"><span></span></div><small>請不要關閉或重新整理頁面</small></div>';
 		document.body.append(submittingOverlay);
+		const steps = Array.from(submittingOverlay.querySelectorAll('.checkout-steps li'));
+		let stepIndex = 0;
+		const stepTimer = window.setInterval(() => {
+			if (stepIndex >= steps.length - 1) { window.clearInterval(stepTimer); return; }
+			steps[stepIndex]?.classList.replace('is-active', 'is-done');
+			stepIndex += 1;
+			steps[stepIndex]?.classList.add('is-active');
+		}, 900);
 	};
 	// 從下一頁按「上一頁」回來時（瀏覽器快取），還原按鈕
 	window.addEventListener('pageshow', (event) => {
@@ -659,5 +608,26 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	:global(.checkout-submitting__card strong) { margin-top: 4px; color: var(--aq-ink); font-size: 16px; }
 	:global(.checkout-submitting__card span:last-child) { color: var(--aq-muted); font-size: 13px; }
 	@keyframes checkout-spin { to { transform: rotate(360deg); } }
-	@media (prefers-reduced-motion: reduce) { :global(.checkout-spinner) { animation-duration: 2s; } }
+	:global(.checkout-submitting__card) { min-width: min(300px, 84vw); }
+	/* 小魚在水裡游＋氣泡 */
+	:global(.checkout-fishbowl) { position: relative; width: 72px; height: 52px; overflow: hidden; border-radius: 16px; background: linear-gradient(180deg, #e7f4f2, #cfe9e5); }
+	:global(.checkout-fishbowl i) { position: absolute; top: 16px; left: 6px; color: var(--aq-primary); font-size: 20px; animation: checkout-swim 2.4s ease-in-out infinite; }
+	:global(.checkout-fishbowl span) { position: absolute; bottom: -8px; width: 6px; height: 6px; border: 1.5px solid rgba(21, 106, 102, 0.45); border-radius: 50%; animation: checkout-bubble 2.2s ease-in infinite; }
+	:global(.checkout-fishbowl span:nth-of-type(1)) { left: 18px; }
+	:global(.checkout-fishbowl span:nth-of-type(2)) { left: 38px; animation-delay: .7s; }
+	:global(.checkout-fishbowl span:nth-of-type(3)) { left: 54px; animation-delay: 1.4s; }
+	@keyframes checkout-swim { 0% { transform: translateX(0) scaleX(1); } 48% { transform: translateX(40px) scaleX(1); } 50% { transform: translateX(40px) scaleX(-1); } 98% { transform: translateX(0) scaleX(-1); } 100% { transform: translateX(0) scaleX(1); } }
+	@keyframes checkout-bubble { from { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-62px); opacity: 0; } }
+	:global(.checkout-steps) { display: grid; gap: 6px; margin: 4px 0 2px; padding: 0; list-style: none; text-align: left; }
+	:global(.checkout-steps li) { display: flex; align-items: center; gap: 8px; color: #a3b0ad; font-size: 13px; transition: color .2s ease; }
+	:global(.checkout-steps li::before) { display: grid; place-items: center; width: 18px; height: 18px; flex: none; border: 1.5px solid currentColor; border-radius: 50%; font-size: 10px; content: ''; }
+	:global(.checkout-steps li.is-active) { color: var(--aq-ink); font-weight: 700; }
+	:global(.checkout-steps li.is-active::before) { border-color: var(--aq-primary); border-top-color: transparent; animation: checkout-spin .8s linear infinite; }
+	:global(.checkout-steps li.is-done) { color: var(--aq-primary); }
+	:global(.checkout-steps li.is-done::before) { border-color: var(--aq-primary); background: var(--aq-primary); color: #fff; content: '✓'; }
+	:global(.checkout-progress) { width: 100%; height: 4px; overflow: hidden; border-radius: 999px; background: #e7eeec; }
+	:global(.checkout-progress span) { display: block; width: 40%; height: 100%; border-radius: inherit; background: var(--aq-primary); animation: checkout-progress 1.4s ease-in-out infinite; }
+	@keyframes checkout-progress { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+	:global(.checkout-submitting__card small) { color: var(--aq-muted); font-size: 12px; }
+	@media (prefers-reduced-motion: reduce) { :global(.checkout-spinner) { animation-duration: 2s; } :global(.checkout-fishbowl i), :global(.checkout-fishbowl span), :global(.checkout-progress span) { animation: none; } }
 </style>
