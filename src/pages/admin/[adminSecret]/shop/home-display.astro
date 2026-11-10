@@ -8,6 +8,7 @@ import { isValidAdminSecretParam } from '../../../../lib/admin/path';
 import { getSanityClient } from '../../../../lib/sanity/client';
 import { PROMO_TABS } from '../../../../lib/promoTabs';
 import { getAnnouncementBar, MAX_ANNOUNCEMENTS } from '../../../../lib/services/announcement';
+import { getHeroSlides, heroImageUrl, MAX_HERO_SLIDES } from '../../../../lib/services/hero-slides';
 
 export const prerender = false;
 
@@ -85,6 +86,7 @@ const promoRows = PROMO_TABS.map((tab) => {
 	return { ...tab, exists: Boolean(doc), enabled: doc ? doc.enabled !== false : false };
 });
 const announcement = await getAnnouncementBar();
+const heroSlides = await getHeroSlides();
 const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=format` : null);
 ---
 
@@ -96,10 +98,18 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 		<a class="preview-link" href="/" target="_blank" rel="noopener">查看首頁 <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a>
 	</header>
 
+	<nav class="display-nav" aria-label="首頁陳列區塊">
+		<a href="#announce-section"><i class="fa-solid fa-bullhorn" aria-hidden="true"></i>公告條</a>
+		<a href="#hero-section"><i class="fa-regular fa-images" aria-hidden="true"></i>主圖輪播</a>
+		<a href="#promo-section"><i class="fa-solid fa-tags" aria-hidden="true"></i>促銷分頁</a>
+		<a href="#spotlight-section"><i class="fa-solid fa-star" aria-hidden="true"></i>主打商品</a>
+		<a href="#featured-section"><i class="fa-solid fa-fire" aria-hidden="true"></i>熱銷推薦</a>
+	</nav>
+
 	{loadError && <p class="display-notice is-error" role="alert">{loadError}</p>}
 	<p class="display-notice" data-status role="status" hidden></p>
 
-	<section class="display-card" aria-labelledby="announce-heading" data-announce-editor data-max={MAX_ANNOUNCEMENTS}>
+	<section id="announce-section" class="display-card" aria-labelledby="announce-heading" data-announce-editor data-max={MAX_ANNOUNCEMENTS}>
 		<header class="display-card__head">
 			<div>
 				<h2 id="announce-heading">頂部公告條</h2>
@@ -138,7 +148,45 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 		</div>
 	</section>
 
-	<section class="display-card" aria-labelledby="promo-tabs-heading">
+	<section id="hero-section" class="display-card" aria-labelledby="hero-heading" data-hero-editor data-max={MAX_HERO_SLIDES}>
+		<header class="display-card__head">
+			<div>
+				<h2 id="hero-heading">主圖輪播</h2>
+				<p>首頁最上方的大圖。建議橫式 1920×1080 以上，主體放中間（手機會裁切左右）。上傳時會自動壓縮。儲存後約 15 秒內生效。</p>
+			</div>
+			<span class="count-pill" data-hero-count></span>
+		</header>
+		<ol class="hero-list" data-hero-list>
+			{heroSlides.map((slide) => (
+				<li class="hero-row" data-slide-id={slide.id} data-image={slide.image}>
+					<div class="hero-row__media">
+						<img src={heroImageUrl(slide.image, 640)} alt="" loading="lazy" data-hero-preview />
+						<span class="hero-row__badge" data-hero-order></span>
+						<label class="hero-row__upload"><input type="file" accept="image/jpeg,image/png,image/webp" data-hero-file hidden /><i class="fa-solid fa-camera" aria-hidden="true"></i><span>更換圖片</span></label>
+					</div>
+					<div class="hero-row__fields">
+						<label class="announce-field"><span>標題 <em data-count-of="40"></em></span><input data-field="title" maxlength="40" value={slide.title} placeholder="例如：水博館水族｜淡水魚水族販售" /></label>
+						<label class="announce-field"><span>副標（選填） <em data-count-of="80"></em></span><input data-field="subtitle" maxlength="80" value={slide.subtitle} placeholder="一句話介紹" /></label>
+						<label class="announce-field"><span>「了解更多」連結（選填）</span><input data-field="href" maxlength="200" value={slide.href} placeholder="/promo/weekly-new" /></label>
+					</div>
+					<div class="hero-row__side">
+						<label class="switch" title="在首頁顯示"><input type="checkbox" role="switch" data-field="enabled" checked={slide.enabled} aria-label="在首頁顯示這張" /><span class="switch__track" aria-hidden="true"></span></label>
+						<div class="announce-row__tools">
+							<button type="button" data-move="-1" aria-label="往前移"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+							<button type="button" data-move="1" aria-label="往後移"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button>
+							<button type="button" data-remove aria-label="刪除這張" class="is-danger"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+						</div>
+					</div>
+				</li>
+			))}
+		</ol>
+		<div class="announce-actions">
+			<label class="announce-add" data-hero-add><input type="file" accept="image/jpeg,image/png,image/webp" data-hero-new hidden /><i class="fa-solid fa-plus" aria-hidden="true"></i>新增輪播圖</label>
+			<button type="button" class="announce-save" data-hero-save><i class="fa-solid fa-check" aria-hidden="true"></i>儲存輪播圖</button>
+		</div>
+	</section>
+
+	<section id="promo-section" class="display-card" aria-labelledby="promo-tabs-heading">
 		<header class="display-card__head">
 			<div>
 				<h2 id="promo-tabs-heading">促銷分頁</h2>
@@ -162,7 +210,7 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 		</ul>
 	</section>
 
-	<section class="display-card" aria-labelledby="spotlight-heading">
+	<section id="spotlight-section" class="display-card" aria-labelledby="spotlight-heading">
 		<header class="display-card__head">
 			<div>
 				<h2 id="spotlight-heading">主打商品</h2>
@@ -197,7 +245,7 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 		</div>
 	</section>
 
-	<section class="display-card" aria-labelledby="featured-heading">
+	<section id="featured-section" class="display-card" aria-labelledby="featured-heading">
 		<header class="display-card__head">
 			<div>
 				<h2 id="featured-heading">熱銷推薦</h2>
@@ -248,6 +296,7 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 
 <script>
 	import { askConfirm } from '../../../../scripts/confirmSheet';
+	import { compressImage } from '../../../../scripts/compressImage';
 
 	type Candidate = { id: string; name: string; categoryLabel: string | null };
 	const HOME_LIMIT = 8;
@@ -256,6 +305,117 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	const dirtyHint = document.querySelector<HTMLElement>('[data-dirty-hint]');
 	const statusBox = document.querySelector<HTMLElement>('[data-status]');
 	let dirty = false;
+
+	// 主圖輪播：換圖會先壓縮再上傳，編輯完按「儲存輪播圖」
+	const heroEditor = document.querySelector<HTMLElement>('[data-hero-editor]');
+	if (heroEditor) {
+		const heroList = heroEditor.querySelector<HTMLOListElement>('[data-hero-list]')!;
+		const heroMax = Number(heroEditor.dataset.max || 8);
+		const heroCount = heroEditor.querySelector<HTMLElement>('[data-hero-count]');
+		const addLabel = heroEditor.querySelector<HTMLElement>('[data-hero-add]')!;
+		const heroTemplate = heroList.querySelector<HTMLLIElement>('.hero-row')?.cloneNode(true) as HTMLLIElement | undefined;
+		const preview = (src: string) => (src.startsWith('https://cdn.sanity.io/') ? `${src}?w=640&auto=format` : src);
+		const refreshHero = () => {
+			const rows = Array.from(heroList.children) as HTMLElement[];
+			let shown = 0;
+			rows.forEach((row, i) => {
+				const on = row.querySelector<HTMLInputElement>('[data-field="enabled"]')?.checked;
+				if (on) shown += 1;
+				row.classList.toggle('is-off', !on);
+				const order = row.querySelector<HTMLElement>('[data-hero-order]');
+				if (order) order.textContent = on ? `第 ${shown} 張` : '已隱藏';
+				row.querySelectorAll<HTMLElement>('[data-count-of]').forEach((em) => {
+					const input = em.closest('label')?.querySelector('input');
+					if (input) em.textContent = `${Array.from(input.value).length}/${em.dataset.countOf}`;
+				});
+				(row.querySelector('[data-move="-1"]') as HTMLButtonElement).disabled = i === 0;
+				(row.querySelector('[data-move="1"]') as HTMLButtonElement).disabled = i === rows.length - 1;
+			});
+			if (heroCount) heroCount.textContent = `${shown} 張顯示中`;
+			addLabel.classList.toggle('is-disabled', rows.length >= heroMax);
+		};
+		const uploadImage = async (file: File) => {
+			showStatus('壓縮並上傳圖片中…');
+			const ready = await compressImage(file);
+			const fd = new FormData();
+			fd.append('files', ready, ready.name);
+			const response = await fetch('/api/admin/sanity-upload', { method: 'POST', body: fd });
+			const payload = await response.json().catch(() => null);
+			if (!response.ok || !payload?.[0]?.url) throw new Error(payload?.error?.message || '圖片上傳失敗');
+			showStatus('圖片已上傳，記得按「儲存輪播圖」。');
+			return String(payload[0].url).split('?')[0];
+		};
+		const setImage = (row: HTMLElement, src: string) => {
+			row.dataset.image = src;
+			const img = row.querySelector<HTMLImageElement>('[data-hero-preview]');
+			if (img) img.src = preview(src);
+		};
+		heroList.addEventListener('input', refreshHero);
+		heroList.addEventListener('change', async (event) => {
+			const input = event.target as HTMLInputElement;
+			if (input.matches('[data-hero-file]') && input.files?.[0]) {
+				const row = input.closest<HTMLElement>('.hero-row')!;
+				row.classList.add('is-uploading');
+				try { setImage(row, await uploadImage(input.files[0])); }
+				catch (error) { showStatus(error instanceof Error ? error.message : '圖片上傳失敗', true); }
+				finally { row.classList.remove('is-uploading'); input.value = ''; }
+			}
+			refreshHero();
+		});
+		heroList.addEventListener('click', async (event) => {
+			const button = (event.target as HTMLElement).closest('button');
+			const row = button?.closest<HTMLElement>('.hero-row');
+			if (!button || !row) return;
+			if (button.hasAttribute('data-remove')) {
+				if (!(await askConfirm('刪除這張輪播圖？按「儲存輪播圖」後才會生效。', { okLabel: '刪除', danger: true }))) return;
+				row.remove();
+			} else if (button.dataset.move === '-1' && row.previousElementSibling) {
+				heroList.insertBefore(row, row.previousElementSibling);
+			} else if (button.dataset.move === '1' && row.nextElementSibling) {
+				heroList.insertBefore(row.nextElementSibling, row);
+			}
+			refreshHero();
+		});
+		heroEditor.querySelector<HTMLInputElement>('[data-hero-new]')?.addEventListener('change', async (event) => {
+			const input = event.target as HTMLInputElement;
+			const file = input.files?.[0];
+			input.value = '';
+			if (!file || heroList.children.length >= heroMax || !heroTemplate) return;
+			const row = heroTemplate.cloneNode(true) as HTMLLIElement;
+			row.dataset.slideId = `slide-${Date.now()}`;
+			row.querySelectorAll<HTMLInputElement>('input[data-field]').forEach((field) => { if (field.type === 'checkbox') field.checked = true; else field.value = ''; });
+			row.classList.add('is-uploading');
+			heroList.appendChild(row);
+			refreshHero();
+			try { setImage(row, await uploadImage(file)); row.querySelector<HTMLInputElement>('[data-field="title"]')?.focus(); }
+			catch (error) { row.remove(); showStatus(error instanceof Error ? error.message : '圖片上傳失敗', true); }
+			finally { row.classList.remove('is-uploading'); refreshHero(); }
+		});
+		heroEditor.querySelector<HTMLButtonElement>('[data-hero-save]')?.addEventListener('click', async (event) => {
+			const button = event.currentTarget as HTMLButtonElement;
+			const slides = (Array.from(heroList.children) as HTMLElement[]).map((row) => ({
+				id: row.dataset.slideId,
+				image: row.dataset.image,
+				title: row.querySelector<HTMLInputElement>('[data-field="title"]')?.value ?? '',
+				subtitle: row.querySelector<HTMLInputElement>('[data-field="subtitle"]')?.value ?? '',
+				href: row.querySelector<HTMLInputElement>('[data-field="href"]')?.value ?? '',
+				enabled: row.querySelector<HTMLInputElement>('[data-field="enabled"]')?.checked ?? true,
+			}));
+			if (slides.some((slide) => slide.enabled && !slide.title.trim())) { showStatus('顯示中的輪播圖都要填標題。', true); return; }
+			button.disabled = true;
+			try {
+				const response = await fetch('/api/admin/hero-slides', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slides }) });
+				const payload = await response.json().catch(() => ({}));
+				if (!response.ok) throw new Error(payload.error || '儲存失敗');
+				showStatus(`已儲存主圖輪播（${payload.value.filter((s: { enabled: boolean }) => s.enabled).length} 張顯示中），約 15 秒內首頁生效。`);
+			} catch (error) {
+				showStatus(error instanceof Error ? error.message : '儲存失敗，請再試一次。', true);
+			} finally {
+				button.disabled = false;
+			}
+		});
+		refreshHero();
+	}
 
 	// 頂部公告條：編輯後按「儲存公告條」才寫入
 	const announceEditor = document.querySelector<HTMLElement>('[data-announce-editor]');
@@ -519,6 +679,33 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	.preview-link { display: inline-flex; align-items: center; gap: 6px; color: var(--commerce-primary); font-size: 13px; font-weight: 700; text-decoration: none; }
 	.display-notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid #c8e8d3; border-radius: 12px; background: #eef8f2; color: #1d6a43; font-size: 13px; font-weight: 650; }
 	.display-notice.is-error { border-color: #f1cfcb; background: #fff1ef; color: #a23c35; }
+	/* 頁內導覽：快速跳到各區塊 */
+	.display-nav { position: sticky; top: 0; z-index: 20; display: flex; gap: 6px; margin: 0 0 14px; padding: 8px 0; overflow-x: auto; background: var(--commerce-bg, #f4f6f5); scrollbar-width: none; }
+	.display-nav::-webkit-scrollbar { display: none; }
+	.display-nav a { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 36px; padding: 0 14px; border: 1px solid var(--commerce-line); border-radius: 999px; background: #fff; color: #4f6569; font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+	.display-nav a:hover { border-color: var(--commerce-primary); color: var(--commerce-primary-dark); }
+	.display-nav i { color: var(--commerce-primary); font-size: 12px; }
+	.display-card { scroll-margin-top: 64px; }
+
+	/* 主圖輪播編輯 */
+	.hero-list { display: grid; gap: 12px; margin: 0; padding: 4px 18px 0; list-style: none; }
+	.hero-row { display: grid; grid-template-columns: 240px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 12px; border: 1px solid #e6ecea; border-radius: 14px; background: #fafcfb; transition: opacity .2s ease; }
+	.hero-row.is-off .hero-row__media img { filter: grayscale(.85); opacity: .55; }
+	.hero-row__media { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 10px; background: #dfe8e6; }
+	.hero-row__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+	.hero-row.is-uploading .hero-row__media::after { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(255, 255, 255, .7); color: var(--commerce-primary-dark); font-size: 13px; font-weight: 800; content: '上傳中…'; }
+	.hero-row__badge { position: absolute; top: 8px; left: 8px; padding: 2px 9px; border-radius: 999px; background: rgba(15, 77, 74, .85); color: #fff; font-size: 11px; font-weight: 800; }
+	.hero-row__upload { position: absolute; right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; background: rgba(255, 255, 255, .92); color: var(--commerce-primary-dark); font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+	.hero-row__fields { display: grid; gap: 8px; min-width: 0; }
+	.hero-row__side { display: grid; justify-items: end; gap: 10px; }
+	label.announce-add { display: inline-flex; cursor: pointer; }
+	label.announce-add.is-disabled { opacity: .45; pointer-events: none; }
+	@media (max-width: 860px) {
+		.hero-list { padding: 4px 12px 0; }
+		.hero-row { grid-template-columns: 1fr; }
+		.hero-row__side { grid-auto-flow: column; justify-content: space-between; align-items: center; }
+	}
+
 	/* 頂部公告條編輯 */
 	.announce-list { display: grid; gap: 10px; margin: 0; padding: 4px 18px 0; list-style: none; counter-reset: announce; }
 	.announce-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 12px; border: 1px solid #e6ecea; border-radius: 12px; background: #fafcfb; counter-increment: announce; }

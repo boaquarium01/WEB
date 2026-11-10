@@ -7,6 +7,7 @@ import { SITE_TITLE, SITE_DESCRIPTION } from '../config/site';
 import { getCartItemCount } from '../lib/services/cart';
 import { formatTwd, listCatalogProducts } from '../lib/services/catalog';
 import { getVisiblePromoTabs } from '../lib/promoTabs';
+import { getActiveHeroSlides, heroImageUrl } from '../lib/services/hero-slides';
 
 export const prerender = false;
 
@@ -78,33 +79,8 @@ Astro.response.headers.set(
   'public, max-age=0, s-maxage=30, stale-while-revalidate=120, must-revalidate'
 );
 
-const heroSlides = [
-  {
-    title: '水博館水族｜淡水魚水族販售',
-    subtitle: '每週新增極品特選，嚴選健康且具觀賞價值的淡水魚與水草景觀魚缸。',
-    image: '/hero-slide-1.png'
-  },
-  {
-    title: '專業、用心、苛求完美',
-    subtitle: '以專業經驗與細節管理，提供穩定水質與健康魚況的門市服務。',
-    image: '/hero-slide-2.png'
-  },
-  {
-    title: '專業養殖與完整售後',
-    subtitle: '服務涵蓋專業養殖、魚病治療、魚缸保養與水族器材銷售。',
-    image: '/hero-slide-3.png'
-  },
-  {
-    title: '中壢在地經營水族專賣',
-    subtitle: '營業時間：10:00-21:00',
-    image: '/hero-slide-4.png'
-  },
-  {
-    title: '精選好魚與器材，一站購足更安心',
-    subtitle: '地址：320桃園市中壢區環西路二段69號',
-    image: '/hero-slide-5.png'
-  }
-];
+/** 主圖輪播：後台「首頁陳列」可換圖、改文字、排序與開關 */
+const heroSlides = await getActiveHeroSlides();
 
 const services = [
   { icon: 'fa-solid fa-fish-fins', title: '專業養殖', desc: '淡水魚健康管理，提供完整淡水魚專業養殖建議' },
@@ -221,14 +197,15 @@ const MAP_EMBED_URL =
         <div class="hero-track" data-hero-swipe>
           {heroSlides.map((slide, idx) => (
             <article class:list={['hero-slide', idx === 0 && 'is-active']}>
-              <div class="hero-slide-bg" style={`--bg: url('${slide.image}')`}></div>
+              <div class="hero-slide-bg" style={`--bg: url('${heroImageUrl(slide.image, 1920)}'); --bg-sm: url('${heroImageUrl(slide.image, 900)}')`}></div>
               <div class="hero-overlay"></div>
               <div class="hero-content wrap">
                 <div class="hero-content-inner">
                   <div class="hero-drift-layer">
                     {/* 整頁只留一個 H1，其餘輪播標題用 H2 */}
                     {idx === 0 ? <h1 class="hero-title">{slide.title}</h1> : <h2 class="hero-title">{slide.title}</h2>}
-                    <p>{slide.subtitle}</p>
+                    {slide.subtitle && <p>{slide.subtitle}</p>}
+                    {slide.href && <a class="hero-more" href={slide.href} tabindex={idx === 0 ? undefined : -1}>了解更多<i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>}
                   </div>
                 </div>
               </div>
@@ -664,8 +641,16 @@ const MAP_EMBED_URL =
     gap: 12px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 14px 20px;
-    min-height: 58px;
+    padding: 8px 20px;
+    min-height: 50px;
+  }
+
+  /* 手機：店名列再矮一點，主圖露出更多 */
+  @media (max-width: 639px) {
+    .header-inner {
+      padding: 4px 12px;
+      min-height: 44px;
+    }
   }
 
   .brand {
@@ -1133,7 +1118,8 @@ const MAP_EMBED_URL =
     height: min(75vh, 640px);
     overflow: hidden;
     /* 將 Home 指示條區域留在 Hero 框內；安全區在 padding-bottom */
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    /* 主圖不在畫面最底部，不需預留安全區；iOS 捲動時工具列收合會讓安全區變大，底部多出深色帶 */
+    padding-bottom: 0;
     background-color: #0a2624;
     background-image: linear-gradient(180deg, #0f3a38 0%, #0a2624 100%);
     box-sizing: border-box;
@@ -1230,6 +1216,12 @@ const MAP_EMBED_URL =
     inset: -1px;
     background-color: #0a2624;
     background-image: var(--bg);
+  }
+  /* 手機用較小的圖，載入更快 */
+  @media (max-width: 639px) {
+    .hero-slide-bg { background-image: var(--bg-sm, var(--bg)); }
+  }
+  .hero-slide-bg {
     background-size: cover;
     background-position: center;
     transform: scale(1.02);
@@ -1479,11 +1471,15 @@ const MAP_EMBED_URL =
     }
   }
 
+  .hero-more { display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; color: #fff; font-size: 0.9rem; font-weight: 700; text-decoration: none; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+  .hero-more i { font-size: 0.75em; transition: transform 0.15s ease; }
+  .hero-more:hover i { transform: translateX(3px); }
+
   .hero-cta {
     position: absolute;
     z-index: 6;
     right: max(clamp(16px, 4.5vw, 40px), env(safe-area-inset-right, 0px));
-    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--hero-scrub-channel) + 22px);
+    bottom: calc(var(--hero-scrub-channel) + 22px);
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
@@ -1539,7 +1535,7 @@ const MAP_EMBED_URL =
     position: absolute;
     /* 以「輪播內容底」（含 safe-area 之上緣）為基準，通道半高 − 軌道半高 → 軌道垂直置中 */
     bottom: calc(
-      env(safe-area-inset-bottom, 0px) + var(--hero-scrub-channel) / 2 - var(--hero-rail-outer) / 2
+      var(--hero-scrub-channel) / 2 - var(--hero-rail-outer) / 2
     );
     left: 0;
     right: 0;
