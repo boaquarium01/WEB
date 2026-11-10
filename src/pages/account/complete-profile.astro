@@ -16,7 +16,7 @@ if (customer?.onboardingCompleted) return Astro.redirect(safeNext);
 		<label>姓名<input name="displayName" required autocomplete="name" value={customer?.displayName || user.name} /></label>
 		<label>手機<input name="phone" required autocomplete="tel" inputmode="tel" value={customer?.phone || ''} /></label>
 		<label>聯絡 Email（選填）<input name="contactEmail" type="email" autocomplete="email" value={customer?.contactEmail || ''} /></label>
-		{needsTerms && <label class="terms"><input type="checkbox" name="acceptedTerms" required />我已閱讀並同意<a href="/terms" target="_blank" rel="noreferrer">服務條款</a>與<a href="/privacy" target="_blank" rel="noreferrer">隱私權政策</a></label>}
+		{needsTerms && <label class="terms"><input type="checkbox" name="acceptedTerms" required />我已閱讀並同意<a href="/shopping-guide" target="_blank" rel="noreferrer">服務條款</a>與<a href="/privacy" target="_blank" rel="noreferrer">隱私權政策</a></label>}
 		<button type="submit">儲存並繼續</button>
 	</form>
 	<p id="complete-status" class="status" role="status" aria-live="polite"></p>

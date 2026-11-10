@@ -1,6 +1,6 @@
 ---
 import SiteLayout from '../../layouts/SiteLayout.astro';
-import CommerceTermsContent from '../../components/CommerceTermsContent.astro';
+import ShopTerms from '../../components/ShopTerms.astro';
 import { listAddressesForUser } from '../../lib/services/address';
 import { placeOrderFromCart } from '../../lib/services/checkout';
 import { getCartView } from '../../lib/services/cart';
@@ -224,24 +224,24 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 							<dd>{dollars(total)}</dd>
 						</div>
 					</dl>
+					{/* 結帳按鈕放在商品明細卡片底部：桌面跟著右欄固定，手機仍是畫面底部的結帳列 */}
+					<div class="actions">
+						<div class="checkout-consent">完成結帳即視為已同意 <button type="button" data-open-terms>購物須知與服務條款</button></div>
+						<div class="checkout-fixed-total"><span>總金額（含運費）</span><strong data-checkout-fixed-total>{formatTwd(total)}</strong></div>
+						<button
+							type="submit"
+							class="btn-primary"
+							disabled={addresses.length === 0 || shippingMethods.length === 0}
+						>
+							結帳<i class="fa-solid fa-arrow-right checkout-confirm-arrow" aria-hidden="true"></i>
+						</button>
+					</div>
 				</section>
-
-				<div class="actions">
-					<div class="checkout-consent">完成結帳即視為已同意 <button type="button" data-open-terms>條款與規則</button></div>
-					<div class="checkout-fixed-total"><span>總金額（含運費）</span><strong data-checkout-fixed-total>{formatTwd(total)}</strong></div>
-					<button
-						type="submit"
-						class="btn-primary"
-						disabled={addresses.length === 0 || shippingMethods.length === 0}
-					>
-						結帳<i class="fa-solid fa-arrow-right checkout-confirm-arrow" aria-hidden="true"></i>
-					</button>
-				</div>
 			</form>
 			<div class="terms-backdrop" data-terms-dialog hidden>
 				<section class="terms-sheet" role="dialog" aria-modal="true" aria-labelledby="terms-sheet-title" tabindex="-1">
-					<header class="terms-sheet__header"><h2 id="terms-sheet-title">水博館水族電商條款與規則</h2><button class="terms-sheet__close" type="button" data-close-terms aria-label="關閉條款視窗">×</button></header>
-					<div class="terms-sheet__body"><CommerceTermsContent /></div>
+					<header class="terms-sheet__header"><h2 id="terms-sheet-title">購物須知與服務條款</h2><button class="terms-sheet__close" type="button" data-close-terms aria-label="關閉條款視窗">×</button></header>
+					<div class="terms-sheet__body"><ShopTerms compact /></div>
 					<footer class="terms-sheet__footer"><button class="terms-sheet__agree" type="button" data-close-terms>同意</button></footer>
 				</section>
 			</div>
@@ -668,4 +668,15 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	:global(.checkout-submitting__card small) { color: var(--aq-muted); font-size: 12px; }
 	@media (prefers-reduced-motion: reduce) { :global(.checkout-spinner) { animation-duration: 2s; } :global(.checkout-fishbowl i), :global(.checkout-fishbowl span), :global(.checkout-progress span) { animation: none; } }
 	:global(.checkout-progress.is-complete span) { width: 100%; animation: none; transform: none; transition: width .3s ease; }
+
+	/* 桌面：結帳列在右側明細卡片底部，總額已在上方顯示，按鈕滿版 */
+	@media(min-width:601px){
+		.checkout .actions{flex-direction:column;align-items:stretch;gap:.6rem;margin-top:1.1rem;padding-top:1rem;border-top:1px solid #e8ebe6}
+		.checkout .actions .checkout-fixed-total{display:none}
+		.checkout .actions .btn-primary{width:100%;min-height:52px;justify-content:center;font-size:1.05rem}
+		.checkout .actions .checkout-consent{order:2;color:var(--aq-muted);font-size:.8rem;text-align:center}
+	}
+	/* 結帳列已移進明細卡片，格線不再保留空的一列 */
+	@media(min-width:781px){.checkout{grid-template-areas:"address summary" "note summary"}}
+	@media(max-width:780px){.checkout{grid-template-areas:"address" "note" "summary"}}
 </style>

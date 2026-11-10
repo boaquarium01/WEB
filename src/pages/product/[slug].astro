@@ -136,7 +136,8 @@ const images = [...new Set([
 							</select>
 							<small class="variant-stock" data-variant-stock hidden={!defaultCanPurchase} role="status" aria-live="polite">{!defaultSku || defaultSku.available === 0 ? "暫無庫存" : defaultSku.available < 0 ? "庫存充足" : `庫存 ${defaultSku.available}`}</small>
 						</>}
-						<label class="purchase-field spec-field" hidden={hasNamedVariants}>
+						{/* 只有一個規格時不顯示選單（仍會送出該規格） */}
+						<label class="purchase-field spec-field" hidden={hasNamedVariants || product.skus.length <= 1}>
 							<span>規格</span>
 							<select name="productSkuId" required disabled={!defaultCanPurchase} data-product-spec>
 								{product.skus.map((sku) => (

@@ -7,6 +7,7 @@ import AdminLayout from '../../../../layouts/AdminLayout.astro';
 import { isValidAdminSecretParam } from '../../../../lib/admin/path';
 import { getSanityClient } from '../../../../lib/sanity/client';
 import { PROMO_TABS } from '../../../../lib/promoTabs';
+import { getAnnouncementBar, MAX_ANNOUNCEMENTS } from '../../../../lib/services/announcement';
 
 export const prerender = false;
 
@@ -83,6 +84,7 @@ const promoRows = PROMO_TABS.map((tab) => {
 	const doc = promoDocs.find((item) => item._id === tab.id);
 	return { ...tab, exists: Boolean(doc), enabled: doc ? doc.enabled !== false : false };
 });
+const announcement = await getAnnouncementBar();
 const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=format` : null);
 ---
 
@@ -96,6 +98,45 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 
 	{loadError && <p class="display-notice is-error" role="alert">{loadError}</p>}
 	<p class="display-notice" data-status role="status" hidden></p>
+
+	<section class="display-card" aria-labelledby="announce-heading" data-announce-editor data-max={MAX_ANNOUNCEMENTS}>
+		<header class="display-card__head">
+			<div>
+				<h2 id="announce-heading">頂部公告條</h2>
+				<p>網站最上方輪播的短訊息，每 4 秒換一則。手機約可完整顯示 22 個字，太長會自動往左滑。儲存後約 15 秒內生效。</p>
+			</div>
+		</header>
+		<ul class="toggle-list">
+			<li class="toggle-row">
+				<span class="row-text"><strong>顯示公告條</strong><small>關閉後全站都不顯示</small></span>
+				<label class="switch"><input type="checkbox" role="switch" data-announce-enabled checked={announcement.enabled} aria-label="顯示公告條" /><span class="switch__track" aria-hidden="true"></span></label>
+			</li>
+			<li class="toggle-row">
+				<span class="row-text"><strong>只在首頁顯示</strong><small>關閉時全站每一頁都顯示</small></span>
+				<label class="switch"><input type="checkbox" role="switch" data-announce-home checked={announcement.homeOnly} aria-label="只在首頁顯示" /><span class="switch__track" aria-hidden="true"></span></label>
+			</li>
+		</ul>
+		<ol class="announce-list" data-announce-list>
+			{announcement.items.map((item) => (
+				<li class="announce-row">
+					<div class="announce-row__fields">
+						<label class="announce-field announce-field--badge"><span>醒目標籤</span><input data-field="badge" maxlength="8" value={item.badge} placeholder="例如：限時優惠" /></label>
+						<label class="announce-field announce-field--text"><span>訊息內容 <em data-count></em></span><input data-field="text" maxlength="60" value={item.text} placeholder="例如：🚚 全館滿 $1,200 免運" /></label>
+						<label class="announce-field announce-field--href"><span>點擊前往（選填）</span><input data-field="href" maxlength="200" value={item.href} placeholder="/promo/weekly-new" /></label>
+					</div>
+					<div class="announce-row__tools">
+						<button type="button" data-move="-1" aria-label="往上移"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button>
+						<button type="button" data-move="1" aria-label="往下移"><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button>
+						<button type="button" data-remove aria-label="刪除這則" class="is-danger"><i class="fa-solid fa-trash-can" aria-hidden="true"></i></button>
+					</div>
+				</li>
+			))}
+		</ol>
+		<div class="announce-actions">
+			<button type="button" class="announce-add" data-announce-add><i class="fa-solid fa-plus" aria-hidden="true"></i>新增一則</button>
+			<button type="button" class="announce-save" data-announce-save><i class="fa-solid fa-check" aria-hidden="true"></i>儲存公告條</button>
+		</div>
+	</section>
 
 	<section class="display-card" aria-labelledby="promo-tabs-heading">
 		<header class="display-card__head">
@@ -215,6 +256,78 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	const dirtyHint = document.querySelector<HTMLElement>('[data-dirty-hint]');
 	const statusBox = document.querySelector<HTMLElement>('[data-status]');
 	let dirty = false;
+
+	// 頂部公告條：編輯後按「儲存公告條」才寫入
+	const announceEditor = document.querySelector<HTMLElement>('[data-announce-editor]');
+	if (announceEditor) {
+		const listEl = announceEditor.querySelector<HTMLOListElement>('[data-announce-list]')!;
+		const max = Number(announceEditor.dataset.max || 6);
+		const addBtn = announceEditor.querySelector<HTMLButtonElement>('[data-announce-add]')!;
+		const saveAnnounce = announceEditor.querySelector<HTMLButtonElement>('[data-announce-save]')!;
+		const template = listEl.querySelector<HTMLLIElement>('.announce-row')?.cloneNode(true) as HTMLLIElement | undefined;
+		const refresh = () => {
+			const rows = Array.from(listEl.children) as HTMLElement[];
+			rows.forEach((row, i) => {
+				const text = row.querySelector<HTMLInputElement>('[data-field="text"]');
+				const count = row.querySelector<HTMLElement>('[data-count]');
+				if (text && count) { const n = Array.from(text.value).length; count.textContent = `${n} 字`; count.classList.toggle('is-long', n > 22); }
+				(row.querySelector('[data-move="-1"]') as HTMLButtonElement).disabled = i === 0;
+				(row.querySelector('[data-move="1"]') as HTMLButtonElement).disabled = i === rows.length - 1;
+			});
+			addBtn.disabled = rows.length >= max;
+		};
+		listEl.addEventListener('input', refresh);
+		listEl.addEventListener('click', async (event) => {
+			const button = (event.target as HTMLElement).closest('button');
+			const row = button?.closest<HTMLElement>('.announce-row');
+			if (!button || !row) return;
+			if (button.hasAttribute('data-remove')) {
+				const label = row.querySelector<HTMLInputElement>('[data-field="text"]')?.value || '這則公告';
+				if (!(await askConfirm(`刪除「${label}」？按「儲存公告條」後才會生效。`, { okLabel: '刪除', danger: true }))) return;
+				row.remove();
+			} else if (button.dataset.move === '-1' && row.previousElementSibling) {
+				listEl.insertBefore(row, row.previousElementSibling);
+			} else if (button.dataset.move === '1' && row.nextElementSibling) {
+				listEl.insertBefore(row.nextElementSibling, row);
+			}
+			refresh();
+		});
+		addBtn.addEventListener('click', () => {
+			if (listEl.children.length >= max) return;
+			const row = (template?.cloneNode(true) as HTMLLIElement | undefined) ?? document.createElement('li');
+			row.querySelectorAll('input').forEach((input) => { input.value = ''; });
+			listEl.appendChild(row);
+			refresh();
+			row.querySelector<HTMLInputElement>('[data-field="text"]')?.focus();
+		});
+		saveAnnounce.addEventListener('click', async () => {
+			const items = (Array.from(listEl.children) as HTMLElement[]).map((row) => ({
+				badge: row.querySelector<HTMLInputElement>('[data-field="badge"]')?.value ?? '',
+				text: row.querySelector<HTMLInputElement>('[data-field="text"]')?.value ?? '',
+				href: row.querySelector<HTMLInputElement>('[data-field="href"]')?.value ?? '',
+			}));
+			saveAnnounce.disabled = true;
+			try {
+				const response = await fetch('/api/admin/announcement', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						enabled: announceEditor.querySelector<HTMLInputElement>('[data-announce-enabled]')?.checked,
+						homeOnly: announceEditor.querySelector<HTMLInputElement>('[data-announce-home]')?.checked,
+						items,
+					}),
+				});
+				const payload = await response.json().catch(() => ({}));
+				if (!response.ok) throw new Error(payload.error || '儲存失敗');
+				showStatus(`已儲存公告條（${payload.value.items.length} 則），約 15 秒內前台生效。`);
+			} catch (error) {
+				showStatus(error instanceof Error ? error.message : '儲存失敗，請再試一次。', true);
+			} finally {
+				saveAnnounce.disabled = false;
+			}
+		});
+		refresh();
+	}
 
 	// 促銷分頁開關：切換即儲存，失敗就切回原狀
 	const promoCount = document.querySelector<HTMLElement>('[data-promo-count]');
@@ -406,6 +519,33 @@ const thumb = (url: string | null) => (url ? `${url}?w=96&h=96&fit=crop&auto=for
 	.preview-link { display: inline-flex; align-items: center; gap: 6px; color: var(--commerce-primary); font-size: 13px; font-weight: 700; text-decoration: none; }
 	.display-notice { margin: 0 0 14px; padding: 10px 14px; border: 1px solid #c8e8d3; border-radius: 12px; background: #eef8f2; color: #1d6a43; font-size: 13px; font-weight: 650; }
 	.display-notice.is-error { border-color: #f1cfcb; background: #fff1ef; color: #a23c35; }
+	/* 頂部公告條編輯 */
+	.announce-list { display: grid; gap: 10px; margin: 0; padding: 4px 18px 0; list-style: none; counter-reset: announce; }
+	.announce-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; padding: 12px; border: 1px solid #e6ecea; border-radius: 12px; background: #fafcfb; counter-increment: announce; }
+	.announce-row__fields { display: grid; grid-template-columns: 120px minmax(0, 1fr) 200px; gap: 8px; }
+	.announce-field { display: grid; gap: 4px; min-width: 0; color: #607579; font-size: 12px; font-weight: 700; }
+	.announce-field em { font-style: normal; font-weight: 600; color: #93a5a6; }
+	.announce-field em.is-long { color: #b4443a; }
+	.announce-field input { width: 100%; box-sizing: border-box; min-height: 40px; padding: 0 10px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; font: inherit; font-size: 14px; }
+	.announce-field--badge input { font-weight: 800; color: #9a4a10; }
+	.announce-row__tools { display: flex; gap: 6px; }
+	.announce-row__tools button { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #4f6569; cursor: pointer; }
+	.announce-row__tools button:disabled { opacity: .35; cursor: default; }
+	.announce-row__tools .is-danger { color: #b4443a; }
+	.announce-actions { display: flex; justify-content: space-between; gap: 10px; padding: 14px 18px 18px; }
+	.announce-add, .announce-save { display: inline-flex; align-items: center; gap: 7px; min-height: 42px; padding: 0 16px; border-radius: 10px; font: inherit; font-weight: 750; cursor: pointer; }
+	.announce-add { border: 1px dashed #b9d6cf; background: #fff; color: var(--commerce-primary-dark); }
+	.announce-add:disabled { opacity: .45; cursor: default; }
+	.announce-save { border: 0; background: var(--commerce-primary); color: #fff; }
+	.announce-save:disabled { opacity: .6; cursor: wait; }
+	@media (max-width: 760px) {
+		.announce-list { padding: 4px 12px 0; }
+		.announce-row { grid-template-columns: 1fr; }
+		.announce-row__fields { grid-template-columns: 1fr; }
+		.announce-row__tools { justify-content: flex-end; }
+		.announce-actions { padding: 12px; }
+		.announce-add, .announce-save { flex: 1; justify-content: center; }
+	}
 	.display-card { margin-bottom: 16px; border: 1px solid var(--commerce-line); border-radius: 15px; background: #fff; box-shadow: var(--commerce-shadow); overflow: hidden; }
 	.display-card__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #edf1ef; }
 	.display-card__head h2 { margin: 0; font-size: 18px; }

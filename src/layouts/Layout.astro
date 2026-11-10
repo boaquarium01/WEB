@@ -1,6 +1,7 @@
 ---
 import '../styles/global.css';
 import ConfirmSheet from '../components/ConfirmSheet.astro';
+import AnnouncementBar from '../components/AnnouncementBar.astro';
 import { SITE_TITLE as defaultTitle, SITE_DESCRIPTION as defaultDescription } from '../config/site';
 import { getCartItemCount } from '../lib/services/cart';
 
@@ -89,6 +90,8 @@ const twitterCard = ogImage ? 'summary_large_image' : 'summary';
 		<slot name="head" />
 	</head>
 	<body>
+		{/* 頂部公告條（後台「首頁陳列」可編輯；後台頁面不顯示） */}
+		{!isAdminRoute && <AnnouncementBar />}
 		<slot />
 		{!isAdminRoute && !hideCartFloat ? (
 			<a class="cart-float" href="/cart" aria-label={`購物車，目前 ${cartCount} 件商品`}>

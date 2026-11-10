@@ -1,0 +1,118 @@
+---
+/** 頂部公告條：一次一則，每 4 秒淡入淡出換下一則；滑鼠移入或聚焦時暫停 */
+import { getAnnouncementBar } from '../lib/services/announcement';
+
+const bar = await getAnnouncementBar();
+const path = Astro.url.pathname.replace(/\/+$/, '') || '/';
+const show = bar.enabled && bar.items.length > 0 && (!bar.homeOnly || path === '/');
+---
+
+{show && (
+	<div class="announce" role="region" aria-label="最新公告" data-announce>
+		<div class="announce__track" aria-live="polite">
+			{bar.items.map((item, index) => {
+				const inner = (
+					<>
+						{item.badge && <span class="announce__badge">{item.badge}</span>}
+						<span class="announce__text"><span class="announce__text-inner">{item.text}</span></span>
+						{item.href && <i class="fa-solid fa-chevron-right announce__go" aria-hidden="true"></i>}
+					</>
+				);
+				return item.href
+					? <a class:list={['announce__item', { 'is-active': index === 0 }]} href={item.href} aria-hidden={index === 0 ? undefined : 'true'} tabindex={index === 0 ? undefined : -1}>{inner}</a>
+					: <p class:list={['announce__item', { 'is-active': index === 0 }]} aria-hidden={index === 0 ? undefined : 'true'}>{inner}</p>;
+			})}
+		</div>
+		{bar.items.length > 1 && (
+			<div class="announce__dots" aria-hidden="true">
+				{bar.items.map((_, index) => <span class:list={{ 'is-active': index === 0 }}></span>)}
+			</div>
+		)}
+	</div>
+)}
+
+<script>
+	const root = document.querySelector<HTMLElement>('[data-announce]');
+	const items = Array.from(root?.querySelectorAll<HTMLElement>('.announce__item') ?? []);
+	const dots = Array.from(root?.querySelectorAll<HTMLElement>('.announce__dots span') ?? []);
+	const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+	// 文字太長放不下時（多半是手機），出現後慢慢往左滑到結尾
+	const fitText = (item?: HTMLElement) => {
+		const box = item?.querySelector<HTMLElement>('.announce__text');
+		const text = box?.querySelector<HTMLElement>('.announce__text-inner');
+		if (!box || !text || reduced) return false;
+		text.classList.remove('is-scrolling');
+		const overflow = text.scrollWidth - box.clientWidth;
+		if (overflow <= 4) return false;
+		text.style.setProperty('--announce-shift', `-${overflow + 8}px`);
+		void text.offsetWidth;
+		text.classList.add('is-scrolling');
+		return true;
+	};
+	let long = fitText(items[0]);
+	if (root && items.length > 1 && !reduced) {
+		let index = 0;
+		let paused = false;
+		const show = (next: number) => {
+			items[index]?.classList.remove('is-active');
+			items[index]?.setAttribute('aria-hidden', 'true');
+			items[index]?.setAttribute('tabindex', '-1');
+			dots[index]?.classList.remove('is-active');
+			index = next;
+			items[index]?.classList.add('is-active');
+			items[index]?.removeAttribute('aria-hidden');
+			items[index]?.removeAttribute('tabindex');
+			dots[index]?.classList.add('is-active');
+			long = fitText(items[index]);
+		};
+		// 一般每 4 秒換一則；文字需要滑動的那則多停留，讓客人看完
+		const tick = () => {
+			if (!paused && !document.hidden) show((index + 1) % items.length);
+			window.setTimeout(tick, long ? 6500 : 4000);
+		};
+		window.setTimeout(tick, long ? 6500 : 4000);
+		root.addEventListener('mouseenter', () => { paused = true; });
+		root.addEventListener('mouseleave', () => { paused = false; });
+		root.addEventListener('focusin', () => { paused = true; });
+		root.addEventListener('focusout', () => { paused = false; });
+	}
+</script>
+
+<style>
+	/* 背景：淺水藍綠漸層緩慢流動（像淺水光影）＋細小氣泡往上飄＋底部金色細線 */
+	.announce { position: relative; z-index: 60; display: flex; align-items: center; justify-content: center; height: 36px; padding: 0 16px; overflow: hidden; color: #0f4d4a; background: linear-gradient(110deg, #d8efec 0%, #e6f6f4 22%, #f3fbfa 42%, #ffffff 50%, #f3fbfa 58%, #e6f6f4 78%, #d8efec 100%); background-size: 260% 100%; animation: announce-flow 14s ease-in-out infinite alternate; box-shadow: inset 0 -1px 0 rgba(15, 77, 74, .06); }
+	.announce::before { position: absolute; inset: -40px 0 0; background-image: radial-gradient(circle at 12% 70%, rgba(21, 106, 102, .16) 0 1.5px, transparent 2.5px), radial-gradient(circle at 34% 40%, rgba(21, 106, 102, .12) 0 1px, transparent 2px), radial-gradient(circle at 58% 85%, rgba(21, 106, 102, .14) 0 1.5px, transparent 2.5px), radial-gradient(circle at 81% 55%, rgba(21, 106, 102, .10) 0 1px, transparent 2px), radial-gradient(circle at 93% 20%, rgba(21, 106, 102, .13) 0 1.5px, transparent 2.5px); background-size: 220px 76px; animation: announce-bubbles 9s linear infinite; content: ''; pointer-events: none; }
+	.announce::after { position: absolute; right: 0; bottom: 0; left: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255, 211, 77, .7) 30%, rgba(255, 138, 61, .7) 70%, transparent); content: ''; pointer-events: none; }
+	.announce__track, .announce__dots { z-index: 1; }
+	@keyframes announce-flow { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+	@keyframes announce-bubbles { from { transform: translateY(0); } to { transform: translateY(-76px); } }
+	.announce__track { position: relative; width: min(100%, 760px); height: 100%; }
+	.announce__item { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px; margin: 0; color: #0f4d4a; font-size: 13.5px; font-weight: 600; letter-spacing: .02em; text-decoration: none; white-space: nowrap; opacity: 0; transform: translateY(6px); transition: opacity .5s ease, transform .5s ease; pointer-events: none; }
+	.announce__item.is-active { opacity: 1; transform: none; pointer-events: auto; }
+	a.announce__item:hover .announce__text { text-decoration: underline; text-underline-offset: 3px; }
+	.announce__text { overflow: hidden; min-width: 0; }
+	/* 只在文字自己的框內滑動，不會壓到左邊的標籤 */
+	.announce__text-inner { display: inline-block; white-space: nowrap; }
+	.announce__text-inner.is-scrolling { animation: announce-scroll 3.2s ease-in-out .6s forwards; }
+	.announce__text:has(.is-scrolling) { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent); }
+	@keyframes announce-scroll { to { transform: translateX(var(--announce-shift, 0)); } }
+	.announce__go { flex: none; font-size: 10px; opacity: .6; }
+	/* 驚爆感：亮色標籤＋光澤掃過＋輕微脈動 */
+	.announce__badge { position: relative; flex: none; overflow: hidden; padding: 2px 9px; border-radius: 999px; background: linear-gradient(135deg, #ffd34d, #ff8a3d); color: #5a2300; font-size: 12px; font-weight: 900; letter-spacing: .06em; box-shadow: 0 0 0 0 rgba(255, 200, 80, .7); animation: announce-pulse 1.8s ease-out infinite; }
+	.announce__badge::after { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .75) 50%, transparent 70%); transform: translateX(-120%); animation: announce-sheen 2.4s ease-in-out infinite; content: ''; }
+	@keyframes announce-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 200, 80, .65); } 70% { box-shadow: 0 0 0 7px rgba(255, 200, 80, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 200, 80, 0); } }
+	@keyframes announce-sheen { 0%, 40% { transform: translateX(-120%); } 80%, 100% { transform: translateX(120%); } }
+	.announce__dots { position: absolute; right: 14px; display: flex; gap: 5px; }
+	.announce__dots span { width: 5px; height: 5px; border-radius: 50%; background: rgba(15, 77, 74, .22); transition: background .3s ease, width .3s ease; }
+	.announce__dots span.is-active { width: 14px; border-radius: 999px; background: #e8892f; }
+	@media (max-width: 640px) {
+		.announce { height: 34px; padding: 0 10px; }
+		.announce__item { justify-content: flex-start; gap: 6px; font-size: 12.5px; }
+		.announce__badge { font-size: 11px; padding: 1px 7px; }
+		.announce__dots { display: none; }
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.announce__item { transition: none; }
+		.announce__badge, .announce__badge::after, .announce, .announce::before { animation: none; }
+	}
+</style>
