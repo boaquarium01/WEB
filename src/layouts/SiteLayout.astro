@@ -142,10 +142,13 @@ const accountLink = user ? { href: '/account', label: '會員中心' } : { href:
 </script>
 
 <style>
+	/* 導覽列高度與首頁一致：電腦 58px、手機 50px（不含底線） */
 	.header-inner {
+		box-sizing: border-box;
 		max-width: 72rem;
 		margin: 0 auto;
-		padding: 0.75rem 1.1rem;
+		height: 58px;
+		padding: 0 20px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -163,8 +166,17 @@ const accountLink = user ? { href: '/account', label: '會員中心' } : { href:
 		display: grid;
 		grid-template-columns: 40px 1fr 40px;
 		max-width: 75rem;
-		min-height: 56px;
-		padding: 0.75rem 1rem;
+		box-sizing: border-box;
+		height: 58px;
+		min-height: 0;
+		padding: 0 20px;
+	}
+
+	@media (max-width: 639px) {
+		.header-inner, .product-header-inner {
+			height: 50px;
+			padding: 0 12px;
+		}
 	}
 
 	.product-back {

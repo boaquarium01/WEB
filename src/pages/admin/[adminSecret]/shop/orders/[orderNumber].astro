@@ -249,6 +249,10 @@ const canCancel = [
 					<dt>運費</dt>
 					<dd>{dollars(order.shippingFee)}</dd>
 				</div>
+				{order.discount > 0 && <div class="discount-line">
+					<dt>折扣{order.discountCode && <span class="discount-code">{order.discountCode}</span>}</dt>
+					<dd>-{dollars(order.discount)}</dd>
+				</div>}
 				<div class="grand">
 					<dt>總計</dt>
 					<dd>{formatTwd(order.total)}</dd>
@@ -670,4 +674,6 @@ const canCancel = [
 		.next-panel .actions-bar.has-actions { display: flex; }
 		.next-panel .actions-bar .btn-danger { min-height: 46px; border-color: var(--commerce-line); background: #fff; }
 	}
+	.discount-code { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1px dashed var(--commerce-primary); border-radius: 6px; color: var(--commerce-primary-dark); font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+	.discount-line dd { color: #c2410c; }
 </style>

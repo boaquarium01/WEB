@@ -19,11 +19,13 @@ const user = Astro.locals.user!;
 
 let error: string | null = null;
 let submittedShippingMethodId = '';
+let submittedDiscountCode = '';
 let selectedCartItemIds: string[] | undefined;
 
 if (Astro.request.method === 'POST') {
 	const form = await Astro.request.formData();
 	submittedShippingMethodId = String(form.get('shippingMethodId') ?? '');
+	submittedDiscountCode = String(form.get('discountCode') ?? '').trim();
 	if (form.has('cartItemIds')) selectedCartItemIds = form.getAll('cartItemIds').map(String).filter(Boolean);
 	try {
 		const result = await placeOrderFromCart(user.id, {
@@ -31,6 +33,7 @@ if (Astro.request.method === 'POST') {
 			shippingMethodId: submittedShippingMethodId,
 			note: String(form.get('note') ?? ''),
 			...(selectedCartItemIds ? { cartItemIds: selectedCartItemIds } : {}),
+			...(submittedDiscountCode ? { discountCode: submittedDiscountCode } : {}),
 		});
 		// 訂單已成立：確認信與店家通知改在背景寄出，顧客不用等寄信就能看到訂單
 		const afterOrder = async () => {
@@ -204,6 +207,22 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 							</li>
 						))}
 					</ul>
+					{/* 折扣碼：按「套用」試算；送出訂單時伺服器會再檢查一次 */}
+					<div class="discount-box" data-discount-box data-initial={submittedDiscountCode}>
+						<input type="hidden" name="discountCode" data-discount-value />
+						{/* 預設只顯示一行小連結，點了才展開輸入框 */}
+						<button type="button" class="discount-box__toggle" data-discount-toggle aria-expanded="false" aria-controls="discount-entry"><i class="fa-solid fa-ticket" aria-hidden="true"></i>使用折扣碼<i class="fa-solid fa-chevron-down discount-box__chev" aria-hidden="true"></i></button>
+						<label class="visually-hidden" for="discount-input">折扣碼</label>
+						<div class="discount-box__row" id="discount-entry" data-discount-entry hidden>
+							<input id="discount-input" type="text" inputmode="latin" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="輸入折扣碼" data-discount-input />
+							<button type="button" data-discount-apply>套用</button>
+						</div>
+						<div class="discount-box__applied" data-discount-applied hidden>
+							<span><i class="fa-solid fa-circle-check" aria-hidden="true"></i><strong data-discount-label></strong></span>
+							<button type="button" data-discount-remove>移除</button>
+						</div>
+						<p class="discount-box__msg" data-discount-msg role="status" aria-live="polite"></p>
+					</div>
 					<dl class="totals">
 						<div>
 							<dt>小計</dt>
@@ -213,12 +232,10 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 							<dt>運費</dt>
 							<dd id="checkout-shipping-fee" data-subtotal={cart.subtotal}>{dollars(shippingFee)}</dd>
 						</div>
-						{discount > 0 && (
-							<div>
-								<dt>折扣</dt>
-								<dd>-{dollars(discount)}</dd>
-							</div>
-						)}
+						<div class="discount-row" data-discount-row hidden>
+							<dt>折扣</dt>
+							<dd data-discount-amount></dd>
+						</div>
 						<div class="grand">
 							<dt>應付總額</dt>
 							<dd>{dollars(total)}</dd>
@@ -291,6 +308,11 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	const totalLabel = document.querySelector<HTMLElement>('.totals .grand dd');
 	const fixedTotalLabel = document.querySelector<HTMLElement>('[data-checkout-fixed-total]');
 	const formatTwd = (value: number) => `$${new Intl.NumberFormat('zh-TW').format(value)}`;
+	/** 目前已套用的折扣碼（空字串＝沒有） */
+	let appliedCode = '';
+	/** 顧客自己移除過自動套用的優惠，這次結帳就不再自動套用 */
+	let autoDismissed = false;
+	let autoApplied = false;
 	const updateShippingTotal = () => {
 		const selected = shippingLabels.find((label) => label.querySelector<HTMLInputElement>('input')?.checked);
 		if (!selected || !shippingFeeLabel || !totalLabel) return;
@@ -303,7 +325,124 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		totalLabel.textContent = total;
 		// 手機底部「總金額（含運費）」保留 NT$
 		if (fixedTotalLabel) fixedTotalLabel.textContent = `NT$ ${new Intl.NumberFormat('zh-TW').format(subtotal + actualFee)}`;
+		// 已套用折扣碼時，換配送方式要重新試算；沒套用時看有沒有可自動套用的優惠
+		if (appliedCode) void applyDiscount(appliedCode, true);
+		else if (!autoDismissed) void autoDiscount();
 	};
+
+	// 折扣碼
+	const discountBox = document.querySelector<HTMLElement>('[data-discount-box]');
+	const discountInput = discountBox?.querySelector<HTMLInputElement>('[data-discount-input]') ?? null;
+	const discountValue = discountBox?.querySelector<HTMLInputElement>('[data-discount-value]') ?? null;
+	const discountApply = discountBox?.querySelector<HTMLButtonElement>('[data-discount-apply]') ?? null;
+	const discountEntry = discountBox?.querySelector<HTMLElement>('[data-discount-entry]') ?? null;
+	const discountApplied = discountBox?.querySelector<HTMLElement>('[data-discount-applied]') ?? null;
+	const discountLabel = discountBox?.querySelector<HTMLElement>('[data-discount-label]') ?? null;
+	const discountMsg = discountBox?.querySelector<HTMLElement>('[data-discount-msg]') ?? null;
+	const discountToggle = discountBox?.querySelector<HTMLButtonElement>('[data-discount-toggle]') ?? null;
+	const openDiscountEntry = (open: boolean) => {
+		if (!discountEntry || !discountToggle) return;
+		discountEntry.hidden = !open;
+		discountToggle.setAttribute('aria-expanded', String(open));
+		discountToggle.classList.toggle('is-open', open);
+	};
+	discountToggle?.addEventListener('click', () => {
+		const open = discountEntry?.hidden ?? true;
+		openDiscountEntry(open);
+		if (open) discountInput?.focus();
+	});
+	const discountRow = document.querySelector<HTMLElement>('[data-discount-row]');
+	const discountAmount = document.querySelector<HTMLElement>('[data-discount-amount]');
+	const setDiscountMsg = (text: string, isError = false) => {
+		if (!discountMsg) return;
+		discountMsg.textContent = text;
+		discountMsg.classList.toggle('is-error', isError);
+	};
+	const clearDiscount = (message = '') => {
+		appliedCode = '';
+		if (discountValue) discountValue.value = '';
+		if (discountEntry) discountEntry.hidden = false;
+		if (discountToggle) discountToggle.hidden = false;
+		if (discountApplied) discountApplied.hidden = true;
+		if (discountRow) discountRow.hidden = true;
+		setDiscountMsg(message, Boolean(message));
+		updateShippingTotal();
+	};
+	// 只採用最後一次試算的結果，避免較慢的舊請求蓋掉新輸入
+	let discountRequest = 0;
+	async function applyDiscount(code: string, silent = false) {
+		const requestId = ++discountRequest;
+		const selected = shippingLabels.find((label) => label.querySelector<HTMLInputElement>('input')?.checked);
+		const shippingMethodId = selected?.querySelector<HTMLInputElement>('input')?.value ?? '';
+		const cartItemIds = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="cartItemIds"]')).map((input) => input.value);
+		if (discountApply) { discountApply.disabled = true; if (!silent) discountApply.textContent = '確認中…'; }
+		try {
+			const response = await fetch('/api/checkout/discount', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, shippingMethodId, cartItemIds }) });
+			const payload = await response.json().catch(() => ({}));
+			if (requestId !== discountRequest) return;
+			if (!response.ok) throw new Error(payload.error || '折扣碼無法使用');
+			appliedCode = payload.code;
+			if (discountValue) discountValue.value = payload.code;
+			if (discountLabel) discountLabel.textContent = payload.label;
+			if (discountEntry) discountEntry.hidden = true;
+			if (discountToggle) discountToggle.hidden = true;
+			if (discountApplied) discountApplied.hidden = false;
+			if (discountRow) discountRow.hidden = false;
+			if (discountAmount) discountAmount.textContent = `-${formatTwd(payload.discount)}`;
+			if (shippingFeeLabel) shippingFeeLabel.textContent = formatTwd(payload.shippingFee);
+			if (totalLabel) totalLabel.textContent = formatTwd(payload.total);
+			if (fixedTotalLabel) fixedTotalLabel.textContent = `NT$ ${new Intl.NumberFormat('zh-TW').format(payload.total)}`;
+			setDiscountMsg(silent ? '' : `已套用，折抵 ${formatTwd(payload.discount)}`);
+		} catch (error) {
+			if (requestId !== discountRequest) return;
+			const message = error instanceof Error ? error.message : '折扣碼無法使用';
+			const previous = appliedCode;
+			appliedCode = '';
+			if (previous) clearDiscount(message); else setDiscountMsg(message, true);
+		} finally {
+			if (discountApply && requestId === discountRequest) { discountApply.disabled = false; discountApply.textContent = '套用'; }
+		}
+	}
+	const submitDiscount = () => {
+		autoApplied = false;
+		const code = discountInput?.value.trim() ?? '';
+		if (!code) { setDiscountMsg('請輸入折扣碼', true); discountInput?.focus(); return; }
+		void applyDiscount(code);
+	};
+	discountApply?.addEventListener('click', submitDiscount);
+	discountInput?.addEventListener('keydown', (event) => {
+		if (event.key !== 'Enter') return;
+		event.preventDefault();
+		submitDiscount();
+	});
+	discountInput?.addEventListener('input', () => { discountRequest += 1; if (discountApply) { discountApply.disabled = false; discountApply.textContent = '套用'; } if (discountMsg?.classList.contains('is-error')) setDiscountMsg(''); });
+	discountBox?.querySelector('[data-discount-remove]')?.addEventListener('click', () => {
+		// 顧客自己移除後，這次結帳不再自動套用
+		autoDismissed = true;
+		autoApplied = false;
+		clearDiscount();
+		openDiscountEntry(true);
+		discountInput?.focus();
+	});
+	// 後台設為「自動套用」的優惠：符合條件就直接幫顧客套上
+	async function autoDiscount() {
+		const selected = shippingLabels.find((label) => label.querySelector<HTMLInputElement>('input')?.checked);
+		const shippingMethodId = selected?.querySelector<HTMLInputElement>('input')?.value ?? '';
+		const cartItemIds = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="cartItemIds"]')).map((input) => input.value);
+		if (!shippingMethodId || appliedCode) return;
+		try {
+			const response = await fetch('/api/checkout/discount', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ auto: true, shippingMethodId, cartItemIds }) });
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok || payload.none || !payload.code || appliedCode || autoDismissed) return;
+			await applyDiscount(payload.code, true);
+			if (appliedCode === payload.code) { autoApplied = true; setDiscountMsg('已自動套用優惠 🎉'); }
+		} catch {
+			/* 自動套用失敗不影響結帳 */
+		}
+	}
+	// 下單失敗回到結帳頁時，自動帶回剛才的折扣碼
+	if (discountBox?.dataset.initial && discountInput) { discountInput.value = discountBox.dataset.initial; openDiscountEntry(true); void applyDiscount(discountBox.dataset.initial, true); }
+	else if (discountBox) void autoDiscount();
 	shippingLabels.forEach((label) => label.querySelector('input')?.addEventListener('change', updateShippingTotal));
 	const checkoutForm = document.querySelector<HTMLFormElement>('form.checkout');
 	const confirmButton = checkoutForm?.querySelector<HTMLButtonElement>('button[type="submit"]');
@@ -679,4 +818,27 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 	/* 結帳列已移進明細卡片，格線不再保留空的一列 */
 	@media(min-width:781px){.checkout{grid-template-areas:"address summary" "note summary"}}
 	@media(max-width:780px){.checkout{grid-template-areas:"address" "note" "summary"}}
+/* 折扣碼 */
+	.discount-box{margin-top:.85rem;padding-top:.75rem;border-top:1px solid #e8ebe6}
+	.discount-box__toggle{display:inline-flex;align-items:center;gap:.4rem;padding:.2rem 0;border:0;background:none;color:var(--aq-primary-dark);font:inherit;font-size:.88rem;font-weight:700;cursor:pointer}
+	.discount-box__toggle[hidden]{display:none}
+	.discount-box__toggle:hover{text-decoration:underline;text-underline-offset:3px}
+	.discount-box__chev{font-size:.7rem;transition:transform .15s ease}
+	.discount-box__toggle.is-open .discount-box__chev{transform:rotate(180deg)}
+	.discount-box__row{margin-top:.5rem}
+	.visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+	.discount-box__row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem}
+	.discount-box__row[hidden],.discount-box__applied[hidden],.discount-row[hidden]{display:none}
+	.discount-box__row input{min-width:0;min-height:40px;padding:0 .8rem;border:1px solid #d9e0dd;border-radius:10px;background:#fff;font:inherit;font-size:16px;letter-spacing:.06em;text-transform:uppercase}
+	.discount-box__row input::placeholder{letter-spacing:0;text-transform:none}
+	.discount-box__row input:focus{outline:none;border-color:var(--aq-primary);box-shadow:0 0 0 3px rgba(21,106,102,.14)}
+	.discount-box__row button{min-height:40px;padding:0 1rem;border:1px solid var(--aq-primary);border-radius:10px;background:#fff;color:var(--aq-primary-dark);font:inherit;font-weight:750;cursor:pointer}
+	.discount-box__row button:disabled{opacity:.6;cursor:wait}
+	.discount-box__applied{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.6rem .8rem;border:1px dashed var(--aq-primary);border-radius:10px;background:#f1f8f6}
+	.discount-box__applied span{display:flex;align-items:center;gap:.45rem;min-width:0;color:var(--aq-primary-dark);font-size:.9rem}
+	.discount-box__applied button{flex:none;padding:.2rem .4rem;border:0;background:none;color:var(--aq-muted);font:inherit;font-size:.85rem;text-decoration:underline;cursor:pointer}
+	.discount-box__msg{margin:.4rem 0 0;color:var(--aq-primary-dark);font-size:.82rem}
+	.discount-box__msg:empty{display:none}
+	.discount-box__msg.is-error{color:#b4443a}
+	.discount-row dd{color:#c2410c;font-weight:750}
 </style>

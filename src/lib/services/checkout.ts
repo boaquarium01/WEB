@@ -21,6 +21,7 @@ import { ensureCustomerForUser } from './customer';
 import { getAddressForUser, type Address } from './address';
 import { getCartView } from './cart';
 import { getShippingFee } from './shipping';
+import { quoteDiscount } from './discounts';
 import { unitPriceForQuantity, type QuantityPriceTier } from './quantity-pricing';
 
 export type ShippingAddressSnapshot = {
@@ -41,6 +42,8 @@ export type PlaceOrderInput = {
 	shippingMethodId: string;
 	note?: string;
 	cartItemIds?: string[];
+	/** 顧客輸入的折扣碼；下單時會重新檢查與計算 */
+	discountCode?: string;
 };
 
 export type PlaceOrderResult = {
@@ -154,6 +157,7 @@ export async function placeOrderFromCart(
 				quantity: cartItems.quantity,
 				productId: products.id,
 				productName: products.name,
+				productType: products.productType,
 				sku: productSkus.sku,
 				skuName: productSkus.name,
 			unitPrice: productSkus.sellingPrice,
@@ -196,6 +200,7 @@ export async function placeOrderFromCart(
 			productId: string;
 			productSkuId: string;
 			productName: string;
+			productType: string | null;
 			sku: string;
 			skuName: string;
 			unitPrice: number;
@@ -236,6 +241,7 @@ export async function placeOrderFromCart(
 				productId: line.productId,
 				productSkuId: line.productSkuId,
 				productName: line.productName,
+				productType: line.productType,
 				sku: line.sku,
 				skuName: line.skuName,
 				unitPrice,
@@ -244,8 +250,13 @@ export async function placeOrderFromCart(
 			});
 		}
 
-		const shippingFee = getShippingFee(shippingMethod, subtotal);
-		const discount = 0;
+		// 折扣碼在交易內重新檢查（鎖住該折扣碼，避免同時下單超過次數上限）；免運門檻看折扣後金額
+		const discountInput = String(input.discountCode ?? '').trim();
+		const quote = discountInput
+			? await quoteDiscount(tx, { code: discountInput, userId, lines: prepared, shippingMethod, lock: true })
+			: null;
+		const shippingFee = quote ? quote.shippingFee : getShippingFee(shippingMethod, subtotal);
+		const discount = quote?.discount ?? 0;
 		const total = subtotal + shippingFee - discount;
 		if (total < 0) {
 			throw new Error('訂單金額無效');
@@ -269,6 +280,8 @@ export async function placeOrderFromCart(
 				shippingStatus: 'NOT_SHIPPED',
 				shippingAddress,
 				note,
+				discountCodeId: quote?.codeId ?? null,
+				discountCode: quote?.code ?? null,
 			})
 			.returning();
 

@@ -641,15 +641,16 @@ const MAP_EMBED_URL =
     gap: 12px;
     max-width: 1200px;
     margin: 0 auto;
-    padding: 8px 20px;
-    min-height: 50px;
+    box-sizing: border-box;
+    height: 58px;
+    padding: 0 20px;
   }
 
-  /* 手機：店名列再矮一點，主圖露出更多 */
+  /* 手機：店名列再矮一點，主圖露出更多（全站導覽列同高） */
   @media (max-width: 639px) {
     .header-inner {
-      padding: 4px 12px;
-      min-height: 44px;
+      height: 50px;
+      padding: 0 12px;
     }
   }
 

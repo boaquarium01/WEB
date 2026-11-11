@@ -257,7 +257,7 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 			{
 				order.discount > 0 && (
 					<div>
-						<dt>折扣</dt>
+						<dt>折扣{order.discountCode && <small class="discount-code">{order.discountCode}</small>}</dt>
 						<dd>-{dollars(order.discount)}</dd>
 					</div>
 				)
@@ -682,4 +682,5 @@ const dollars = (amount: number) => `$${new Intl.NumberFormat('zh-TW').format(am
 		.order-calc b { color: var(--aq-ink); }
 		.order-line-total { grid-area: total; text-align: right; font-size: .95rem; }
 	}
+	.discount-code{display:inline-block;margin-left:.4rem;padding:.05rem .45rem;border:1px dashed var(--aq-primary);border-radius:6px;color:var(--aq-primary-dark);font-size:.75rem;font-weight:700;letter-spacing:.04em}
 </style>

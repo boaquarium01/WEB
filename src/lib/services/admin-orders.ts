@@ -65,6 +65,7 @@ export type AdminOrderDetail = {
 	subtotal: number;
 	shippingFee: number;
 	discount: number;
+	discountCode: string | null;
 	total: number;
 	note: string | null;
 	shippingAddress: ShippingAddressSnapshot;
@@ -536,6 +537,7 @@ export async function getAdminOrder(
 		subtotal: order.subtotal,
 		shippingFee: order.shippingFee,
 		discount: order.discount,
+		discountCode: order.discountCode,
 		total: order.total,
 		note: order.note,
 		shippingAddress: order.shippingAddress as ShippingAddressSnapshot,

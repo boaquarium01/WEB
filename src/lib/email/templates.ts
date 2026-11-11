@@ -118,6 +118,7 @@ export type EmailOrder = {
 	subtotal: number;
 	shippingFee: number;
 	discount: number;
+	discountCode?: string | null;
 	total: number;
 	items: { productName: string; skuName: string | null; quantity: number; unitPrice: number; subtotal: number }[];
 	shippingAddress: { recipientName: string; phone: string; postalCode: string; city: string; district: string; addressLine: string; shippingMethodName?: string | null };
@@ -129,7 +130,7 @@ const textItems = (order: EmailOrder) => order.items.map((item) => `• ${item.p
 const textTotals = (order: EmailOrder) => [
 	`商品小計：${formatTwd(order.subtotal)}`,
 	`運費：${formatTwd(order.shippingFee)}`,
-	...(order.discount > 0 ? [`折扣：-${formatTwd(order.discount)}`] : []),
+	...(order.discount > 0 ? [`折扣${order.discountCode ? `（${order.discountCode}）` : ''}：-${formatTwd(order.discount)}`] : []),
 	`應付總額：${formatTwd(order.total)}`,
 ];
 
@@ -143,7 +144,7 @@ function htmlItems(order: EmailOrder): string {
 	<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;padding-top:8px;border-top:2px solid ${LINE};">
 		${line('商品小計', formatTwd(order.subtotal))}
 		${line('運費', formatTwd(order.shippingFee))}
-		${order.discount > 0 ? line('折扣', `-${formatTwd(order.discount)}`) : ''}
+		${order.discount > 0 ? line(`折扣${order.discountCode ? `（${escapeHtml(order.discountCode)}）` : ''}`, `-${formatTwd(order.discount)}`) : ''}
 		${line('應付總額', formatTwd(order.total), true)}
 	</table>`;
 }

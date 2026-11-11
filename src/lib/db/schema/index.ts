@@ -424,10 +424,14 @@ export const orders = pgTable(
 			.default('NOT_SHIPPED'),
 		shippingAddress: jsonb('shipping_address').notNull(),
 		note: text('note'),
+		/** 使用的折扣碼（快照）；用量以「未取消訂單」計算，取消訂單即自動歸還次數 */
+		discountCodeId: uuid('discount_code_id'),
+		discountCode: text('discount_code'),
 		createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 		updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	},
 	(t) => [
+		index('orders_discount_code_id_idx').on(t.discountCodeId),
 		uniqueIndex('orders_order_number_uidx').on(t.orderNumber),
 		index('orders_user_id_idx').on(t.userId),
 		index('orders_customer_id_idx').on(t.customerId),
@@ -618,4 +622,32 @@ export const storeSettings = pgTable('store_settings', {
 	value: jsonb('value').notNull(),
 	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 	updatedBy: text('updated_by'),
+});
+
+/** 折扣碼：後台「折扣碼」頁建立與管理，結帳時輸入 */
+export const discountCodes = pgTable('discount_codes', {
+	id: uuid('id').defaultRandom().primaryKey(),
+	/** 一律大寫 */
+	code: text('code').notNull().unique(),
+	description: text('description'),
+	/** AMOUNT＝折固定金額、PERCENT＝打折（value 為折掉的百分比）、FREE_SHIPPING＝免運 */
+	type: text('type').notNull().default('AMOUNT'),
+	value: integer('value').notNull().default(0),
+	/** 打折時最多折多少；null 不限 */
+	maxDiscount: integer('max_discount'),
+	minSubtotal: integer('min_subtotal').notNull().default(0),
+	startsAt: timestamp('starts_at', { withTimezone: true }),
+	endsAt: timestamp('ends_at', { withTimezone: true }),
+	/** 總共可用幾次；null 不限 */
+	usageLimit: integer('usage_limit'),
+	/** 每位會員可用幾次；null 不限 */
+	perUserLimit: integer('per_user_limit'),
+	firstOrderOnly: boolean('first_order_only').notNull().default(false),
+	/** 活體分類的商品不列入折扣計算 */
+	excludeLive: boolean('exclude_live').notNull().default(true),
+	/** 符合條件時結帳頁自動套用，顧客不用輸入 */
+	autoApply: boolean('auto_apply').notNull().default(false),
+	isActive: boolean('is_active').notNull().default(true),
+	createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+	updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

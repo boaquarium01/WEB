@@ -1,0 +1,278 @@
+---
+/** 折扣碼管理：新增、編輯、停用、刪除，並顯示每組代碼的使用次數與折抵總額 */
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getAdminBasePath, isValidAdminSecretParam } from '../../../../lib/admin/path';
+import { deleteDiscountCode, describeDiscount, listDiscountCodes, saveDiscountCode, setDiscountCodeActive, type DiscountCodeRow } from '../../../../lib/services/discounts';
+
+export const prerender = false;
+
+if (!isValidAdminSecretParam(Astro.params.adminSecret)) {
+	return new Response(null, { status: 404, statusText: 'Not Found' });
+}
+
+const base = getAdminBasePath();
+const pagePath = `${base}/shop/discounts`;
+let error: string | null = null;
+let message: string | null = null;
+let openId: string | null = null;
+
+const numberOrNull = (value: FormDataEntryValue | null) => {
+	const text = String(value ?? '').trim();
+	return text === '' ? null : Number(text);
+};
+/** datetime-local 以台灣時間解讀 */
+const taipeiDate = (value: FormDataEntryValue | null) => {
+	const text = String(value ?? '').trim();
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)) return null;
+	const date = new Date(`${text}:00+08:00`);
+	return Number.isNaN(date.getTime()) ? null : date;
+};
+const toLocalInput = (date: Date | null) => {
+	if (!date) return '';
+	const parts = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+	return parts.replace(' ', 'T');
+};
+
+if (Astro.request.method === 'POST') {
+	const form = await Astro.request.formData();
+	const intent = String(form.get('intent') ?? '');
+	const id = String(form.get('id') ?? '').trim();
+	try {
+		if (intent === 'save') {
+			openId = id || 'new';
+			await saveDiscountCode({
+				id: id || undefined,
+				code: String(form.get('code') ?? ''),
+				description: String(form.get('description') ?? ''),
+				type: String(form.get('type') ?? ''),
+				value: Number(form.get('value') ?? 0),
+				maxDiscount: numberOrNull(form.get('maxDiscount')),
+				minSubtotal: Number(form.get('minSubtotal') || 0),
+				startsAt: taipeiDate(form.get('startsAt')),
+				endsAt: taipeiDate(form.get('endsAt')),
+				usageLimit: numberOrNull(form.get('usageLimit')),
+				perUserLimit: numberOrNull(form.get('perUserLimit')),
+				firstOrderOnly: form.get('firstOrderOnly') === 'on',
+				excludeLive: form.get('excludeLive') === 'on',
+				autoApply: form.get('autoApply') === 'on',
+				isActive: form.get('isActive') === 'on',
+			});
+			message = id ? '折扣碼已更新' : '折扣碼已新增';
+			openId = null;
+		} else if (intent === 'toggle') {
+			await setDiscountCodeActive(id, form.get('active') === '1');
+			message = form.get('active') === '1' ? '已啟用折扣碼' : '已停用折扣碼';
+		} else if (intent === 'delete') {
+			await deleteDiscountCode(id);
+			message = '已刪除折扣碼';
+		}
+	} catch (cause) {
+		error = cause instanceof Error ? cause.message : '儲存失敗';
+	}
+}
+
+let codes: DiscountCodeRow[] = [];
+try {
+	codes = await listDiscountCodes();
+} catch {
+	error = error ?? '折扣碼暫時無法讀取，請稍後再試';
+}
+
+const now = new Date();
+const statusOf = (code: DiscountCodeRow) => {
+	if (!code.isActive) return { key: 'off', label: '已停用' };
+	if (code.startsAt && now < code.startsAt) return { key: 'soon', label: '尚未開始' };
+	if (code.endsAt && now > code.endsAt) return { key: 'expired', label: '已過期' };
+	if (code.usageLimit !== null && code.usedCount >= code.usageLimit) return { key: 'used', label: '已用完' };
+	return { key: 'on', label: '使用中' };
+};
+const dateText = (date: Date | null) => (date ? new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date) : null);
+const twd = (amount: number) => `NT$ ${amount.toLocaleString('zh-TW')}`;
+const conditions = (code: DiscountCodeRow) => [
+	code.minSubtotal > 0 ? `滿 ${twd(code.minSubtotal)}` : '無最低消費',
+	code.perUserLimit !== null ? `每人限 ${code.perUserLimit} 次` : '每人不限次數',
+	...(code.firstOrderOnly ? ['限首次購買'] : []),
+	code.excludeLive ? '活體不適用' : '含活體',
+	...(code.autoApply ? ['符合條件自動套用'] : []),
+];
+const blank = { id: '', code: '', description: '', type: 'AMOUNT', value: 100, maxDiscount: null, minSubtotal: 0, startsAt: null, endsAt: null, usageLimit: null, perUserLimit: 1, firstOrderOnly: false, excludeLive: true, autoApply: false, isActive: true } as const;
+---
+
+<AdminLayout title="折扣碼">
+	<header class="head page-heading">
+		<div class="heading-row"><div><h1>折扣碼</h1><p>顧客在結帳頁輸入代碼即可折抵。可與多件優惠併用；取消訂單會自動歸還使用次數。</p></div></div>
+	</header>
+	{message && <p class="notice success" role="status">{message}</p>}
+	{error && <p class="notice error" role="alert">{error}</p>}
+
+	<details class="card editor" open={openId === 'new' || codes.length === 0}>
+		<summary><i class="fa-solid fa-plus" aria-hidden="true"></i>新增折扣碼</summary>
+		{[blank].map((code) => (
+			<form method="post" action={pagePath} class="code-form" data-code-form>
+				<input type="hidden" name="intent" value="save" />
+				<div class="fields">
+					<label>折扣碼<input name="code" required maxlength="20" pattern="[A-Za-z0-9_\-]{3,20}" placeholder="例如 NEW100" autocapitalize="characters" autocomplete="off" /></label>
+					<label class="wide">說明（只有後台看得到）<input name="description" maxlength="80" placeholder="例如：新站開幕優惠" /></label>
+					<label>折扣方式<select name="type" data-type><option value="AMOUNT">折固定金額</option><option value="PERCENT">打折（百分比）</option><option value="FREE_SHIPPING">免運費</option></select></label>
+					<label data-when="AMOUNT,PERCENT"><span data-value-label>折抵金額（NT$）</span><input name="value" type="number" min="1" step="1" value={code.value} /></label>
+					<label data-when="PERCENT">最高折抵（NT$，選填）<input name="maxDiscount" type="number" min="1" step="1" placeholder="不限" /></label>
+					<label>最低消費（NT$）<input name="minSubtotal" type="number" min="0" step="1" value="0" /></label>
+					<label>開始時間（選填）<input name="startsAt" type="datetime-local" /></label>
+					<label>結束時間（選填）<input name="endsAt" type="datetime-local" /></label>
+					<label>總共可用次數（選填）<input name="usageLimit" type="number" min="1" step="1" placeholder="不限" /></label>
+					<label>每位會員可用次數（選填）<input name="perUserLimit" type="number" min="1" step="1" value="1" placeholder="不限" /></label>
+				</div>
+				<div class="checks">
+					<label><input type="checkbox" name="firstOrderOnly" />限首次購買的會員</label>
+					<label><input type="checkbox" name="excludeLive" checked />排除活體（活體分類的商品不列入折扣與最低消費）</label>
+					<label><input type="checkbox" name="autoApply" />符合條件時自動套用（顧客不用輸入代碼；有多組時套用最划算的一組）</label>
+					<label><input type="checkbox" name="isActive" checked />建立後立即啟用</label>
+				</div>
+				<footer><button type="submit" class="primary"><i class="fa-solid fa-check" aria-hidden="true"></i>新增折扣碼</button></footer>
+			</form>
+		))}
+	</details>
+
+	<section class="list" aria-label="折扣碼清單">
+		{codes.length === 0 && <p class="empty">還沒有折扣碼，從上面新增第一組。</p>}
+		{codes.map((code) => {
+			const status = statusOf(code);
+			return (
+				<article class:list={['card code-card', `is-${status.key}`]}>
+					<header class="code-head">
+						<div class="code-title">
+							<strong class="code-text">{code.code}</strong>
+							<span class:list={['badge', status.key]}>{status.label}</span>
+							<span class="amount">{describeDiscount(code)}</span>
+							{code.autoApply && <span class="badge auto"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> 自動套用</span>}
+						</div>
+						<form method="post" action={pagePath} class="toggle-form">
+							<input type="hidden" name="intent" value="toggle" />
+							<input type="hidden" name="id" value={code.id} />
+							<input type="hidden" name="active" value={code.isActive ? '0' : '1'} />
+							<button type="submit" class="ghost">{code.isActive ? '停用' : '啟用'}</button>
+						</form>
+					</header>
+					{code.description && <p class="desc">{code.description}</p>}
+					<ul class="chips">{conditions(code).map((text) => <li>{text}</li>)}</ul>
+					<dl class="stats">
+						<div><dt>已使用</dt><dd>{code.usedCount}<small> / {code.usageLimit ?? '不限'}</small></dd></div>
+						<div><dt>累計折抵</dt><dd>{twd(code.discountTotal)}</dd></div>
+						<div><dt>期間</dt><dd class="period">{dateText(code.startsAt) ?? '即日起'} – {dateText(code.endsAt) ?? '不限'}</dd></div>
+					</dl>
+					<details class="edit" open={openId === code.id}>
+						<summary><i class="fa-solid fa-pen" aria-hidden="true"></i>編輯</summary>
+						<form method="post" action={pagePath} class="code-form" data-code-form>
+							<input type="hidden" name="intent" value="save" />
+							<input type="hidden" name="id" value={code.id} />
+							<div class="fields">
+								<label>折扣碼<input name="code" required maxlength="20" pattern="[A-Za-z0-9_\-]{3,20}" value={code.code} autocapitalize="characters" autocomplete="off" /></label>
+								<label class="wide">說明（只有後台看得到）<input name="description" maxlength="80" value={code.description ?? ''} /></label>
+								<label>折扣方式<select name="type" data-type><option value="AMOUNT" selected={code.type === 'AMOUNT'}>折固定金額</option><option value="PERCENT" selected={code.type === 'PERCENT'}>打折（百分比）</option><option value="FREE_SHIPPING" selected={code.type === 'FREE_SHIPPING'}>免運費</option></select></label>
+								<label data-when="AMOUNT,PERCENT"><span data-value-label>折抵金額（NT$）</span><input name="value" type="number" min="1" step="1" value={code.value || ''} /></label>
+								<label data-when="PERCENT">最高折抵（NT$，選填）<input name="maxDiscount" type="number" min="1" step="1" value={code.maxDiscount ?? ''} placeholder="不限" /></label>
+								<label>最低消費（NT$）<input name="minSubtotal" type="number" min="0" step="1" value={code.minSubtotal} /></label>
+								<label>開始時間（選填）<input name="startsAt" type="datetime-local" value={toLocalInput(code.startsAt)} /></label>
+								<label>結束時間（選填）<input name="endsAt" type="datetime-local" value={toLocalInput(code.endsAt)} /></label>
+								<label>總共可用次數（選填）<input name="usageLimit" type="number" min="1" step="1" value={code.usageLimit ?? ''} placeholder="不限" /></label>
+								<label>每位會員可用次數（選填）<input name="perUserLimit" type="number" min="1" step="1" value={code.perUserLimit ?? ''} placeholder="不限" /></label>
+							</div>
+							<div class="checks">
+								<label><input type="checkbox" name="firstOrderOnly" checked={code.firstOrderOnly} />限首次購買的會員</label>
+								<label><input type="checkbox" name="excludeLive" checked={code.excludeLive} />排除活體（活體分類的商品不列入折扣與最低消費）</label>
+								<label><input type="checkbox" name="autoApply" checked={code.autoApply} />符合條件時自動套用（顧客不用輸入代碼；有多組時套用最划算的一組）</label>
+								<label><input type="checkbox" name="isActive" checked={code.isActive} />啟用</label>
+							</div>
+							<footer><button type="submit" class="primary"><i class="fa-solid fa-check" aria-hidden="true"></i>儲存變更</button></footer>
+						</form>
+						<form method="post" action={pagePath} class="delete-form" data-confirm={`確定刪除折扣碼「${code.code}」？\n已有訂單使用過的折扣碼不能刪除，只能停用。`} data-confirm-danger>
+							<input type="hidden" name="intent" value="delete" />
+							<input type="hidden" name="id" value={code.id} />
+							<button type="submit" class="danger"><i class="fa-regular fa-trash-can" aria-hidden="true"></i>刪除這組折扣碼</button>
+						</form>
+					</details>
+				</article>
+			);
+		})}
+	</section>
+</AdminLayout>
+
+<script>
+	// 依折扣方式顯示對應欄位與說明
+	document.querySelectorAll<HTMLFormElement>('[data-code-form]').forEach((form) => {
+		const type = form.querySelector<HTMLSelectElement>('[data-type]');
+		const valueLabel = form.querySelector<HTMLElement>('[data-value-label]');
+		const valueInput = form.querySelector<HTMLInputElement>('input[name="value"]');
+		const sync = () => {
+			const current = type?.value ?? 'AMOUNT';
+			form.querySelectorAll<HTMLElement>('[data-when]').forEach((field) => { field.hidden = !field.dataset.when!.split(',').includes(current); });
+			if (valueLabel) valueLabel.textContent = current === 'PERCENT' ? '折掉幾 %（10＝打 9 折）' : '折抵金額（NT$）';
+			if (valueInput) { valueInput.max = current === 'PERCENT' ? '99' : ''; valueInput.required = current !== 'FREE_SHIPPING'; }
+		};
+		type?.addEventListener('change', sync);
+		sync();
+	});
+</script>
+
+<style>
+	.heading-row p { margin: 8px 0 0; color: var(--commerce-muted); font-size: 14px; }
+	.notice { margin: 0 0 14px; padding: 12px 15px; border-radius: 10px; font-size: 14px; }
+	.notice.success { background: #edf8f1; color: #28734b; }
+	.notice.error { background: #fff0ee; color: #a8433a; }
+	.card { margin-bottom: 14px; border: 1px solid var(--commerce-line); border-radius: 16px; background: #fff; box-shadow: var(--commerce-shadow); }
+	.editor > summary { display: flex; align-items: center; gap: 8px; padding: 16px 18px; color: var(--commerce-primary-dark); font-size: 16px; font-weight: 800; cursor: pointer; list-style: none; }
+	.editor > summary::-webkit-details-marker, .edit > summary::-webkit-details-marker { display: none; }
+	.code-form { padding: 0 18px 18px; }
+	.fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+	.fields label { display: grid; gap: 6px; min-width: 0; color: #52676b; font-size: 13px; font-weight: 650; }
+	.fields label[hidden] { display: none; }
+	.fields .wide { grid-column: span 3; }
+	.fields input, .fields select { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 0 11px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: var(--commerce-ink); font: inherit; font-size: 15px; }
+	.fields input[name='code'] { font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+	.checks { display: grid; gap: 8px; margin-top: 14px; }
+	.checks label { display: flex; align-items: flex-start; gap: 8px; color: #40575c; font-size: 14px; }
+	.checks input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--commerce-primary); }
+	.code-form footer { display: flex; justify-content: flex-end; margin-top: 16px; }
+	.primary { display: inline-flex; align-items: center; gap: 7px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--commerce-primary); color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+	.empty { padding: 28px 16px; border: 1px dashed var(--commerce-line); border-radius: 14px; background: #fff; color: var(--commerce-muted); text-align: center; }
+	.code-card { position: relative; overflow: hidden; padding: 16px 18px 6px; }
+	.code-card::before { position: absolute; top: 0; bottom: 0; left: 0; width: 4px; background: var(--tone, #cfd8d6); content: ''; }
+	.code-card.is-on { --tone: var(--commerce-primary); }
+	.code-card.is-soon { --tone: #e0c27a; }
+	.code-card.is-off, .code-card.is-expired, .code-card.is-used { --tone: #cfd8d6; }
+	.code-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+	.code-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+	.code-text { padding: 3px 10px; border: 1.5px dashed var(--commerce-primary); border-radius: 8px; background: #f1f8f6; color: var(--commerce-primary-dark); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 17px; letter-spacing: .08em; }
+	.is-off .code-text, .is-expired .code-text, .is-used .code-text { border-color: #cfd8d6; background: #f4f6f5; color: #8a9897; }
+	.badge { padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 750; }
+	.badge.on { background: #e4f4eb; color: #1e6840; }
+	.badge.auto { background: #fff1e2; color: #a2551a; }
+	.badge.soon { background: #fff4df; color: #9a6510; }
+	.badge.off, .badge.expired, .badge.used { background: #f1f3f2; color: #68787a; }
+	.amount { color: #c2410c; font-size: 16px; font-weight: 800; }
+	.ghost { min-height: 36px; padding: 0 14px; border: 1px solid var(--commerce-line); border-radius: 9px; background: #fff; color: #4f6569; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+	.desc { margin: 8px 0 0; color: var(--commerce-muted); font-size: 14px; }
+	.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+	.chips li { padding: 3px 9px; border-radius: 999px; background: #f2f5f4; color: #52676b; font-size: 12px; font-weight: 650; }
+	.stats { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 10px 26px; margin: 14px 0 0; padding-top: 12px; border-top: 1px solid #eef2f1; }
+	.stats dt { color: var(--commerce-muted); font-size: 12px; }
+	.stats dd { margin: 2px 0 0; color: var(--commerce-ink); font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+	.stats dd small { color: var(--commerce-muted); font-size: 13px; font-weight: 600; }
+	.stats .period { font-size: 13px; font-weight: 650; }
+	.edit { margin: 12px -18px 0; border-top: 1px solid #eef2f1; }
+	.edit > summary { display: flex; align-items: center; gap: 7px; padding: 12px 18px; color: #4f6569; font-size: 14px; font-weight: 700; cursor: pointer; list-style: none; }
+	.edit[open] > summary { color: var(--commerce-primary-dark); }
+	.delete-form { padding: 0 18px 16px; }
+	.danger { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 0 12px; border: 0; background: none; color: #b4443a; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+	@media (max-width: 900px) {
+		.fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.fields .wide { grid-column: span 2; }
+	}
+	@media (max-width: 560px) {
+		.fields { grid-template-columns: 1fr; }
+		.fields .wide { grid-column: auto; }
+		.code-form footer .primary { width: 100%; justify-content: center; }
+		.stats { grid-template-columns: 1fr 1fr; }
+		.stats div:last-child { grid-column: 1 / -1; }
+	}
+</style>

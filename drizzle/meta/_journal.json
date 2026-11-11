@@ -113,6 +113,20 @@
       "when": 1794152781202,
       "tag": "0015_store_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1794405068664,
+      "tag": "0016_discount_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1794406436497,
+      "tag": "0017_discount_auto_apply",
+      "breakpoints": true
     }
   ]
 }
