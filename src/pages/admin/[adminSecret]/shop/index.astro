@@ -46,6 +46,11 @@ function formatOrderTime(date: Date): string {
 	});
 }
 
+/** 金額只顯示 $ 與千分位 */
+const money = (amount: number) => `$${Math.round(amount).toLocaleString('zh-TW')}`;
+/** 本月（至今）營收相較上個月整月的增減百分比；上月沒有營收時不比較 */
+const monthChange = stats.lastMonth.revenue > 0 ? Math.round(((stats.month.revenue - stats.lastMonth.revenue) / stats.lastMonth.revenue) * 100) : null;
+
 const longestWaitLabel = stats.oldestAwaitingShipmentHours < 1
 	? '不到 1 小時'
 	: stats.oldestAwaitingShipmentHours < 24
@@ -106,22 +111,28 @@ const todoCards = [
 			<h2 id="trend-heading">營收趨勢</h2>
 			<a href={`${base}/shop/operations`}>營運管理 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></a>
 		</div>
-		<div class="trend-metrics">
-			<div class="trend-metric">
-				<span>今日營收</span>
-				<strong>{formatTwd(stats.todayRevenue)}</strong>
-				<small>已付款</small>
+		<div class="trend">
+			<div class="trend-top">
+				<div class="trend-today"><span>今日</span><strong>{money(stats.todayRevenue)}</strong></div>
+				<p class:list={['trend-compare', monthChange === null ? 'is-flat' : monthChange >= 0 ? 'is-up' : 'is-down']} title={`${stats.lastMonth.month} 月整月 ${money(stats.lastMonth.revenue)}`}>
+					<span>比 {stats.lastMonth.month} 月</span>
+					{monthChange === null
+						? <b>上月無營收</b>
+						: <b><i class:list={['fa-solid', monthChange >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down']} aria-hidden="true"></i>{monthChange >= 0 ? '+' : '−'}{Math.abs(monthChange)}%</b>}
+				</p>
 			</div>
-			<div class="trend-metric">
-				<span>近 7 日營收</span>
-				<strong>{formatTwd(stats.weekRevenue)}</strong>
-				<small>前 7 日 {formatTwd(stats.previousWeekRevenue)}</small>
-			</div>
-			<div class="trend-metric">
-				<span>近 7 日訂單</span>
-				<strong>{stats.weekOrders}<small>筆</small></strong>
-				<small>前 7 日 {stats.previousWeekOrders} 筆</small>
-			</div>
+			<dl class="trend-rows">
+				<div class="trend-row">
+					<dt>本週</dt>
+					<dd><span>營收</span><b>{money(stats.calendarWeek.revenue)}</b></dd>
+					<dd><span>訂單</span><b>{stats.calendarWeek.orders}<small>筆</small></b></dd>
+				</div>
+				<div class="trend-row">
+					<dt>本月</dt>
+					<dd><span>營收</span><b>{money(stats.month.revenue)}</b></dd>
+					<dd><span>訂單</span><b>{stats.month.orders}<small>筆</small></b></dd>
+				</div>
+			</dl>
 		</div>
 	</section>
 
@@ -364,4 +375,49 @@ const todoCards = [
 		.todo__num { font-size: 40px; }
 	}
 	@media (prefers-reduced-motion: reduce) { .todo, .todo:hover, .todo:active { transition: none; transform: none; } }
+
+	/* 營收趨勢：今日大字＋本週／本月兩列＋與上月比較 */
+	.trend { display: grid; gap: 10px; padding: 4px 18px 16px; }
+	.trend-today { display: flex; align-items: baseline; gap: 10px; }
+	.trend-today > span { color: #52676b; font-size: 14px; font-weight: 700; }
+	.trend-today > strong { color: #1c3941; font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+	.trend-rows { display: grid; margin: 0; border: 1px solid var(--commerce-line); border-radius: 12px; overflow: hidden; }
+	.trend-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, .8fr); align-items: center; gap: 8px; padding: 10px 12px; }
+	.trend-row + .trend-row { border-top: 1px solid var(--commerce-line); }
+	.trend-row dt { color: #1c3941; font-size: 14px; font-weight: 800; }
+	.trend-row dd { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin: 0; }
+	.trend-row dd > span { color: var(--commerce-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+	.trend-row dd > b { color: #1c3941; font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+	.trend-row dd > b small { margin-left: 2px; color: var(--commerce-muted); font-size: 12px; font-weight: 600; }
+	.trend-compare { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; padding: 9px 12px; border-radius: 10px; background: #f3f6f5; font-size: 13px; }
+	.trend-compare > span { color: #52676b; font-weight: 700; }
+	.trend-compare > b { display: inline-flex; align-items: center; gap: 5px; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+	.trend-compare > small { margin-left: auto; color: var(--commerce-muted); font-size: 12px; }
+	.trend-compare.is-up { background: #ecf8f2; }
+	.trend-compare.is-up > b { color: #15803d; }
+	.trend-compare.is-down { background: #fdf0ef; }
+	.trend-compare.is-down > b { color: #c2410c; }
+	.trend-compare.is-flat > b { color: #52676b; }
+	@media (max-width: 640px) {
+		.trend { padding: 2px 12px 12px; gap: 8px; }
+		.trend-today > strong { font-size: 24px; }
+		.trend-row { grid-template-columns: 40px minmax(0, 1fr) minmax(0, .75fr); padding: 9px 10px; gap: 6px; }
+		.trend-row dd > b { font-size: 16px; }
+		.trend-compare > small { margin-left: 0; flex-basis: 100%; }
+	}
+
+	/* 營收趨勢（精簡）：今日與月比較同一列，本週／本月各一列 */
+	.trend { gap: 6px; padding: 0 18px 12px; }
+	.trend-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+	.trend-today > strong { font-size: 24px; }
+	.trend-compare { padding: 4px 10px; border-radius: 999px; gap: 6px; font-size: 12px; }
+	.trend-compare > b { font-size: 14px; gap: 4px; }
+	.trend-row { padding: 7px 12px; }
+	.trend-row dd > b { font-size: 16px; }
+	@media (max-width: 640px) {
+		.trend { padding: 0 12px 10px; gap: 6px; }
+		.trend-today > strong { font-size: 22px; }
+		.trend-row { padding: 6px 10px; }
+		.trend-row dd > b { font-size: 15px; }
+	}
 </style>

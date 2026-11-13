@@ -35,6 +35,10 @@ export type AdminDashboardStats = {
 	weekOrders: number;
 	previousWeekRevenue: number;
 	previousWeekOrders: number;
+	/** 本週（週一起）、本月、上個月整月 */
+	calendarWeek: { revenue: number; orders: number };
+	month: { revenue: number; orders: number };
+	lastMonth: { revenue: number; orders: number; month: number };
 };
 
 export type AdminOrderListItem = {
@@ -111,6 +115,20 @@ function startOfTodayTaipei(): Date {
 	return new Date(`${day}T00:00:00+08:00`);
 }
 
+/** 台北時間的本週一 00:00、本月 1 日、上個月 1 日 */
+function taipeiPeriodStarts(todayStart: Date) {
+	const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).format(todayStart).split('-').map(Number);
+	const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+	const at = (yy: number, mm: number) => new Date(`${yy}-${String(mm).padStart(2, '0')}-01T00:00:00+08:00`);
+	const lastMonthNumber = m === 1 ? 12 : m - 1;
+	return {
+		weekStart: addDays(todayStart, -((weekday + 6) % 7)),
+		monthStart: at(y, m),
+		lastMonthStart: at(m === 1 ? y - 1 : y, lastMonthNumber),
+		lastMonthNumber,
+	};
+}
+
 function addDays(date: Date, days: number): Date {
 	return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
@@ -136,6 +154,7 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
 	const now = new Date();
 	const weekStart = addDays(todayStart, -7);
 	const previousWeekStart = addDays(todayStart, -14);
+	const periods = taipeiPeriodStarts(todayStart);
 	const [today, [pendingRow], [verificationRow], [shipRow], [oldestShipRow], inventoryRows, week, previousWeek] = await Promise.all([
 		summarizeOrders(todayStart, now),
 		db
@@ -158,6 +177,11 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
 		summarizeOrders(weekStart, todayStart),
 		summarizeOrders(previousWeekStart, weekStart),
 	]);
+	const [calendarWeek, month, lastMonth] = await Promise.all([
+		summarizeOrders(periods.weekStart, now),
+		summarizeOrders(periods.monthStart, now),
+		summarizeOrders(periods.lastMonthStart, periods.monthStart),
+	]);
 	const lowStockItems = inventoryRows
 		.filter((row) => row.isLowStock)
 		.sort((a, b) => a.available - b.available || a.productName.localeCompare(b.productName, 'zh-Hant'));
@@ -176,6 +200,9 @@ export async function getAdminDashboardStats(): Promise<AdminDashboardStats> {
 		weekOrders: week.orders,
 		previousWeekRevenue: previousWeek.revenue,
 		previousWeekOrders: previousWeek.orders,
+		calendarWeek,
+		month,
+		lastMonth: { ...lastMonth, month: periods.lastMonthNumber },
 	};
 }
 
