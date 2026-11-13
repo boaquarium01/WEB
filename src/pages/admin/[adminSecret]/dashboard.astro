@@ -6683,21 +6683,21 @@ ${describePlan(plan)}`, { okLabel: "套用變更" });
 
   /* PWA toolbar and catalog use the page width without outer card shells. */
   @media(max-width:860px) {
-    body:has(.commerce-admin) .adminx[data-model='product'] .topbar,
-    body:has(.commerce-admin) .adminx[data-model='product'] .listpane {
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar,
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .listpane {
       width:100%; min-width:0; box-sizing:border-box; margin-inline:0; padding:0;
       border:0; border-radius:0; background:transparent; box-shadow:none; overflow:visible;
     }
-    body:has(.commerce-admin) .adminx[data-model='product'] .topbar { gap:6px; }
-    .adminx[data-model='product'] .listpane .listpane__filters,
-    .adminx[data-model='product'] .listpane .search-wrap {
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar { gap:6px; }
+    .adminx:is([data-model='product'],[data-model='promotion']) .listpane .listpane__filters,
+    .adminx:is([data-model='product'],[data-model='promotion']) .listpane .search-wrap {
       width:100%; min-width:0; box-sizing:border-box; margin-inline:0; padding-inline:0;
     }
-    body:has(.commerce-admin) .adminx[data-model='product'] .entry-list {
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .entry-list {
       width:100%; min-width:0; height:auto; max-height:none; box-sizing:border-box;
       margin-inline:0; padding:0; overflow:visible;
     }
-    .adminx[data-model='product'] .entry-list > .item { width:100%; box-sizing:border-box; }
+    .adminx:is([data-model='product'],[data-model='promotion']) .entry-list > .item { width:100%; box-sizing:border-box; }
   }
 
   @media(max-width:860px) {

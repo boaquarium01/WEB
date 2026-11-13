@@ -292,7 +292,7 @@ const todayCompact = new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei',
 	}
 
   @media(max-width:860px) {
-    .commerce-main:has(.adminx[data-model='product']) {
+    .commerce-main:has(.adminx:is([data-model='product'],[data-model='promotion'])) {
       padding-left:max(6px, env(safe-area-inset-left, 0px));
       padding-right:max(6px, env(safe-area-inset-right, 0px));
     }
