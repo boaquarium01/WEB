@@ -462,6 +462,17 @@ const images = [...new Set([
 		font-size: 1.15rem;
 	}
 
+	.prose :global(.body-image) {
+		margin: 1rem 0;
+	}
+
+	.prose :global(.body-image img) {
+		display: block;
+		width: 100%;
+		height: auto;
+		border-radius: 8px;
+	}
+
 	.prose :global(p) {
 		line-height: 1.85;
 		color: #333;

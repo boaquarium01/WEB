@@ -123,7 +123,12 @@ function mapProductRow(doc: Record<string, unknown>, b: ImageUrlBuilder) {
 		slug: (doc.slug as { current?: string })?.current ?? doc.slug,
 		name: doc.name,
 		excerpt: doc.excerpt,
-		body: doc.body,
+		body: Array.isArray(doc.body)
+			? (doc.body as Record<string, unknown>[]).map((block) => {
+				if (block?._type !== 'image') return block;
+				try { return { ...block, url: b.image(block as Parameters<ImageUrlBuilder['image']>[0]).width(1000).url() }; } catch { return block; }
+			})
+			: doc.body,
 		enabled: doc.enabled,
 		sortOrder: doc.sortOrder,
 		featured: doc.featured,
@@ -222,7 +227,14 @@ function mapCategoryRow(doc: Record<string, unknown>) {
 function bodyToPortable(input: unknown): unknown[] {
 	if (Array.isArray(input) && input.length) {
 		const first = input[0] as { _type?: string; type?: string };
-		if (first && first._type === 'block') return input as unknown[];
+		if (first && (first._type === 'block' || first._type === 'image')) {
+			// 內文圖片：只存 asset 參照（編輯器顯示用的 url 不寫入）
+			return (input as Record<string, unknown>[]).flatMap((block) => {
+				if (block?._type === 'block') return [block];
+				const ref = (block?.asset as { _ref?: string } | undefined)?._ref;
+				return block?._type === 'image' && ref ? [{ _type: 'image', _key: String(block._key ?? ref), asset: { _type: 'reference', _ref: ref } }] : [];
+			});
+		}
 		if (first && first.type === 'paragraph') {
 			const t = strapiBlocksToPlainText(input as unknown[]);
 			return plainTextToPortableBlocks(t);

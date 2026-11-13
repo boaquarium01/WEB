@@ -88,10 +88,26 @@ const shopProductsHref = `${shopAdminHref}/products`;
           <div id="modelTabs" class="tabs"></div>
         </div>
         <div class="actions">
-          <button id="simpleModeToggle" class="mode-btn is-on action-btn" type="button" aria-pressed="true" aria-label="切換簡易或完整編輯模式">
-            <i class="fa-solid fa-sliders" aria-hidden="true"></i>
-            <span class="action-btn__label">簡易</span>
-          </button>
+          <div class="adv-wrap">
+            <button id="advancedBtn" class="mode-btn is-on action-btn" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="進階功能">
+              <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+              <span class="action-btn__label">進階</span>
+            </button>
+            <div id="advancedMenu" class="adv-menu" role="menu" hidden>
+              <button id="simpleModeToggle" class="adv-item is-on" type="button" role="menuitem" aria-pressed="true">
+                <i class="fa-solid fa-pen-to-square" aria-hidden="true"></i>
+                <span>編輯模式：<b class="action-btn__label">簡易</b></span>
+              </button>
+              <div class="adv-sep">大量編輯（商品／價格／庫存）</div>
+              <button id="excelExportBtn" class="adv-item" type="button" role="menuitem">
+                <i class="fa-solid fa-file-arrow-down" aria-hidden="true"></i><span>匯出 Excel</span>
+              </button>
+              <button id="excelImportBtn" class="adv-item" type="button" role="menuitem">
+                <i class="fa-solid fa-file-arrow-up" aria-hidden="true"></i><span>匯入 Excel</span>
+              </button>
+              <input id="excelImportInput" type="file" accept=".xlsx" hidden />
+            </div>
+          </div>
           <button id="refreshBtn" type="button" class="action-btn action-btn--solid" aria-label="重整清單">
             <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
             <span class="action-btn__label">重整</span>
@@ -216,6 +232,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
     import { normalizeSpecifications, generateSpecificationCombinations } from '../../../lib/sanity/specifications';
     import { validateQuantityPriceTiers } from '../../../lib/services/quantity-pricing';
     import { selectProductEditorSkus } from '../../../lib/services/product-sku-identity';
+    import { createBodyEditor } from '../../../scripts/richBody';
+    import { exportProductsExcel, previewProductsExcel, applyProductPlan, describePlan, planCount } from '../../../scripts/productExcel';
 
     try {
     const portableBlocksToPlainText = (blocks) => {
@@ -2289,6 +2307,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
       if (cfg.type === 'boolean') {
         wrap.classList.add('card--bool');
         wrap.insertAdjacentHTML('beforeend', `<label class="switch"><input type="checkbox"><span></span></label>`);
+      } else if (cfg.type === 'blocks' && state.model === 'product' && field === 'body') {
+        wrap.__body = createBodyEditor(wrap, { upload: (file) => uploadOne(file), onChange: () => markDirty(), onStatus: (text) => setStatus(text) });
       } else if (cfg.type === 'text' || cfg.type === 'blocks') {
         const rows = cfg.type === 'blocks' ? 8 : field === 'excerpt' ? 2 : 4;
         wrap.insertAdjacentHTML('beforeend', `<textarea rows="${rows}"></textarea>`);
@@ -2297,7 +2317,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       } else if (cfg.type === 'media') {
         wrap.insertAdjacentHTML(
           'beforeend',
-          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><input class="file-input" type="file" accept="image/*" ${allowMultiUpload ? 'multiple' : ''}><span class="pick-info">未選擇檔案</span></div><div class="pick-files" aria-live="polite"></div></div>`
+          `<div class="wall"><div class="grid"></div><div class="pending-grid"></div><div class="uploader"><label class="upload-btn"><i class="fa-regular fa-image" aria-hidden="true"></i><span>新增圖片</span><input class="file-input" type="file" accept="image/*" ${allowMultiUpload ? 'multiple' : ''}></label><span class="pick-info">可一次選多張，上傳前自動壓縮</span></div><div class="pick-files" aria-live="polite"></div></div>`
         );
       } else {
         wrap.insertAdjacentHTML('beforeend', `<input type="${cfg.type === 'datetime' ? 'datetime-local' : 'text'}">`);
@@ -2367,7 +2387,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         formRoot.appendChild(fieldEl(f, cfg));
       });
 
-      if (advancedKeys.length > 0) {
+      if (advancedKeys.length > 0 || state.model === 'product') {
         const details = document.createElement('details');
         details.className = 'advanced';
         details.innerHTML = `<summary>進階設定（slug / SEO / 排序）</summary><div class="advanced-grid"></div>`;
@@ -2391,6 +2411,12 @@ const shopProductsHref = `${shopAdminHref}/products`;
               return String(a).localeCompare(String(b), 'zh-Hant');
             });
           }
+          if (state.model === 'product') {
+            const slugField = document.createElement('div');
+            slugField.className = 'field slug-field';
+            slugField.innerHTML = '<label for="productSlugReadonly">商品網址代號（slug）</label><div class="slug-input"><span class="slug-input__prefix">/product/</span><input id="productSlugReadonly" type="text" autocomplete="off" spellcheck="false" maxlength="60" pattern="[a-z0-9-]{2,60}" /></div><small class="slug-hint">只能用小寫英文、數字和連字號（-）。修改後，舊網址與已印出的 QR Code 會失效。</small>';
+            grid.prepend(slugField);
+          }
           orderedAdvancedKeys.forEach((f) => grid.appendChild(fieldEl(f, attrs[f])));
         }
         formRoot.appendChild(details);
@@ -2400,7 +2426,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         const slugCard = document.createElement('section');
         slugCard.className = 'card span2 slug-card';
         slugCard.innerHTML =
-          '<label>商品 slug (自動生成)</label><input id="productSlugReadonly" type="text" readonly /><button id="productRemoveBtn" type="button" class="product-remove-btn" disabled>移除此品項</button>';
+          '<button id="productRemoveBtn" type="button" class="product-remove-btn" disabled>移除此品項</button>';
         formRoot.appendChild(slugCard);
         const removeBtn = slugCard.querySelector('#productRemoveBtn');
         if (removeBtn instanceof HTMLButtonElement) {
@@ -2467,7 +2493,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       });
       grid.insertBefore(fragment, grid.firstChild);
       state.pendingUploads[field] = [];
-      info.textContent = '未選擇檔案';
+      info.textContent = '可一次選多張，上傳前自動壓縮';
       const pendingGrid = card.querySelector('.pending-grid');
       if (pendingGrid instanceof HTMLElement) pendingGrid.innerHTML = '';
       if (fileList instanceof HTMLElement) fileList.innerHTML = '';
@@ -2500,7 +2526,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
             rm.onclick = () => {
               state.pendingUploads[field].splice(idx, 1);
               renderPending();
-              info.textContent = state.pendingUploads[field].length > 0 ? `已選 ${state.pendingUploads[field].length} 張` : '未選擇檔案';
+              info.textContent = state.pendingUploads[field].length > 0 ? `已選 ${state.pendingUploads[field].length} 張` : '可一次選多張，上傳前自動壓縮';
               if (state.pendingUploads[field].length === 0) input.value = '';
               markDirty();
             };
@@ -2628,6 +2654,8 @@ const shopProductsHref = `${shopAdminHref}/products`;
           } else {
             fillMedia(card, v);
           }
+        } else if (card.__body) {
+          card.__body.set(v);
         } else {
           const i = card.querySelector('input,textarea');
           if (!i) return;
@@ -2664,6 +2692,12 @@ const shopProductsHref = `${shopAdminHref}/products`;
         const err = card.querySelector('.err');
         if (validate && err) err.textContent = '';
 
+        if (card.__body) {
+          out[f] = card.__body.get();
+          const problem = validate ? card.__body.validate() : '';
+          if (problem) { if (err) err.textContent = problem; ok = false; }
+          return;
+        }
         if (t === 'boolean') {
           const c = card.querySelector('input[type="checkbox"]');
           out[f] = Boolean(c?.checked);
@@ -3056,12 +3090,21 @@ const shopProductsHref = `${shopAdminHref}/products`;
       productCommercePanel.dataset.savePhase = 'checking'; setStatus('檢查變更…');
       saveBtn.disabled = true; saveBtn.setAttribute('aria-busy', 'true'); saveBtn.setAttribute('data-saving', '1');
       [formRoot, productCommercePanel, entryList, modelTabs].forEach((element) => { element.inert = true; });
-      [newBtn, refreshBtn, simpleModeToggle].forEach((button) => { button.disabled = true; });
+      [newBtn, refreshBtn, simpleModeToggle, document.getElementById('advancedBtn')].forEach((button) => { if (button) button.disabled = true; });
       let hasCommittedContent = false;
       try {
         await productCommerceReady;
         if (specificationUploads) throw new Error('圖片仍在上傳，完成後再儲存');
         const basic = collect(); if (!basic.ok) throw new Error('請先修正商品必填欄位');
+        // 商品網址代號：格式、不可重複；已存在的商品改代號前先提醒舊網址會失效
+        const originalSlug = String(state.selected.slug ?? '').trim();
+        const nextSlug = String(basic.out?.slug ?? '').trim();
+        if (nextSlug !== originalSlug) {
+          if (!/^[a-z0-9-]{2,60}$/.test(nextSlug)) throw new Error('商品網址代號只能用 2–60 個小寫英文、數字或連字號');
+          if (state.entries.some((entry) => kOf(entry) !== state.selectedId && String(entry.slug ?? '').trim() === nextSlug)) throw new Error(`商品網址代號「${nextSlug}」已被其他商品使用`);
+          if (originalSlug && !(await askConfirm(`確定把商品網址從 /product/${originalSlug} 改成 /product/${nextSlug}？
+舊網址與已印出的 QR Code 會失效。`, { okLabel: '確定修改', danger: true }))) throw new Error('已取消儲存，商品網址沒有變更');
+        }
         const specDraft = productSpecificationDraft;
         const specValue = specDraft?.read();
         const specPatch = specDraft ? changedFields(specValue, specDraft.baseline) : {};
@@ -3144,7 +3187,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       } finally {
         state.saving = false; saveBtn.disabled = false; saveBtn.removeAttribute('aria-busy'); saveBtn.removeAttribute('data-saving');
         [formRoot, productCommercePanel, entryList, modelTabs].forEach((element) => { element.inert = false; });
-        [newBtn, refreshBtn, simpleModeToggle].forEach((button) => { button.disabled = false; });
+        [newBtn, refreshBtn, simpleModeToggle, document.getElementById('advancedBtn')].forEach((button) => { if (button) button.disabled = false; });
       }
     }
 
@@ -3251,6 +3294,54 @@ const shopProductsHref = `${shopAdminHref}/products`;
       void drawForm()
         .then(() => syncPublicSiteButtons())
         .catch((e) => setStatus(`表單更新失敗：${e.message}`));
+    };
+    // ── 進階選單 ──
+    const advancedBtn = document.getElementById('advancedBtn');
+    const advancedMenu = document.getElementById('advancedMenu');
+    const excelImportInput = document.getElementById('excelImportInput');
+    const closeAdvanced = () => { advancedMenu.hidden = true; advancedBtn.setAttribute('aria-expanded', 'false'); };
+    advancedBtn.onclick = (event) => {
+      event.stopPropagation();
+      const open = advancedMenu.hidden;
+      advancedMenu.hidden = !open; if (open) { const r = advancedBtn.getBoundingClientRect(); const w = Math.min(260, window.innerWidth - 16); advancedMenu.style.width = w + 'px'; advancedMenu.style.top = (r.bottom + 6) + 'px'; advancedMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px'; }
+      advancedBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    document.addEventListener('click', (event) => { if (!advancedMenu.hidden && !advancedMenu.contains(event.target)) closeAdvanced(); });
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && !advancedMenu.hidden) { closeAdvanced(); advancedBtn.focus(); } });
+    simpleModeToggle.addEventListener('click', closeAdvanced);
+    document.getElementById('excelExportBtn').onclick = async () => {
+      closeAdvanced();
+      setStatus('正在產生 Excel…');
+      try {
+        const count = await exportProductsExcel();
+        setStatus(`已匯出 ${count.products} 個商品、${count.skus} 個規格。修改後用「匯入 Excel」上傳；新增商品請在「商品資料」留空商品ID`);
+      } catch (e) { setStatus(`匯出失敗：${e.message}`); }
+    };
+    document.getElementById('excelImportBtn').onclick = async () => {
+      closeAdvanced();
+      if (!(await confirmDiscardIfDirty())) return;
+      excelImportInput.value = '';
+      excelImportInput.click();
+    };
+    excelImportInput.onchange = async () => {
+      const file = excelImportInput.files?.[0];
+      if (!file) return;
+      setStatus('正在讀取 Excel 並比對…');
+      try {
+        const plan = await previewProductsExcel(file);
+        const total = planCount(plan);
+        if (!total) {
+          setStatus(plan.errors.length ? `沒有可套用的變更，${plan.errors.length} 列有錯誤：${plan.errors.slice(0, 3).join("；")}` : `沒有變更（${plan.unchanged} 筆與目前相同）`);
+          return;
+        }
+        const ok = await askConfirm(`套用 ${total} 筆變更？
+
+${describePlan(plan)}`, { okLabel: "套用變更" });
+        if (!ok) { setStatus('已取消匯入，資料沒有變更'); return; }
+        const result = await applyProductPlan(plan, (done, all) => setStatus(`正在套用 ${done}／${all}…`));
+        setStatus(result.failed.length ? `已套用 ${result.saved} 筆，${result.failed.length} 筆失敗：${result.failed.slice(0, 3).join('；')}` : `已套用 ${result.saved} 筆變更`);
+        void refreshCurrentView().catch(() => {});
+      } catch (e) { setStatus(`匯入失敗：${e.message}`); }
     };
     refreshBtn.onclick = () => void refreshCurrentView().catch((e) => setStatus(`載入失敗：${e.message}`));
     newBtn.onclick = async () => {
@@ -3605,7 +3696,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
     gap: 8px;
   }
   .actions > .action-btn,
-  .actions > .mode-btn {
+  .actions > .adv-wrap > .mode-btn {
     width: 100%;
     min-width: 0;
   }
@@ -3791,6 +3882,31 @@ const shopProductsHref = `${shopAdminHref}/products`;
     border-color: #ef4444;
     background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
   }
+  .adv-wrap { position: relative; display: inline-flex; }
+  .rb { border: 1px solid #dbe4ea; border-radius: 10px; background: #fff; overflow: hidden; }
+  .rb__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; background: #f8fafb; border-bottom: 1px solid #e5ecf0; font-size: 14px; }
+  .rb__add { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; cursor: pointer; color: #1a2221; }
+  .rb__add:hover { background: #eef3f5; }
+  .rb__add:focus-within { outline: 2px solid #0f766e; outline-offset: 1px; }
+  .rb__count { color: #6b7280; font-variant-numeric: tabular-nums; }
+  .rb__count b { font-weight: 500; }
+  .rb__count.is-over { color: #dc2626; }
+  .rb__area { min-height: 220px; max-height: 70vh; overflow-y: auto; padding: 14px 16px; font-size: 15px; line-height: 1.7; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .rb__area.is-empty::before { content: attr(data-placeholder); color: #9ca3af; pointer-events: none; position: absolute; }
+  .rb__img { position: relative; margin: 10px 0; user-select: none; }
+  .rb__img img { display: block; max-width: 100%; max-height: 520px; border-radius: 6px; }
+  .rb__img.is-loading img { opacity: .5; }
+  .rb__spin { position: absolute; left: 12px; top: 12px; padding: 4px 10px; border-radius: 999px; background: rgba(17, 24, 39, .75); color: #fff; font-size: 13px; }
+  .rb__del { position: absolute; top: 8px; right: 8px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(17, 24, 39, .7); color: #fff; font-size: 20px; line-height: 1; cursor: pointer; }
+  .rb__del:hover { background: #dc2626; }
+  .rb__del:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+  .adv-menu { position: fixed; z-index: 200; padding: 6px; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(15, 23, 42, .12); display: flex; flex-direction: column; gap: 2px; }
+  .adv-menu[hidden] { display: none; }
+  .adv-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 8px; background: none; color: #111827; font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+  .adv-item:hover, .adv-item:focus-visible { background: #f3f4f6; outline: none; }
+  .adv-item > i { width: 16px; color: #0f766e; }
+  .adv-item:disabled { opacity: .5; cursor: not-allowed; }
+  .adv-sep { margin: 6px 10px 2px; padding-top: 8px; border-top: 1px solid #f1f5f9; font-size: 12px; color: #6b7280; }
   .mode-btn {
     min-height: 42px;
     border-radius: 11px;
@@ -5558,7 +5674,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
     }
     /** 勿用 overflow-x:auto／hidden，否則按鈕 box-shadow、hover 上移會被裁成「切邊」 */
     .actions > .action-btn,
-    .actions > .mode-btn {
+    .actions > .adv-wrap > .mode-btn {
       position: relative;
       flex-direction: column;
       align-items: stretch;
@@ -5590,7 +5706,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
     .actions > .action-btn--solid {
       background: linear-gradient(165deg, #f0f3ff 0%, #e2e9fb 55%, #d9e2f8 100%);
     }
-    .actions > .mode-btn.is-on {
+    .actions > .adv-wrap > .mode-btn.is-on {
       border-color: rgba(199, 210, 236, 0.92);
       background: linear-gradient(165deg, #f0f3ff 0%, #e2e9fb 55%, #d9e2f8 100%);
       box-shadow:
@@ -5598,7 +5714,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         0 1px 2px rgba(15, 23, 42, 0.04),
         inset 0 1px 0 rgba(255, 255, 255, 0.9);
     }
-    .actions > .mode-btn.is-off {
+    .actions > .adv-wrap > .mode-btn.is-off {
       border-color: rgba(218, 224, 238, 0.75);
       background: linear-gradient(165deg, #ffffff 0%, #f7f9fc 50%, #f0f3f9 100%);
       box-shadow:
@@ -5607,7 +5723,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
       color: #4a5568;
     }
     .actions > .action-btn > i,
-    .actions > .mode-btn > i {
+    .actions > .adv-wrap > .mode-btn > i {
       flex: 1 1 0;
       min-height: 0;
       width: 100%;
@@ -5651,7 +5767,7 @@ const shopProductsHref = `${shopAdminHref}/products`;
         0 1px 3px rgba(15, 23, 42, 0.05),
         inset 0 1px 0 rgba(255, 255, 255, 0.95);
     }
-    .actions > .mode-btn.is-off:hover {
+    .actions > .adv-wrap > .mode-btn.is-off:hover {
       border-color: rgba(200, 208, 228, 0.9);
       background: linear-gradient(165deg, #ffffff 0%, #fafbfd 100%);
     }
@@ -5674,11 +5790,11 @@ const shopProductsHref = `${shopAdminHref}/products`;
       font-size: 1.18rem;
     }
     .actions > .action-btn:not(#saveBtn) > i,
-    .actions > .mode-btn > i {
+    .actions > .adv-wrap > .mode-btn > i {
       font-size: 1.12rem;
     }
     .actions > .action-btn .action-btn__label,
-    .actions > .mode-btn .action-btn__label {
+    .actions > .adv-wrap > .mode-btn .action-btn__label {
       display: block;
       flex: 0 0 auto;
       position: static;
@@ -6775,4 +6891,121 @@ const shopProductsHref = `${shopAdminHref}/products`;
 
   .adminx #entryList > .product-list-more { display:block; width:100%; min-height:42px; padding:10px; border:1px dashed #c7ded7; border-radius:10px; background:transparent; color:#548077; font:inherit; font-size:.78rem; cursor:pointer; }
   .adminx #entryList > .product-list-more:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
+
+  /* 商品網址代號（進階設定內） */
+  .slug-field { grid-column: 1 / -1; display: grid; gap: 6px; }
+  .slug-field label { font-weight: 700; color: #334155; }
+  .slug-input { display: flex; align-items: stretch; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff; overflow: hidden; }
+  .slug-input:focus-within { border-color: #087e78; box-shadow: 0 0 0 3px rgba(8, 126, 120, .15); }
+  .slug-input__prefix { display: grid; place-items: center; padding: 0 10px; background: #f1f5f4; color: #64748b; font-size: 14px; white-space: nowrap; }
+  .slug-input input { flex: 1; min-width: 0; min-height: 42px; padding: 0 10px; border: 0; outline: none; font: inherit; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .slug-hint { color: #9a6510; font-size: 12px; }
+
+  /* ── 商品編輯：統一標籤、輸入框、對齊（桌面／平板／手機） ── */
+  .adminx .form-grid { column-gap: 16px; row-gap: 4px; }
+  .adminx .form-grid > .card { padding-block: 8px; gap: 6px; }
+  .adminx .card > label:first-child,
+  .adminx .advanced-grid .card > label,
+  .adminx .slug-field > label,
+  .adminx .product-commerce-sku label[role="cell"] > span {
+    font-size: 14px; font-weight: 700; color: #334155; line-height: 1.4; letter-spacing: 0;
+  }
+  .adminx .card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .adminx .card select,
+  .adminx .card textarea,
+  .adminx .product-commerce-sku label[role="cell"] > input {
+    min-height: 44px; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+    font-size: 15px; font-weight: 500; color: #1a2221; background-color: #fff; box-sizing: border-box;
+  }
+  .adminx .card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+  .adminx .card select:focus, .adminx .card textarea:focus,
+  .adminx .product-commerce-sku label[role="cell"] > input:focus {
+    outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15, 118, 110, .15);
+  }
+  .adminx .card textarea { line-height: 1.6; }
+  /* 分類：與其他欄位一樣標籤在上 */
+  .adminx .card[data-field="category"] { grid-template-columns: 1fr; row-gap: 6px; padding-block: 8px; }
+  /* 短述：兩行高、可拉高 */
+  .adminx .card textarea[rows='2'] { height: auto; min-height: 68px; resize: vertical; overflow: auto; }
+  /* 開關列：標籤垂直置中 */
+  .adminx .card--bool { min-height: 48px; padding-block: 4px; }
+  .adminx .card--bool > label:first-child { line-height: 1.4; }
+  /* 圖片上傳：按鈕取代瀏覽器預設的檔案選擇 */
+  .adminx .uploader { flex-wrap: wrap; gap: 10px; }
+  .adminx .upload-btn { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px dashed #94a3b8; border-radius: 8px; background: #f8fafc; color: #1a2221; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .adminx .upload-btn:hover { border-color: #0f766e; background: #f0fdfa; }
+  .adminx .upload-btn:focus-within { outline: 2px solid #0f766e; outline-offset: 2px; }
+  .adminx .upload-btn > i { color: #0f766e; }
+  .adminx .upload-btn > .file-input { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; opacity: 0; cursor: pointer; }
+  .adminx .pick-info { min-width: 0; font-size: 13px; }
+  /* 進階設定：標題與內距對齊 */
+  .adminx .advanced { padding: 12px 14px; border-style: solid; border-color: #e2e8f0; }
+  .adminx .advanced summary { font-size: 14px; font-weight: 700; min-height: 24px; display: flex; align-items: center; gap: 6px; }
+  .adminx .advanced-grid { column-gap: 16px; row-gap: 4px; }
+  .adminx .advanced-grid .card { padding-block: 6px; }
+  /* 編輯器與輸入框同一套圓角／邊框 */
+  .adminx .rb { border-color: #cbd5e1; border-radius: 8px; }
+  @media (max-width: 760px) {
+    .adminx .form-grid { column-gap: 0; }
+    .adminx .card input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+    .adminx .card select, .adminx .card textarea,
+    .adminx .product-commerce-sku label[role="cell"] > input { font-size: 16px; }
+    .adminx .rb__area { min-height: 180px; padding: 12px; }
+    .adminx .rb__bar { padding: 6px 8px; }
+  }
+
+  /* ── 進階設定：窄欄時單欄、寬欄時兩欄，輸入框靠上對齊、不超出 ── */
+  .adminx .advanced-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; }
+  .adminx .advanced-grid > * { min-width: 0; }
+  .adminx .advanced-grid .slug-field { grid-column: 1 / -1; }
+  .adminx .advanced-grid .card input, .adminx .advanced-grid .card textarea { width: 100%; max-width: 100%; }
+  .adminx .advanced-grid .card textarea { min-height: 88px; }
+  .adminx .advanced-grid .hint, .adminx .slug-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: #64748b; }
+  .adminx .advanced summary { padding-bottom: 2px; }
+
+  /* ── 規格表卡片（多規格、窄欄）：名稱＋販售一列，售價／庫存等寬兩欄 ── */
+  @container product-commerce (max-width: 659px) {
+    .adminx .product-commerce-sku:not(.is-simple) { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px 12px; width: auto; min-width: 0; padding: 12px; box-sizing: border-box; }
+    .adminx .product-commerce-sku:not(.is-simple) .product-commerce-sku__identity { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid #edf2f0; }
+    .adminx .product-commerce-sku:not(.is-simple) .product-commerce-sku__identity strong { font-size: 15px; }
+    .adminx .product-commerce-sku:not(.is-simple) .product-commerce-sale-options { grid-column: auto; grid-row: auto; flex: none; }
+    .adminx .product-commerce-sku:not(.is-simple) > label[data-column] { grid-row: 2; min-width: 0; align-content: start; }
+    .adminx .product-commerce-sku:not(.is-simple) > label[data-column="售價"] { grid-column: 1; }
+    .adminx .product-commerce-sku:not(.is-simple) > label[data-column="商品數量"] { grid-column: 2; }
+    .adminx .product-commerce-sku:not(.is-simple) > label > input { width: 100%; min-width: 0; }
+    .adminx .product-commerce-sku:not(.is-simple) > label small { font-size: 12px; line-height: 1.4; }
+    .adminx .product-commerce-sku:not(.is-simple) .product-commerce-sku__extra { grid-column: 1 / -1; grid-row: 3; }
+  }
+
+  /* ── 規格表 → 批次設定：售價／庫存並排、不限量小勾選、貨號與按鈕整列 ── */
+  .adminx .product-commerce-bulk { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; padding: 12px; }
+  .adminx .product-commerce-bulk > strong { display: none; }
+  .adminx .product-commerce-bulk > label { display: grid; gap: 6px; min-width: 0; grid-row: auto; grid-column: auto; align-content: start; }
+  .adminx .product-commerce-bulk > label > span { font-size: 14px; font-weight: 700; color: #334155; line-height: 1.4; }
+  .adminx .product-commerce-bulk > label > input { width: 100%; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; font-size: 15px; box-sizing: border-box; }
+  .adminx .product-commerce-bulk > label > label { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; font-size: 13px; font-weight: 600; color: #475569; cursor: pointer; }
+  .adminx .product-commerce-bulk > label > label input[type="checkbox"] { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; accent-color: #0f766e; }
+  .adminx .product-commerce-bulk > label:nth-of-type(3) { grid-column: 1 / -1; }
+  .adminx .product-commerce-bulk > .product-commerce-bulk__hint { grid-column: 1 / -1; grid-row: auto; margin: 0; font-size: 12.5px; line-height: 1.5; color: #64748b; }
+  .adminx .product-commerce-bulk > button { grid-column: 1 / -1; grid-row: auto; align-self: stretch; min-height: 44px; border-radius: 8px; font-size: 15px; }
+  .adminx .product-commerce-bulk__feedback { grid-column: 1 / -1; font-size: 13px; }
+  .adminx .product-commerce-bulk__feedback:empty { display: none; }
+  .adminx .product-commerce-bulk input:focus { outline: none; border-color: #0f766e; box-shadow: 0 0 0 3px rgba(15, 118, 110, .15); }
+
+  /* ── 上方工具列（電腦版）：寬度不夠時自動換行，文字不截斷 ── */
+  @media (min-width: 861px) {
+    .adminx .topbar .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); grid-auto-rows: minmax(40px, auto); height: auto; gap: 8px; }
+    .adminx .topbar .actions > .adv-wrap { display: flex; min-width: 0; }
+    .adminx .topbar .actions > .adv-wrap > .mode-btn,
+    .adminx .topbar .actions > .action-btn { width: 100%; min-width: 0; height: auto; min-height: 40px; padding: 6px 8px; gap: 6px; justify-content: center; }
+    .adminx .topbar .actions .action-btn__label { font-size: 13px; white-space: nowrap; overflow: visible; text-overflow: clip; max-width: none; }
+    .adminx .topbar .actions i { font-size: 13px; }
+  }
+  /* 很窄時：圖示在上、文字在下，字再小一點 */
+  @media (min-width: 861px) and (max-width: 1180px) {
+    .adminx .topbar .actions { grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 6px; }
+    .adminx .topbar .actions > .adv-wrap > .mode-btn,
+    .adminx .topbar .actions > .action-btn { flex-direction: column; gap: 2px; padding: 6px 4px; min-height: 48px; }
+    .adminx .topbar .actions .action-btn__label { font-size: 12px; line-height: 1.2; }
+  }
 </style>
