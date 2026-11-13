@@ -59,7 +59,7 @@ const relativeTime = (date: Date) => {
 					{first ? (
 						<>
 							<span class="ol-items__name">{first.productName}{first.skuName && first.skuName !== first.productName && <small>（{first.skuName}）</small>}</span>
-							<small class="ol-count">{row.itemLineCount} 項 · {row.itemCount} 件</small>
+							<small class="ol-count">{row.itemLineCount > 1 ? `× ${first.quantity}・另有 ${row.itemLineCount - 1} 項 ${Math.max(0, row.itemCount - first.quantity)} 件` : `× ${first.quantity}`}</small>
 						</>
 					) : <small>—</small>}
 				</div>

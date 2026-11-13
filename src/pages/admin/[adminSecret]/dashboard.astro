@@ -7008,4 +7008,36 @@ ${describePlan(plan)}`, { okLabel: "套用變更" });
     .adminx .topbar .actions > .action-btn { flex-direction: column; gap: 2px; padding: 6px 4px; min-height: 48px; }
     .adminx .topbar .actions .action-btn__label { font-size: 12px; line-height: 1.2; }
   }
+
+  /* ── 左側清單（促銷／商品，電腦版）：加寬 5%，內距縮小讓卡片左右填滿 ── */
+  @media (min-width: 861px) {
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']):not([data-product-sort-mode="1"]) .workspace {
+      grid-template-columns: minmax(326px, 357px) minmax(0, 1fr);
+    }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .listpane { padding: 8px 6px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .entry-list { padding: 2px 0; scrollbar-width: thin; scrollbar-gutter: auto; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .entry-list::-webkit-scrollbar { width: 6px; }
+    .adminx:is([data-model='product'],[data-model='promotion']) .entry-list > .item { width: 100%; box-sizing: border-box; margin-inline: 0; }
+    .adminx[data-model='product'] .entry-list > .item--catalog { padding: 9px 8px; column-gap: 10px; grid-template-columns: 64px minmax(0, 1fr); }
+    .adminx:is([data-model='product'],[data-model='promotion']) .listpane__filters { gap: 6px; }
+  }
+
+  /* ── 電腦版（促銷／商品）：內容、按鈕、外框內距與間距統一 7px ── */
+  @media (min-width: 861px) {
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .workspace { column-gap: 7px; row-gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .listpane { padding: 7px; gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .listpane__filters { gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .entry-list { padding: 0; gap: 7px; display: grid; align-content: start; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .entry-list > .item { margin: 0; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar { padding: 7px; gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar .center-nav { gap: 0; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar .tabs { gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .topbar .actions { gap: 7px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .formpane { padding: 7px 14px 14px; }
+    body:has(.commerce-admin) .adminx:is([data-model='product'],[data-model='promotion']) .formpane > .product-commerce-panel { margin-top: 0; margin-bottom: 7px; }
+  }
+
+  /* 內文編輯器：右下角可拖曳調整高度（同輸入框） */
+  .adminx .rb__area { resize: vertical; overflow: auto; height: 260px; min-height: 140px; max-height: none; }
+  @media (max-width: 760px) { .adminx .rb__area { height: 220px; } }
 </style>
